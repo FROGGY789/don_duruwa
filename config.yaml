@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────
+#  파판14 제작 수익성 분석 — 설정 파일
+#  값을 바꾼 뒤 웹페이지를 새로고침(F5)하면 적용됩니다.
+# ─────────────────────────────────────────────
+
+# ── 서버 ──
+# Universalis 월드 이름. 실행할 때 /api/v2/worlds 에서 숫자 ID를 찾아 씁니다.
+world: "초코보"
+# 이름으로 못 찾으면 여기에 숫자 ID를 직접 적으세요. (평소엔 null)
+world_id: null
+
+# ── 제작직 레벨 ──
+# 이 레벨보다 높은 레시피는 분석 대상에서 빠지고, 중간재료 직접 제작도 불가로 처리합니다.
+job_levels:
+  목수: 50
+  대장: 50
+  갑주: 50
+  보석: 50
+  가죽: 50
+  재봉: 50
+  연금: 50
+  요리: 50
+
+# 분석할 레시피 레벨 범위 (웹페이지 사이드바에서도 조절 가능)
+recipe_level_min: 40
+recipe_level_max: 50
+
+# ── 세금 ──
+# 판매세: 내 리테이너가 등록하는 도시. "min" 으로 두면 가장 낮은 세율 도시 기준.
+# 선택지: Limsa Lominsa, Gridania, Ul'dah, Ishgard, Kugane, Crystarium, Old Sharlayan, Tuliyollal, min
+tax_city: "Limsa Lominsa"
+# 세율 API 를 못 불러올 때 쓰는 판매세
+default_tax_rate: 0.05
+# 거래소에서 재료를 살 때 붙는 구매세 (NPC 상점 구매에는 붙지 않음)
+buyer_tax_rate: 0.05
+
+# ── 계산 방식 ──
+# 판매 기록을 볼 기간(시간). 판매 건수·중앙값·재료 거래량 계산에 모두 사용.
+history_hours: 48
+# 한 번에 몇 번 제작할 생각인지. 재료를 "필요 수량만큼" 싼 매물부터 사는 비용 계산에 쓰입니다.
+batch_size: 1
+# 판매 예상가 계산 시, 중앙값의 이 비율보다 싼 등록가는 이상치(미끼 매물)로 보고 무시
+outlier_ratio: 0.5
+# HQ 가 있는 아이템을 HQ 로 판다고 가정할지 (false 면 NQ 시세 기준)
+sell_hq: false
+# true 면 가구 외 모든 제작품도 분석 (사이드바 토글 기본값)
+include_all_crafts: false
+# 중간재료를 직접 만들 때 비전서가 필요한 레시피도 쓸지 (비전서가 있으면 true)
+allow_secret_recipe_intermediates: false
+
+# ── 필터 기본값 (사이드바에서 조절 가능) ──
+filters:
+  min_sales: 3          # 기간 내 판매 건수 이상
+  material_ratio: 2.0   # 재료별 기간 내 판매 수량이 필요 수량의 몇 배 이상 (NPC/직접 채집 재료는 통과)
+  min_margin_pct: 20    # 최소 수익률(%)
+  min_profit: 3000      # 개당 최소 순수익(길)
+  max_listings: 20      # 현재 등록 건수 이하
+  stale_hours: 72       # 마지막 업로드가 이보다 오래되면 "데이터 오래됨" 표시 (제외하지는 않음)
+
+# 기본 정렬: 순수익 / 수익률 / 하루 잠재 이익
+sort_by: "순수익"
+
+# ── 아이템 분류 ──
+# 하우징 가구로 볼 ItemUICategory 번호
+# 57 가구, 65~72 외장 건축재, 73~75 내장 건축재, 76 조경물, 77 받침대, 78 탁상, 79 벽걸이, 80 깔개, 95 그림
+furniture_ui_categories: [57, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 95]
+
+# 직접 채집해서 원가 0 으로 칠 재료 (아이템 이름 그대로)
+self_gathered_items: []
+#  예) self_gathered_items: ["구리 광석", "단풍나무 원목"]
+
+# NPC 상점 가격을 무시할 재료 (실제로는 못 사는 상점 데이터가 섞여 있을 때)
+npc_ignore_items: []
+
+# ── 데이터 소스 ──
+datamining_base_url: "https://raw.githubusercontent.com/Ra-Workspace/ffxiv-datamining-ko/master/csv"
+universalis_base_url: "https://universalis.app"
+# Universalis 요청 간격(초). 제한은 초당 25회 — 여유 있게 둡니다.
+request_interval_sec: 0.1

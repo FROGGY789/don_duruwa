@@ -49,14 +49,15 @@ class Stats:
     last_upload: float = 0  # 초
 
 
-def market_stats(entry, hq, hours, outlier_ratio=0.0):
-    """hq=None 이면 품질 구분 없이, True/False 면 그 품질만."""
+def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None):
+    """hq=None 이면 품질 구분 없이, True/False 면 그 품질만. world=None 이면 데이터센터 전체, 월드ID 면 그 서버만."""
     st = Stats()
     if not entry:
         return st
     since = entry.get("fetched_at", time.time()) - hours * 3600
-    sales = [s for s in entry["sales"] if s[3] >= since and (hq is None or s[2] == hq)]
-    listings = [l for l in entry["listings"] if hq is None or l[2] == hq]
+    sales = [s for s in entry["sales"]
+             if s[3] >= since and (hq is None or s[2] == hq) and (world is None or s[4] == world)]
+    listings = [l for l in entry["listings"] if (hq is None or l[2] == hq) and (world is None or l[3] == world)]
     st.sale_count = len(sales)
     st.sold_qty = sum(s[1] for s in sales)
     if sales:
@@ -83,9 +84,14 @@ class CostNode:
 
 
 class Calculator:
-    def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1, job_levels=None):
+    def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1, job_levels=None,
+                 sell_world=None, buy_world=None, world_names=None):
         self.gd = gd
         self.job_levels = job_levels or cfg["job_levels"]
+        # None = 데이터센터 전체, 월드ID = 그 서버만
+        self.sell_world = sell_world
+        self.buy_world = buy_world
+        self.world_names = world_names or {}
         self.market = market
         self.cfg = cfg
         self.seller_tax = seller_tax
@@ -100,23 +106,28 @@ class Calculator:
 
     # ── 재료 구매 ──
     def market_buy_price(self, item_id, need):
-        """거래소에서 need 개를 살 때의 평균 단가 (세금 제외)."""
+        """거래소에서 need 개를 살 때의 평균 단가 (세금 제외). 비고에는 사러 갈 서버를 적는다."""
         entry = self.market.get(item_id)
         if not entry:
             return None, ""
-        listings = sorted((l[0], l[1]) for l in entry["listings"])
-        bought, spent = 0, 0
-        for price, qty in listings:
+        listings = sorted((l[0], l[1], l[3]) for l in entry["listings"]
+                          if self.buy_world is None or l[3] == self.buy_world)
+        bought, spent, worlds = 0, 0, []
+        for price, qty, world in listings:
             take = min(qty, need - bought)
             bought += take
             spent += take * price
+            name = self.world_names.get(str(world), str(world))
+            if name not in worlds:
+                worlds.append(name)
             if bought >= need:
-                return spent / bought, ""
-        median = market_stats(entry, None, self.hours).median
+                return spent / bought, ", ".join(worlds)
+        median = market_stats(entry, None, self.hours, world=self.buy_world).median
+        where = ", ".join(worlds)
         if bought and median:
-            return max(spent / bought, median), "매물 부족"
+            return max(spent / bought, median), f"{where} (매물 부족)"
         if bought:
-            return spent / bought, "매물 부족"
+            return spent / bought, f"{where} (매물 부족)"
         if median:
             return median, "매물 없음(최근 판매가)"
         return None, ""
@@ -166,7 +177,7 @@ class Calculator:
     def evaluate(self, recipe):
         item = self.gd.items[recipe.result_id]
         hq = self.sell_hq if item.can_hq else None
-        st = market_stats(self.market.get(recipe.result_id), hq, self.hours, self.outlier_ratio)
+        st = market_stats(self.market.get(recipe.result_id), hq, self.hours, self.outlier_ratio, self.sell_world)
         tree = self.craft(recipe, self.batch, ())
 
         extra = []
@@ -215,7 +226,7 @@ class Calculator:
         ratio = math.inf
         for node in walk(tree):
             if node.source == "거래소":
-                sold = market_stats(self.market.get(node.item_id), None, self.hours).sold_qty
+                sold = market_stats(self.market.get(node.item_id), None, self.hours, world=self.buy_world).sold_qty
                 ratio = min(ratio, sold / node.need)
         return ratio
 
@@ -231,7 +242,7 @@ def detail_rows(calc, tree):
     rows = []
 
     def add(node, amt, depth):
-        st = market_stats(calc.market.get(node.item_id), None, calc.hours)
+        st = market_stats(calc.market.get(node.item_id), None, calc.hours, world=calc.buy_world)
         rows.append({
             "재료": "　" * depth + ("└ " if depth else "") + calc.gd.name(node.item_id),
             "1회 제작당 수량": amt,
@@ -241,7 +252,7 @@ def detail_rows(calc, tree):
             "구매처": node.source,
             "판매 수량(기간)": st.sold_qty,
             "현재 매물 수": st.listing_count,
-            "비고": node.note,
+            "비고(구매 서버)": node.note,
         })
         for child, child_amt in node.children:
             add(child, child_amt, depth + 1)
@@ -263,9 +274,12 @@ def seller_tax_rate(cfg, tax_rates, city=None):
     return cfg["default_tax_rate"], "기본값"
 
 
-def analyze(gd, market, cfg, targets, seller_tax, sell_hq=False, batch_size=1, job_levels=None):
-    """대상 레시피 전체를 평가해서 (rows, {recipe_id: (recipe, tree)}, calc) 를 돌려준다."""
-    calc = Calculator(gd, market, cfg, seller_tax, sell_hq, batch_size, job_levels)
+def analyze(gd, market, cfg, targets, seller_tax, **options):
+    """대상 레시피 전체를 평가해서 (rows, {recipe_id: (recipe, tree)}, calc) 를 돌려준다.
+
+    options 는 Calculator 인자 (sell_hq, batch_size, job_levels, sell_world, buy_world, world_names).
+    """
+    calc = Calculator(gd, market, cfg, seller_tax, **options)
     trees = {}
     rows = []
     for r in targets:
@@ -278,17 +292,25 @@ def analyze(gd, market, cfg, targets, seller_tax, sell_hq=False, batch_size=1, j
 if __name__ == "__main__":
     from .config import load_config
     from .gamedata import GameData, target_recipes
-    from .market import MarketCache, Universalis, resolve_world_id
+    from .market import MarketCache, Universalis, resolve_server
 
     cfg = load_config()
     gd = GameData()
     api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"])
-    cache = MarketCache(resolve_world_id(api, cfg))
+    server = resolve_server(api, cfg)
+    cache = MarketCache(server)
     tax, city = seller_tax_rate(cfg, cache.tax_rates)
     targets = list(target_recipes(gd, cfg, cfg["include_all_crafts"], cfg["recipe_level_min"], cfg["recipe_level_max"]))
-    rows, trees, calc = analyze(gd, cache.items, cfg, targets, tax, cfg["sell_hq"], cfg["batch_size"])
+    rows, trees, calc = analyze(
+        gd, cache.items, cfg, targets, tax, sell_hq=cfg["sell_hq"], batch_size=cfg["batch_size"],
+        sell_world=None if cfg["sell_scope"] == "dc" else server["world_id"],
+        buy_world=None if cfg["buy_scope"] == "dc" else server["world_id"],
+        world_names=server["world_names"],
+    )
     ok = sorted((r for r in rows if r["순수익"] is not None), key=lambda r: -r["순수익"])
-    print(f"판매세 {tax:.0%} ({city}) / 계산된 레시피 {len(ok)}/{len(rows)}개 (필터 적용 전)\n")
+    scope = lambda v: f"{server['dc']} 전체" if v == "dc" else server["world"]
+    print(f"판매 시세: {scope(cfg['sell_scope'])} / 재료 구매: {scope(cfg['buy_scope'])} / 판매세 {tax:.0%} ({city})")
+    print(f"레벨 {cfg['recipe_level_min']}~{cfg['recipe_level_max']} 계산된 레시피 {len(ok)}/{len(rows)}개 (필터 적용 전)\n")
     for i, r in enumerate(ok[:15], 1):
         print(f"{i:>2}. [{r['직업']}] {r['아이템명']:<20} 판매 {r['판매 예상가']:>9,.0f}  원가 {r['원가']:>9,.0f}  "
               f"순수익 {r['순수익']:>9,.0f}  수익률 {r['수익률(%)'] or 0:>6.1f}%  판매 {r['판매 건수']}건  매물 {r['현재 매물 수']}")
@@ -296,4 +318,4 @@ if __name__ == "__main__":
         print(f"\n── {r['아이템명']} 원가 내역 ──")
         for d in detail_rows(calc, trees[r["recipe_id"]][1]):
             unit = f"{d['단가']:,.0f}" if d["단가"] is not None else "-"
-            print(f"  {d['재료']:<16} x{d['1회 제작당 수량']:<3} 단가 {unit:>8}  {d['구매처']} {d['비고']}")
+            print(f"  {d['재료']:<16} x{d['1회 제작당 수량']:<3} 단가 {unit:>8}  {d['구매처']} {d['비고(구매 서버)']}")

@@ -11,7 +11,7 @@ import streamlit as st
 
 from ffxiv.config import JOB_NAMES, TAX_CITIES, load_config
 from ffxiv.gamedata import GameData, download_csvs, scope_recipes, target_recipes
-from ffxiv.market import MarketCache, Universalis, refresh, resolve_world_id
+from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
 from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate
 
 st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🪑", layout="wide")
@@ -27,8 +27,8 @@ def load_gamedata(base_url):
 
 
 @st.cache_resource(show_spinner="저장된 시세 불러오는 중…")
-def load_market_cache(world_id):
-    return MarketCache(world_id)
+def load_market_cache(world_id, dc):
+    return MarketCache({"world_id": world_id, "dc": dc})
 
 
 def fmt_time(ts):
@@ -43,11 +43,12 @@ except requests.RequestException as e:
 
 api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"])
 try:
-    world_id = resolve_world_id(api, cfg)
+    server = resolve_server(api, cfg)
 except (requests.RequestException, ValueError) as e:
-    st.error(f"월드 ID 를 확인하지 못했습니다: {e}")
+    st.error(f"월드 정보를 확인하지 못했습니다: {e}")
     st.stop()
-cache = load_market_cache(world_id)
+cache = load_market_cache(server["world_id"], server["dc"])
+home, dc = server["world_id"], server["dc"]
 
 # ── 사이드바 ──
 sb = st.sidebar
@@ -55,6 +56,17 @@ sb.title("⚙️ 설정")
 
 refresh_clicked = sb.button("🔄 데이터 갱신", type="primary", width="stretch")
 sb.caption(f"마지막 갱신: {fmt_time(cache.updated_at)}")
+
+sb.subheader("서버 범위")
+scope_names = {"dc": f"{dc} 전체 (5개 서버)" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
+sell_scope = sb.radio("판매 시세 기준", list(scope_names), format_func=scope_names.get, horizontal=True,
+                      index=0 if cfg["sell_scope"] == "dc" else 1,
+                      help="등록은 내 서버에서만 되지만, 사는 사람들이 서버를 돌아다니며 제일 싼 걸 사가니 "
+                           "경쟁 매물과 판매량을 데이터센터 전체로 보는 게 기본입니다.")
+buy_scope = sb.radio("재료 구매", list(scope_names), format_func=scope_names.get, horizontal=True,
+                     index=0 if cfg["buy_scope"] == "dc" else 1,
+                     help="데이터센터 전체면 다른 서버에 가서 제일 싼 매물을 사 온다고 가정합니다. "
+                          "재료 상세의 '구매 서버'에 어디로 가면 되는지 나옵니다.")
 
 sb.subheader("분석 대상")
 include_all = sb.toggle("전체 제작품 (가구 외 포함)", value=cfg["include_all_crafts"])
@@ -103,7 +115,7 @@ if refresh_clicked or missing:
     todo = len(ids) if refresh_clicked else len(missing)
     bar = st.progress(0.0, f"시세 받는 중… ({todo:,}개 아이템, 처음엔 1~5분 걸릴 수 있어요)")
     try:
-        n = refresh(api, cache, world_id, ids, cfg["history_hours"], full=refresh_clicked,
+        n = refresh(api, cache, server, ids, cfg["history_hours"], full=refresh_clicked,
                     progress=lambda p, msg: bar.progress(p, msg))
         bar.empty()
         if refresh_clicked:
@@ -113,11 +125,15 @@ if refresh_clicked or missing:
         st.warning(f"Universalis 에서 시세를 받지 못했습니다. 저장된 데이터로 계산합니다. ({e})")
 
 # ── 계산 ──
-rows, trees, calc = analyze(gd, cache.items, cfg, targets, seller_tax, sell_hq, batch_size, job_levels)
+rows, trees, calc = analyze(
+    gd, cache.items, cfg, targets, seller_tax, sell_hq=sell_hq, batch_size=batch_size, job_levels=job_levels,
+    sell_world=None if sell_scope == "dc" else home, buy_world=None if buy_scope == "dc" else home,
+    world_names=server["world_names"],
+)
 df = pd.DataFrame(rows)
 
 st.title("🪑 파판14 제작 수익 분석")
-st.caption(f"{cfg['world']} · 레시피 레벨 {level_range[0]}~{level_range[1]} · "
+st.caption(f"{server['world']} · 판매 시세 {scope_names[sell_scope]} · 재료 구매 {scope_names[buy_scope]} · 레시피 레벨 {level_range[0]}~{level_range[1]} · "
            f"{'전체 제작품' if include_all else '하우징 가구'} · 시세 갱신 {fmt_time(cache.updated_at)}")
 
 if df.empty:

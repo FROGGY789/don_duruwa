@@ -18,16 +18,23 @@ from dataclasses import dataclass, field
 from .gamedata import can_craft_intermediate
 
 
-def market_item_ids(gd, cfg, targets):
-    """시세가 필요한 아이템 ID: 완성품 + 재료 (직접 제작 가능한 중간재료의 하위 재료까지)."""
-    ids, stack = set(), [r.result_id for r in targets]
+def market_item_ids(gd, recipes):
+    """시세가 필요한 아이템 ID: 완성품 + 재료 + 중간재료의 하위 재료까지.
+
+    중간재료는 레벨과 상관없이 따라 내려가서, 사이드바에서 직업 레벨을 올려도 시세를 다시 받지 않게 한다.
+    """
+    targets = {}
+    for r in recipes:
+        targets.setdefault(r.result_id, []).append(r)
+    ids, stack = set(), list(targets)
     while stack:
         iid = stack.pop()
         if iid in ids:
             continue
         ids.add(iid)
-        for r in [r for r in targets if r.result_id == iid] + [
-                r for r in gd.recipes_by_result.get(iid, []) if can_craft_intermediate(r, cfg)]:
+        subs = [r for r in gd.recipes_by_result.get(iid, [])
+                if not (r.expert or r.specialist or r.stars)]
+        for r in targets.get(iid, []) + subs:
             stack.extend(i for i, _ in r.ingredients)
     return sorted(i for i in ids if i in gd.items and gd.items[i].marketable)
 
@@ -76,8 +83,9 @@ class CostNode:
 
 
 class Calculator:
-    def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1):
+    def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1, job_levels=None):
         self.gd = gd
+        self.job_levels = job_levels or cfg["job_levels"]
         self.market = market
         self.cfg = cfg
         self.seller_tax = seller_tax
@@ -131,7 +139,7 @@ class Calculator:
             options.append(CostNode(item_id, need, price * (1 + self.buyer_tax), "거래소", note))
         if item_id not in stack:
             for r in self.gd.recipes_by_result.get(item_id, []):
-                if can_craft_intermediate(r, self.cfg):
+                if can_craft_intermediate(r, self.cfg, self.job_levels):
                     crafted = self.craft(r, math.ceil(need / r.result_amount), stack + (item_id,))
                     if crafted.unit_cost is not None:
                         options.append(crafted)
@@ -218,7 +226,6 @@ def walk(node):
         yield from walk(child)
 
 
-
 def detail_rows(calc, tree):
     """재료 상세 표 (중간재료는 들여쓰기로 하위 재료 표시)."""
     rows = []
@@ -244,7 +251,6 @@ def detail_rows(calc, tree):
     return rows
 
 
-
 def seller_tax_rate(cfg, tax_rates, city=None):
     city = city or cfg["tax_city"]
     if not tax_rates:
@@ -257,9 +263,9 @@ def seller_tax_rate(cfg, tax_rates, city=None):
     return cfg["default_tax_rate"], "기본값"
 
 
-def analyze(gd, market, cfg, targets, seller_tax, sell_hq=False, batch_size=1):
+def analyze(gd, market, cfg, targets, seller_tax, sell_hq=False, batch_size=1, job_levels=None):
     """대상 레시피 전체를 평가해서 (rows, {recipe_id: (recipe, tree)}, calc) 를 돌려준다."""
-    calc = Calculator(gd, market, cfg, seller_tax, sell_hq, batch_size)
+    calc = Calculator(gd, market, cfg, seller_tax, sell_hq, batch_size, job_levels)
     trees = {}
     rows = []
     for r in targets:

@@ -192,15 +192,11 @@ class GameData:
         return {iid for iid, it in self.items.items() if it.name in wanted}
 
 
-def target_recipes(gd, cfg, include_all, level_min, level_max):
-    """분석 대상 레시피: 레벨 범위 안, 내 레벨로 가능, 거래소 판매 가능, (기본) 하우징 가구."""
+def scope_recipes(gd, cfg, include_all):
+    """시세를 받아둘 전체 범위: 레벨과 상관없이, 거래소 판매 가능, (기본) 하우징 가구."""
     furniture = set(cfg["furniture_ui_categories"])
     for r in gd.recipes:
         if r.expert or r.specialist:
-            continue
-        if not level_min <= r.job_level <= level_max:
-            continue
-        if r.job_level > cfg["job_levels"][r.job_name]:
             continue
         item = gd.items[r.result_id]
         if not item.marketable:
@@ -210,13 +206,22 @@ def target_recipes(gd, cfg, include_all, level_min, level_max):
         yield r
 
 
-def can_craft_intermediate(recipe, cfg):
+def target_recipes(gd, cfg, include_all, level_min, level_max, job_levels=None):
+    """분석 대상 레시피: 전체 범위 중 레벨 범위 안이고 내 직업 레벨로 가능한 것."""
+    job_levels = job_levels or cfg["job_levels"]
+    for r in scope_recipes(gd, cfg, include_all):
+        if level_min <= r.job_level <= level_max and r.job_level <= job_levels[r.job_name]:
+            yield r
+
+
+def can_craft_intermediate(recipe, cfg, job_levels=None):
     """중간재료를 직접 만들 수 있는지: 내 레벨 이하, 별 없음, 전문/고난도 아님."""
     if recipe.expert or recipe.specialist or recipe.stars > 0:
         return False
     if recipe.secret_book and not cfg.get("allow_secret_recipe_intermediates", False):
         return False
-    return recipe.job_level <= cfg["job_levels"][recipe.job_name]
+    job_levels = job_levels or cfg["job_levels"]
+    return recipe.job_level <= job_levels[recipe.job_name]
 
 
 if __name__ == "__main__":

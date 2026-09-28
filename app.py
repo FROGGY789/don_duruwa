@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 
 from ffxiv.config import JOB_NAMES, TAX_CITIES, load_config
-from ffxiv.gamedata import GameData, download_csvs, target_recipes
+from ffxiv.gamedata import GameData, download_csvs, scope_recipes, target_recipes
 from ffxiv.market import MarketCache, Universalis, refresh, resolve_world_id
 from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate
 
@@ -24,6 +24,11 @@ F = cfg["filters"]
 def load_gamedata(base_url):
     download_csvs(base_url)
     return GameData()
+
+
+@st.cache_resource(show_spinner="저장된 시세 불러오는 중…")
+def load_market_cache(world_id):
+    return MarketCache(world_id)
 
 
 def fmt_time(ts):
@@ -42,7 +47,7 @@ try:
 except (requests.RequestException, ValueError) as e:
     st.error(f"월드 ID 를 확인하지 못했습니다: {e}")
     st.stop()
-cache = MarketCache(world_id)
+cache = load_market_cache(world_id)
 
 # ── 사이드바 ──
 sb = st.sidebar
@@ -54,6 +59,11 @@ sb.caption(f"마지막 갱신: {fmt_time(cache.updated_at)}")
 sb.subheader("분석 대상")
 include_all = sb.toggle("전체 제작품 (가구 외 포함)", value=cfg["include_all_crafts"])
 level_range = sb.slider("레시피 레벨", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
+with sb.expander("직업별 레벨", expanded=False):
+    st.caption("이 레벨보다 높은 레시피는 빠지고, 중간재료 직접 제작도 이 레벨까지만 고려합니다.")
+    cols = st.columns(2)
+    job_levels = {job: cols[i % 2].number_input(job, 1, 100, cfg["job_levels"][job], key=f"lv_{job}")
+                  for i, job in enumerate(JOB_NAMES)}
 sell_hq = sb.toggle("HQ 가능 아이템은 HQ 로 판매", value=cfg["sell_hq"])
 batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_size"],
                              help="재료를 싼 매물부터 이 횟수만큼 사는 비용으로 원가를 계산합니다.")
@@ -79,19 +89,19 @@ city = sb.selectbox("판매 도시(세율)", city_keys,
 seller_tax, tax_city = seller_tax_rate(cfg, cache.tax_rates, city)
 sb.caption(f"적용 판매세: {seller_tax:.0%} ({TAX_CITIES.get(tax_city, tax_city)}) · 구매세 {cfg['buyer_tax_rate']:.0%}")
 
-with sb.expander("직업 레벨 (config.yaml 에서 수정)"):
-    st.write(" / ".join(f"{j} {cfg['job_levels'][j]}" for j in JOB_NAMES))
 if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바뀌었을 때만"):
     download_csvs(cfg["datamining_base_url"], force=True)
     load_gamedata.clear()
     st.rerun()
 
 # ── 시세 데이터 준비 ──
-targets = list(target_recipes(gd, cfg, include_all, *level_range))
-ids = market_item_ids(gd, cfg, targets)
+# 시세는 레벨과 상관없이 전체 범위를 받아둔다 → 레벨 범위/직업 레벨을 바꿔도 다시 받지 않음
+ids = market_item_ids(gd, scope_recipes(gd, cfg, include_all))
+targets = list(target_recipes(gd, cfg, include_all, *level_range, job_levels))
 missing = cache.missing(ids)
 if refresh_clicked or missing:
-    bar = st.progress(0.0, "시세 받는 중…")
+    todo = len(ids) if refresh_clicked else len(missing)
+    bar = st.progress(0.0, f"시세 받는 중… ({todo:,}개 아이템, 처음엔 1~5분 걸릴 수 있어요)")
     try:
         n = refresh(api, cache, world_id, ids, cfg["history_hours"], full=refresh_clicked,
                     progress=lambda p, msg: bar.progress(p, msg))
@@ -103,7 +113,7 @@ if refresh_clicked or missing:
         st.warning(f"Universalis 에서 시세를 받지 못했습니다. 저장된 데이터로 계산합니다. ({e})")
 
 # ── 계산 ──
-rows, trees, calc = analyze(gd, cache.items, cfg, targets, seller_tax, sell_hq, batch_size)
+rows, trees, calc = analyze(gd, cache.items, cfg, targets, seller_tax, sell_hq, batch_size, job_levels)
 df = pd.DataFrame(rows)
 
 st.title("🪑 파판14 제작 수익 분석")

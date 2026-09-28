@@ -176,7 +176,7 @@ def refresh(api, cache, world_id, item_ids, history_hours, full, progress=None):
 
 
 if __name__ == "__main__":
-    from .gamedata import GameData, download_csvs, target_recipes
+    from .gamedata import GameData, download_csvs, scope_recipes
     from .profit import market_item_ids
 
     cfg = load_config()
@@ -185,9 +185,9 @@ if __name__ == "__main__":
     api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"])
     wid = resolve_world_id(api, cfg)
     print(f"월드: {cfg['world']} (ID {wid})")
-    targets = list(target_recipes(gd, cfg, cfg["include_all_crafts"], cfg["recipe_level_min"], cfg["recipe_level_max"]))
-    ids = market_item_ids(gd, cfg, targets)
-    print(f"대상 레시피 {len(targets)}개, 시세 조회할 아이템 {len(ids)}개")
+    recipes = list(scope_recipes(gd, cfg, cfg["include_all_crafts"]))
+    ids = market_item_ids(gd, recipes)
+    print(f"레시피 {len(recipes)}개 (전체 레벨), 시세 조회할 아이템 {len(ids)}개")
     cache = MarketCache(wid)
     n = refresh(api, cache, wid, ids, cfg["history_hours"], full=True,
                 progress=lambda p, msg: print(f"  {msg}"))

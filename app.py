@@ -18,6 +18,8 @@ st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🪑",
 
 cfg = load_config()
 F = cfg["filters"]
+H = cfg["history_hours"]
+PERIOD = f"{H // 24}일" if H % 24 == 0 else f"{H}시간"
 
 
 @st.cache_resource(show_spinner="게임 데이터(레시피/아이템) 불러오는 중…")
@@ -81,7 +83,7 @@ batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_si
                              help="재료를 싼 매물부터 이 횟수만큼 사는 비용으로 원가를 계산합니다.")
 
 sb.subheader("필터")
-min_sales = sb.number_input(f"최근 {cfg['history_hours']}시간 판매 건수 ≥", 0, 999, F["min_sales"])
+min_sales = sb.number_input(f"최근 {PERIOD} 판매 건수 ≥", 0, 999, F["min_sales"])
 mat_ratio = sb.number_input("재료 판매 수량 ≥ 필요 수량 × (배)", 0.0, 100.0, float(F["material_ratio"]), 0.5,
                             help="NPC 에서 사거나 직접 채집하는 재료는 검사하지 않습니다.")
 min_margin = sb.number_input("최소 수익률(%)", -100.0, 10000.0, float(F["min_margin_pct"]), 5.0)
@@ -169,7 +171,7 @@ COLUMN_CONFIG = {
     "원가": st.column_config.NumberColumn(format="localized"),
     "순수익": st.column_config.NumberColumn(format="localized"),
     "수익률(%)": st.column_config.NumberColumn(format="%.1f%%"),
-    "판매 건수": st.column_config.NumberColumn(f"{cfg['history_hours']}h 판매 건수"),
+    "판매 건수": st.column_config.NumberColumn(f"{PERIOD} 판매 건수"),
     "하루 잠재 이익": st.column_config.NumberColumn(
         format="localized", help="순수익 × 시장 전체 하루 판매량. 내가 다 팔 수 있다는 뜻은 아닌 상한값."),
     "업데이트": st.column_config.DatetimeColumn("데이터 업데이트", format="MM-DD HH:mm"),
@@ -190,7 +192,7 @@ def show_detail(recipe_id):
         column_config={
             "단가": st.column_config.NumberColumn(format="localized"),
             "소계(1회 제작)": st.column_config.NumberColumn(format="localized"),
-            "판매 수량(기간)": st.column_config.NumberColumn(f"{cfg['history_hours']}h 판매 수량"),
+            "판매 수량(기간)": st.column_config.NumberColumn(f"{PERIOD} 판매 수량"),
         },
     )
 

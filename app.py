@@ -3,7 +3,8 @@
 실행:  streamlit run app.py
 """
 import math
-from datetime import datetime
+import time
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -20,6 +21,7 @@ cfg = load_config()
 F = cfg["filters"]
 H = cfg["history_hours"]
 PERIOD = f"{H // 24}일" if H % 24 == 0 else f"{H}시간"
+KST = timezone(timedelta(hours=9), "KST")  # 클라우드 서버는 시간대가 달라서 한국 시간으로 고정
 
 
 @st.cache_resource(show_spinner="게임 데이터(레시피/아이템) 불러오는 중…")
@@ -33,8 +35,14 @@ def load_market_cache(world_id, dc):
     return MarketCache({"world_id": world_id, "dc": dc})
 
 
+@st.cache_resource
+def auto_refresh_state():
+    """자동 갱신을 마지막으로 시도한 시각. 실패해도 매 클릭마다 재시도하지 않게 기억해 둔다."""
+    return {"last_try": 0.0}
+
+
 def fmt_time(ts):
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "없음"
+    return datetime.fromtimestamp(ts, KST).strftime("%Y-%m-%d %H:%M") if ts else "없음"
 
 
 try:
@@ -57,7 +65,9 @@ sb = st.sidebar
 sb.title("⚙️ 설정")
 
 refresh_clicked = sb.button("🔄 데이터 갱신", type="primary", width="stretch")
-sb.caption(f"마지막 갱신: {fmt_time(cache.updated_at)}")
+auto_min = cfg.get("auto_refresh_minutes", 0)
+sb.caption(f"마지막 갱신: {fmt_time(cache.updated_at)}"
+           + (f" · {auto_min}분 지나면 페이지를 열 때 자동 갱신" if auto_min else ""))
 
 sb.subheader("서버 범위")
 scope_names = {"dc": f"{dc} 전체 (5개 서버)" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
@@ -113,14 +123,21 @@ if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바
 ids = market_item_ids(gd, scope_recipes(gd, cfg, include_all))
 targets = list(target_recipes(gd, cfg, include_all, *level_range, job_levels))
 missing = cache.missing(ids)
-if refresh_clicked or missing:
-    todo = len(ids) if refresh_clicked else len(missing)
-    bar = st.progress(0.0, f"시세 받는 중… ({todo:,}개 아이템, 처음엔 1~5분 걸릴 수 있어요)")
+auto = auto_refresh_state()
+now = time.time()
+auto_due = (bool(auto_min) and cache.updated_at and now - cache.updated_at > auto_min * 60
+            and now - auto["last_try"] > auto_min * 60)
+full = refresh_clicked or auto_due
+if full or missing:
+    auto["last_try"] = now
+    todo = len(ids) if full else len(missing)
+    why = "시세가 오래돼서 자동으로 " if auto_due and not refresh_clicked else ""
+    bar = st.progress(0.0, f"{why}시세 받는 중… ({todo:,}개 아이템, 1~5분 걸릴 수 있어요)")
     try:
-        n = refresh(api, cache, server, ids, cfg["history_hours"], full=refresh_clicked,
+        n = refresh(api, cache, server, ids, cfg["history_hours"], full=full,
                     progress=lambda p, msg: bar.progress(p, msg))
         bar.empty()
-        if refresh_clicked:
+        if full:
             st.toast(f"{n}개 아이템 시세를 새로 받았습니다.")
     except requests.RequestException as e:
         bar.empty()
@@ -142,11 +159,10 @@ if df.empty:
     st.info("조건에 맞는 레시피가 없습니다.")
     st.stop()
 
-now = datetime.now().timestamp()
 stale = df["업데이트"].fillna(0) < now - stale_hours * 3600
 df["기타"] = [(["⚠ 데이터 오래됨"] if s else []) + extra for s, extra in zip(stale, df["기타"])]
 df["기타"] = df["기타"].apply(" · ".join)
-df["업데이트"] = pd.to_datetime(df["업데이트"], unit="s", utc=True).dt.tz_convert(datetime.now().astimezone().tzinfo)
+df["업데이트"] = pd.to_datetime(df["업데이트"], unit="s", utc=True).dt.tz_convert(KST)
 
 calculable = df["순수익"].notna()
 passed = (

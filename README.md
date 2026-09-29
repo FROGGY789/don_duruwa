@@ -21,6 +21,15 @@ Windows 에서는 `run.bat` 을 더블클릭해도 됩니다. 브라우저가 �
 
 처음 켤 때는 레시피 CSV(약 25MB)와 시세를 받느라 1~2분 걸립니다. 그다음부터는 저장된 데이터(`data/`, `cache/` 폴더)를 씁니다.
 
+배포된 앱: https://uyeon-donpiryo.streamlit.app/
+
+## 비밀번호 걸기
+비밀번호는 코드(GitHub)에 넣지 않고 따로 저장합니다.
+- **Streamlit Cloud**: 앱의 **Settings → Secrets** 칸에 `app_password = "원하는비밀번호"` 한 줄 입력 → Save
+- **내 PC**: `.streamlit/secrets.toml` 파일을 만들고 같은 한 줄을 넣기 (이 파일은 GitHub 에 올라가지 않음)
+
+설정이 없으면 비밀번호 없이 바로 열립니다. 한 번 맞히면 그 브라우저 탭을 닫거나 새로고침할 때까지 유지됩니다.
+
 ## 어디서든 접속하기 (Streamlit Community Cloud, 무료)
 PC를 꺼도 폰·다른 컴퓨터에서 볼 수 있게 인터넷에 올리는 방법입니다.
 1. https://share.streamlit.io 접속 → **Continue with GitHub** 로 로그인 (비공개 저장소 접근 허용)

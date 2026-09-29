@@ -16,6 +16,7 @@ from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
 from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate
 
 st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🪑", layout="wide")
+ui.password_gate()  # Streamlit Secrets 에 app_password 가 있으면 비밀번호 화면부터
 
 cfg = load_config()
 F = cfg["filters"]

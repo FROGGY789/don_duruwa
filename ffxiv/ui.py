@@ -4,6 +4,7 @@
 - design/streamlit.css  사이드바 등 Streamlit 기본 위젯을 디자인에 맞추는 스타일
 - design/dashboard.*    메인 영역(헤더·카드·탭·순위 표·재료 상세)을 그리는 컴포넌트
 """
+import hmac
 import math
 import re
 from pathlib import Path
@@ -92,3 +93,33 @@ def badge_kind(text):
     if text.startswith("⚠"):
         return "stale"
     return "nq"
+
+
+def _app_password():
+    """Streamlit Secrets 의 app_password. 설정이 없으면 None (비밀번호 없이 열림)."""
+    try:
+        return st.secrets.get("app_password") or None
+    except Exception:  # secrets.toml 자체가 없을 때
+        return None
+
+
+def password_gate():
+    """비밀번호를 맞게 입력해야 아래 화면이 보인다. 한 번 맞히면 창을 닫을 때까지 유지."""
+    password = _app_password()
+    if password is None or st.session_state.get("authed"):
+        return
+    theme = st.query_params.get("theme", "다크")
+    palette = st.query_params.get("palette", "골드")
+    apply_theme(theme if theme in THEMES else "다크", palette if palette in PALETTES else "골드")
+    st.html("<style>" + _read("login.css") + "</style>")
+    st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
+            '<h1>파판14 제작 수익 분석</h1><p>비밀번호를 입력하면 화면이 열립니다.</p></div>')
+    with st.form("login", border=False):
+        typed = st.text_input("비밀번호", type="password", placeholder="비밀번호")
+        ok = st.form_submit_button("들어가기", type="primary", width="stretch")
+    if ok:
+        if hmac.compare_digest(typed.encode(), str(password).encode()):
+            st.session_state["authed"] = True
+            st.rerun()
+        st.error("비밀번호가 맞지 않아요.")
+    st.stop()

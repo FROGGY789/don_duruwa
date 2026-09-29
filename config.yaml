@@ -35,7 +35,7 @@ recipe_level_max: 60
 # ── 세금 ──
 # 판매세: 내 리테이너가 등록하는 도시. "min" 으로 두면 가장 낮은 세율 도시 기준.
 # 선택지: Limsa Lominsa, Gridania, Ul'dah, Ishgard, Kugane, Crystarium, Old Sharlayan, Tuliyollal, min
-tax_city: "Limsa Lominsa"
+tax_city: "Gridania"   # 내 리테이너: 전원 그리다니아
 # 세율 API 를 못 불러올 때 쓰는 판매세
 default_tax_rate: 0.05
 # 거래소에서 재료를 살 때 붙는 구매세 (NPC 상점 구매에는 붙지 않음)

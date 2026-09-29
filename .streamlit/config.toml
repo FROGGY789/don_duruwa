@@ -1,0 +1,13 @@
+# 기본 위젯 색 (디자인의 다크·골드). 세부 색은 ffxiv/design/*.css 에서 테마별로 덮어씀
+[theme]
+base = "dark"
+primaryColor = "#cfa95e"
+backgroundColor = "#0c1018"
+secondaryBackgroundColor = "#151c28"
+textColor = "#e9e5da"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

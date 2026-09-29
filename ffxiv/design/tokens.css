@@ -1,0 +1,86 @@
+/* =========================================================
+   디자인 토큰 (Claude Design 원본). ffxiv/ui.py 가 테마·색감에 맞는 블록을 골라 :root 에 적용한다.
+   ========================================================= */
+:root{
+  /* 폰트 */
+  --font-sans:"IBM Plex Sans KR",system-ui,sans-serif;
+  --font-display:"Noto Serif KR",serif;
+  --fs-xs:11px; --fs-sm:12.5px; --fs-md:14px; --fs-lg:16px; --fs-xl:20px; --fs-2xl:28px; --fs-num:30px;
+
+  /* 색상 (다크 기본) */
+  --bg:#0c1018;
+  --sidebar-bg:#10151f;
+  --surface:#151c28;
+  --surface-2:#1b2433;
+  --surface-hover:#1f2a3b;
+  --row-selected:#2a2618;
+  --border:#263043;
+  --border-strong:#34405a;
+  --primary:#cfa95e;          /* 골드 */
+  --primary-strong:#e2c07a;
+  --primary-soft:rgba(207,169,94,.13);
+  --on-primary:#1a140a;
+  --text:#e9e5da;
+  --text-muted:#9ba2b3;
+  --text-faint:#6c7487;
+  --positive:#5cc28c;
+  --positive-soft:rgba(92,194,140,.13);
+  --negative:#e8736f;
+  --negative-soft:rgba(232,115,111,.13);
+  --warning:#e0b04f;
+  --warning-soft:rgba(224,176,79,.14);
+  --info:#76a9dc;
+  --info-soft:rgba(118,169,220,.14);
+  --violet:#b395e0;
+  --violet-soft:rgba(179,149,224,.14);
+  --star:#e2c07a;
+
+  /* 모서리 · 그림자 · 여백 */
+  --radius-sm:6px; --radius:10px; --radius-lg:14px; --radius-pill:999px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow:0 6px 20px rgba(0,0,0,.28);
+  --ring:0 0 0 3px rgba(207,169,94,.28);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
+  --sidebar-w:320px;
+}
+[data-theme="light"]{
+  --bg:#f4f1ea;
+  --sidebar-bg:#ece7dc;
+  --surface:#ffffff;
+  --surface-2:#f7f4ee;
+  --surface-hover:#f3eee3;
+  --row-selected:#fbf1d9;
+  --border:#e0d9ca;
+  --border-strong:#cfc5b1;
+  --primary:#9c7431;
+  --primary-strong:#80601f;
+  --primary-soft:rgba(156,116,49,.11);
+  --on-primary:#ffffff;
+  --text:#1f1d19;
+  --text-muted:#645f55;
+  --text-faint:#948d80;
+  --positive:#23865a;
+  --positive-soft:rgba(35,134,90,.1);
+  --negative:#c24640;
+  --negative-soft:rgba(194,70,64,.1);
+  --warning:#9a6a0c;
+  --warning-soft:rgba(190,140,30,.13);
+  --info:#2f6ea8;
+  --info-soft:rgba(47,110,168,.1);
+  --violet:#7250a8;
+  --violet-soft:rgba(114,80,168,.1);
+  --star:#a8791f;
+  --shadow-sm:0 1px 2px rgba(60,45,20,.08);
+  --shadow:0 6px 20px rgba(60,45,20,.08);
+  --ring:0 0 0 3px rgba(156,116,49,.22);
+}
+
+/* ---------- 색감 팔레트 (data-palette) — 기본은 골드 ---------- */
+[data-theme="dark"][data-palette="crystal"]{--bg:#0a1019;--sidebar-bg:#0e1522;--surface:#131c2b;--surface-2:#192436;--surface-hover:#1d2a3f;--row-selected:#16283d;--border:#233049;--border-strong:#31415e;--primary:#7fb4e3;--primary-strong:#a5cbee;--primary-soft:rgba(127,180,227,.14);--on-primary:#0a1422;--star:#a5cbee;--ring:0 0 0 3px rgba(127,180,227,.3)}
+[data-theme="light"][data-palette="crystal"]{--bg:#eef1f5;--sidebar-bg:#e4e9f0;--surface:#ffffff;--surface-2:#f5f7fa;--surface-hover:#eef2f7;--row-selected:#e6eff9;--border:#d6dde7;--border-strong:#c2ccda;--primary:#2f6aa3;--primary-strong:#22548a;--primary-soft:rgba(47,106,163,.1);--on-primary:#ffffff;--star:#2f6aa3;--ring:0 0 0 3px rgba(47,106,163,.22)}
+[data-theme="dark"][data-palette="aether"]{--bg:#0e0d17;--sidebar-bg:#13121f;--surface:#191827;--surface-2:#211f33;--surface-hover:#26243b;--row-selected:#28213d;--border:#2c2942;--border-strong:#3d3959;--primary:#b69cf0;--primary-strong:#cdbaf6;--primary-soft:rgba(182,156,240,.14);--on-primary:#150f24;--star:#e2c07a;--ring:0 0 0 3px rgba(182,156,240,.3)}
+[data-theme="light"][data-palette="aether"]{--bg:#f2f0f6;--sidebar-bg:#e8e4f0;--surface:#ffffff;--surface-2:#f7f5fb;--surface-hover:#f0ecf7;--row-selected:#eee8fa;--border:#ddd7e8;--border-strong:#c9c1da;--primary:#6d4fb0;--primary-strong:#573c93;--primary-soft:rgba(109,79,176,.1);--on-primary:#ffffff;--star:#a8791f;--ring:0 0 0 3px rgba(109,79,176,.22)}
+[data-theme="dark"][data-palette="rose"]{--bg:#120e0e;--sidebar-bg:#171212;--surface:#1d1717;--surface-2:#251e1d;--surface-hover:#2b2322;--row-selected:#33241f;--border:#342a28;--border-strong:#463936;--primary:#e0a283;--primary-strong:#ecbca3;--primary-soft:rgba(224,162,131,.14);--on-primary:#221208;--star:#ecbca3;--ring:0 0 0 3px rgba(224,162,131,.3)}
+[data-theme="light"][data-palette="rose"]{--bg:#f6f0ed;--sidebar-bg:#eee4df;--surface:#ffffff;--surface-2:#faf5f2;--surface-hover:#f5ece7;--row-selected:#fbe9e0;--border:#e5d6cf;--border-strong:#d4c0b6;--primary:#a5583a;--primary-strong:#87442a;--primary-soft:rgba(165,88,58,.1);--on-primary:#ffffff;--star:#a5583a;--ring:0 0 0 3px rgba(165,88,58,.22)}
+[data-theme="dark"][data-palette="silver"]{--bg:#0e0f11;--sidebar-bg:#131417;--surface:#18191d;--surface-2:#1f2025;--surface-hover:#25262c;--row-selected:#2a2b31;--border:#2a2c32;--border-strong:#3a3c44;--primary:#c9ccd4;--primary-strong:#e6e8ee;--primary-soft:rgba(201,204,212,.12);--on-primary:#111217;--star:#e2c07a;--ring:0 0 0 3px rgba(201,204,212,.28)}
+[data-theme="light"][data-palette="silver"]{--bg:#f1f2f4;--sidebar-bg:#e6e8eb;--surface:#ffffff;--surface-2:#f7f8f9;--surface-hover:#eff0f2;--row-selected:#e9ebef;--border:#dcdee2;--border-strong:#c7cad0;--primary:#3f4550;--primary-strong:#262b33;--primary-soft:rgba(63,69,80,.08);--on-primary:#ffffff;--star:#a8791f;--ring:0 0 0 3px rgba(63,69,80,.2)}

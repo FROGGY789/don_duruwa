@@ -1,0 +1,114 @@
+/* Streamlit 기본 화면·위젯을 디자인 토큰에 맞춘다. (tokens.css 의 변수를 사용) */
+
+/* ---------- 바탕 · 글꼴 ---------- */
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+  background: var(--bg) !important; color: var(--text);
+}
+.stApp, .stApp input, .stApp button, .stApp textarea, .stApp select,
+[data-testid="stSidebar"], [data-baseweb="popover"] { font-family: var(--font-sans) !important; }
+[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stMainBlockContainer"] { padding: var(--space-8) var(--space-10) var(--space-10); max-width: 1600px; }
+@media (max-width: 900px) { [data-testid="stMainBlockContainer"] { padding: var(--space-10) var(--space-4) var(--space-8); } }
+.stApp p, .stApp span, .stApp label { color: inherit; }
+[data-testid="stToast"], [data-testid="stAlert"] { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border); }
+[data-testid="stProgress"] p { color: var(--text-muted) !important; }
+
+/* ---------- 사이드바 ---------- */
+[data-testid="stSidebar"] { background: var(--sidebar-bg) !important; border-right: 1px solid var(--border); }
+[data-testid="stSidebar"] > div { background: var(--sidebar-bg) !important; }
+[data-testid="stSidebarContent"] { color: var(--text); }
+[data-testid="stSidebarHeader"] { height: 2.25rem; }
+[data-testid="stSidebarUserContent"] { padding: 0 var(--space-5) var(--space-10); }
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: var(--space-3); }
+[data-testid="stSidebarCollapseButton"] svg, [data-testid="stExpandSidebarButton"] svg, [data-testid="stSidebarCollapsedControl"] svg { color: var(--text-muted); }
+
+.brand { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-1); }
+.brand-mark { width: 10px; height: 10px; transform: rotate(45deg); background: var(--primary); flex: none; }
+.brand-name { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-lg); letter-spacing: .02em; color: var(--text); }
+.sb-title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .12em;
+  color: var(--primary); margin: var(--space-4) 0 0; padding-top: var(--space-5); border-top: 1px solid var(--border); }
+.sb-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--primary-soft), transparent); }
+.sb-note { font-size: var(--fs-xs); color: var(--text-faint); text-align: center; margin-top: calc(-1 * var(--space-2)); }
+.sb-note.tax { display: flex; justify-content: space-between; text-align: left; font-size: var(--fs-sm); padding: 8px 10px;
+  border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--text-muted); margin-top: 0; }
+.sb-note.tax b { color: var(--primary-strong); }
+
+/* 위젯 라벨 */
+[data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p { color: var(--text-muted) !important; font-size: var(--fs-sm) !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--text-faint) !important; }
+[data-testid="stTooltipIcon"] svg { color: var(--text-faint) !important; }
+
+/* ---------- 버튼 ---------- */
+[data-testid="stBaseButton-primary"] { background: var(--primary) !important; color: var(--on-primary) !important; border: 0 !important;
+  border-radius: var(--radius) !important; font-weight: 600 !important; padding: 11px var(--space-4) !important; box-shadow: var(--shadow-sm); }
+[data-testid="stBaseButton-primary"]:hover { background: var(--primary-strong) !important; }
+[data-testid="stBaseButton-primary"] p { color: var(--on-primary) !important; font-weight: 600; }
+[data-testid="stBaseButton-secondary"] { background: var(--surface) !important; color: var(--text-muted) !important;
+  border: 1px solid var(--border) !important; border-radius: var(--radius) !important; }
+[data-testid="stBaseButton-secondary"]:hover { border-color: var(--primary) !important; color: var(--text) !important; }
+
+/* 세그먼트 (다크/화이트, 서버 범위, 색감) */
+[data-testid="stButtonGroup"] { width: 100%; }
+[data-testid="stButtonGroup"] [role="radiogroup"] { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; width: 100%;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 3px; gap: 3px; }
+button[data-variant="segmented_control"] { border: 0 !important; border-radius: calc(var(--radius) - 3px) !important;
+  background: transparent !important; color: var(--text-muted) !important; min-height: 32px; padding: 6px var(--space-2) !important; width: 100%; }
+button[data-variant="segmented_control"]:hover { color: var(--text) !important; }
+button[data-variant="segmented_control"][aria-checked="true"] { background: var(--surface-2) !important; color: var(--text) !important;
+  box-shadow: inset 0 0 0 1px var(--border-strong) !important; }
+button[data-variant="segmented_control"] p { color: inherit !important; font-size: var(--fs-sm) !important; }
+.st-key-theme button[data-variant="segmented_control"]:nth-of-type(1) p::before { content: "🌙 "; }
+.st-key-theme button[data-variant="segmented_control"]:nth-of-type(2) p::before { content: "☀️ "; }
+
+/* 색감 스와치: 버튼을 색 동그라미로 */
+.st-key-palette [data-testid="stButtonGroup"] { display: flex; align-items: center; justify-content: space-between; }
+.st-key-palette [data-testid="stWidgetLabel"] { margin: 0; min-height: 0; }
+.st-key-palette [data-testid="stWidgetLabel"] p { font-size: var(--fs-xs) !important; color: var(--text-faint) !important; }
+.st-key-palette [role="radiogroup"] { display: flex; width: auto; background: transparent; border: 0; padding: 0; gap: var(--space-2); }
+.st-key-palette button[data-variant="segmented_control"] { width: 22px; height: 22px; min-height: 22px; padding: 0 !important;
+  border-radius: 50% !important; border: 2px solid var(--sidebar-bg) !important; box-shadow: 0 0 0 1px var(--border-strong) !important; }
+.st-key-palette button[data-variant="segmented_control"][aria-checked="true"] { box-shadow: 0 0 0 2px var(--text) !important; }
+.st-key-palette button p { display: none; }
+.st-key-palette button:nth-of-type(1) { background: #cfa95e !important; }
+.st-key-palette button:nth-of-type(2) { background: #7fb4e3 !important; }
+.st-key-palette button:nth-of-type(3) { background: #b69cf0 !important; }
+.st-key-palette button:nth-of-type(4) { background: #e0a283 !important; }
+.st-key-palette button:nth-of-type(5) { background: #c9ccd4 !important; }
+
+/* ---------- 입력칸 ---------- */
+[data-baseweb="input"], [data-baseweb="base-input"], [data-testid="stNumberInputContainer"], [data-baseweb="select"] > div {
+  background: var(--surface) !important; border-color: var(--border) !important; border-radius: var(--radius-sm) !important; }
+[data-testid="stNumberInputContainer"] { border: 1px solid var(--border) !important; }
+[data-testid="stNumberInputContainer"]:focus-within, [data-baseweb="select"] > div:focus-within { border-color: var(--primary) !important; box-shadow: var(--ring); }
+.stApp input, [data-baseweb="select"] div { color: var(--text) !important; font-variant-numeric: tabular-nums; }
+[data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"] { background: var(--surface-2) !important; color: var(--text-muted) !important; }
+[data-testid="stNumberInputStepDown"]:hover, [data-testid="stNumberInputStepUp"]:hover { background: var(--primary-soft) !important; color: var(--primary-strong) !important; }
+[data-baseweb="select"] svg { color: var(--text-muted) !important; }
+[data-baseweb="popover"] ul, [data-baseweb="popover"] li, [data-baseweb="menu"] { background: var(--surface) !important; color: var(--text) !important; }
+[data-baseweb="popover"] li:hover, [data-baseweb="popover"] li[aria-selected="true"] { background: var(--surface-hover) !important; }
+
+/* 토글 (오른쪽 끝에 스위치) */
+[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) { width: 100% !important; }
+[data-testid="stCheckbox"] label { display: flex; flex-direction: row-reverse; justify-content: space-between; width: 100%; color: var(--text) !important; }
+[data-testid="stCheckbox"] label p { color: var(--text) !important; font-size: var(--fs-md) !important; }
+[data-testid="stCheckbox"] label > span + div { width: 36px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong) !important; flex: none; }
+[data-testid="stCheckbox"] label > span + div > div { width: 16px; height: 16px; background: var(--text) !important; box-shadow: none !important; }
+[data-testid="stCheckbox"] label:has(input:checked) > span + div { background: var(--primary) !important; }
+[data-testid="stCheckbox"] label:has(input:checked) > span + div > div { background: var(--on-primary) !important; }
+
+/* 슬라이더 */
+[data-testid="stSlider"] [style*="translate(-50%, -50%)"] > div:not([data-testid]):not([style]) { background: var(--primary) !important;
+  border: 3px solid var(--sidebar-bg); box-shadow: 0 0 0 1px var(--primary) !important; }
+[data-testid="stSliderThumbValue"], [data-testid="stSliderThumbValue"] div { color: var(--text) !important; font-weight: 600; font-family: var(--font-sans); }
+[data-testid="stSliderTickBarMin"], [data-testid="stSliderTickBarMax"] { color: var(--text-faint) !important; }
+
+/* 접는 영역 (직업별 레벨) */
+[data-testid="stExpander"] details { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; }
+[data-testid="stExpander"] summary { color: var(--text-muted) !important; font-size: var(--fs-sm); }
+[data-testid="stExpander"] summary:hover { color: var(--text) !important; }
+[data-testid="stExpander"] summary svg { color: var(--text-muted) !important; }
+[data-testid="stExpanderDetails"] [data-testid="stVerticalBlock"] { gap: var(--space-2); }
+
+/* 스크롤바 */
+[data-testid="stSidebarContent"]::-webkit-scrollbar { width: 6px; }
+[data-testid="stSidebarContent"]::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }

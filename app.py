@@ -6,10 +6,10 @@ import math
 import time
 from datetime import datetime, timedelta, timezone
 
-import pandas as pd
 import requests
 import streamlit as st
 
+from ffxiv import ui
 from ffxiv.config import JOB_NAMES, TAX_CITIES, load_config
 from ffxiv.gamedata import GameData, download_csvs, scope_recipes, target_recipes
 from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
@@ -45,6 +45,15 @@ def fmt_time(ts):
     return datetime.fromtimestamp(ts, KST).strftime("%Y-%m-%d %H:%M") if ts else "없음"
 
 
+# ── 테마 (사이드바 맨 위에서 고르고, 주소에 기억해서 새로고침해도 유지) ──
+sb = st.sidebar
+ui.sidebar_brand(sb)
+theme = sb.segmented_control("화면 모드", list(ui.THEMES), default="다크", required=True,
+                             key="theme", bind="query-params", label_visibility="collapsed", width="stretch")
+palette = sb.segmented_control("색감", list(ui.PALETTES), default="골드", required=True,
+                               key="palette", bind="query-params", width="stretch")
+ui.apply_theme(theme, palette)
+
 try:
     gd = load_gamedata(cfg["datamining_base_url"])
 except requests.RequestException as e:
@@ -61,59 +70,59 @@ cache = load_market_cache(server["world_id"], server["dc"])
 home, dc = server["world_id"], server["dc"]
 
 # ── 사이드바 ──
-sb = st.sidebar
-sb.title("⚙️ 설정")
-
 refresh_clicked = sb.button("🔄 데이터 갱신", type="primary", width="stretch")
 auto_min = cfg.get("auto_refresh_minutes", 0)
-sb.caption(f"마지막 갱신: {fmt_time(cache.updated_at)}"
-           + (f" · {auto_min}분 지나면 페이지를 열 때 자동 갱신" if auto_min else ""))
+ui.sidebar_note(sb, f"마지막 갱신: {fmt_time(cache.updated_at)}"
+                + (f" · {auto_min}분 지나면 자동 갱신" if auto_min else ""))
 
-sb.subheader("서버 범위")
-scope_names = {"dc": f"{dc} 전체 (5개 서버)" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
-sell_scope = sb.radio("판매 시세 기준", list(scope_names), format_func=scope_names.get, horizontal=True,
-                      index=0 if cfg["sell_scope"] == "dc" else 1,
-                      help="등록은 내 서버에서만 되지만, 사는 사람들이 서버를 돌아다니며 제일 싼 걸 사가니 "
-                           "경쟁 매물과 판매량을 데이터센터 전체로 보는 게 기본입니다.")
-buy_scope = sb.radio("재료 구매", list(scope_names), format_func=scope_names.get, horizontal=True,
-                     index=0 if cfg["buy_scope"] == "dc" else 1,
-                     help="데이터센터 전체면 다른 서버에 가서 제일 싼 매물을 사 온다고 가정합니다. "
-                          "재료 상세의 '구매 서버'에 어디로 가면 되는지 나옵니다.")
+ui.sidebar_title(sb, "서버 범위")
+scope_names = {"dc": f"{dc} 전체" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
+sell_scope = sb.segmented_control(
+    "판매 시세 기준", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
+    default="dc" if cfg["sell_scope"] == "dc" else "world",
+    help="등록은 내 서버에서만 되지만, 사는 사람들이 서버를 돌아다니며 제일 싼 걸 사가니 "
+         "경쟁 매물과 판매량을 데이터센터 전체로 보는 게 기본입니다.")
+buy_scope = sb.segmented_control(
+    "재료 구매", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
+    default="dc" if cfg["buy_scope"] == "dc" else "world",
+    help="데이터센터 전체면 다른 서버에 가서 제일 싼 매물을 사 온다고 가정합니다. "
+         "재료 상세의 '구매 서버'에 어디로 가면 되는지 나옵니다.")
 
-sb.subheader("분석 대상")
-include_all = sb.toggle("전체 제작품 (가구 외 포함)", value=cfg["include_all_crafts"])
-level_range = sb.slider("레시피 레벨", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
-with sb.expander("직업별 레벨", expanded=False):
+ui.sidebar_title(sb, "분석 대상")
+include_all = sb.toggle("전체 제작품", value=cfg["include_all_crafts"], help="끄면 하우징 가구만 봅니다.")
+level_range = sb.slider("레시피 레벨 범위", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
+with sb.expander(f"직업별 레벨 · {len(JOB_NAMES)}개 직업", expanded=False):
     st.caption("이 레벨보다 높은 레시피는 빠지고, 중간재료 직접 제작도 이 레벨까지만 고려합니다.")
     cols = st.columns(2)
     job_levels = {job: cols[i % 2].number_input(job, 1, 100, cfg["job_levels"][job], key=f"lv_{job}")
                   for i, job in enumerate(JOB_NAMES)}
-sell_hq = sb.toggle("HQ 가능 아이템은 HQ 로 판매", value=cfg["sell_hq"])
+sell_hq = sb.toggle("HQ 판매", value=cfg["sell_hq"], help="HQ 가 있는 아이템을 HQ 시세로 판다고 가정합니다.")
 batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_size"],
                              help="재료를 싼 매물부터 이 횟수만큼 사는 비용으로 원가를 계산합니다.")
 
-sb.subheader("필터")
-min_sales = sb.number_input(f"최근 {PERIOD} 판매 건수 ≥", 0, 999, F["min_sales"])
-mat_ratio = sb.number_input("재료 판매 수량 ≥ 필요 수량 × (배)", 0.0, 100.0, float(F["material_ratio"]), 0.5,
-                            help="NPC 에서 사거나 직접 채집하는 재료는 검사하지 않습니다.")
+ui.sidebar_title(sb, "필터")
+min_sales = sb.number_input(f"{PERIOD} 판매 건수 ≥", 0, 999, F["min_sales"])
+mat_ratio = sb.number_input("재료 판매 수량 배수 ≥", 0.0, 100.0, float(F["material_ratio"]), 0.5,
+                            help="재료별 판매 수량이 필요 수량의 몇 배 이상인지. NPC·직접 채집 재료는 검사하지 않습니다.")
 min_margin = sb.number_input("최소 수익률(%)", -100.0, 10000.0, float(F["min_margin_pct"]), 5.0)
 min_profit = sb.number_input("개당 최소 순수익(길)", -1_000_000, 10_000_000, F["min_profit"], 500)
 max_listings = sb.number_input("현재 등록 건수 ≤", 0, 999, F["max_listings"])
 stale_hours = sb.number_input("데이터 오래됨 기준(시간)", 1, 720, F["stale_hours"])
 
-sb.subheader("정렬 / 세금")
-sort_options = ["순수익", "수익률(%)", "하루 잠재 이익"]
-default_sort = {"수익률": "수익률(%)"}.get(cfg["sort_by"], cfg["sort_by"])
-sort_by = sb.radio("기본 정렬", sort_options,
-                   index=sort_options.index(default_sort) if default_sort in sort_options else 0)
+ui.sidebar_title(sb, "정렬 · 세금")
+sort_names = {"net": "순수익", "margin": "수익률", "daily": "하루 잠재 이익"}
+default_sort = {"순수익": "net", "수익률": "margin", "수익률(%)": "margin", "하루 잠재 이익": "daily"}.get(cfg["sort_by"], "net")
+sort_by = sb.selectbox("기본 정렬", list(sort_names), index=list(sort_names).index(default_sort),
+                       format_func=sort_names.get)
 city_keys = ["min"] + list(TAX_CITIES)
 city = sb.selectbox("판매 도시(세율)", city_keys,
                     index=city_keys.index(cfg["tax_city"]) if cfg["tax_city"] in city_keys else 1,
                     format_func=lambda c: "가장 낮은 세율" if c == "min" else TAX_CITIES[c])
 seller_tax, tax_city = seller_tax_rate(cfg, cache.tax_rates, city)
-sb.caption(f"적용 판매세: {seller_tax:.0%} ({TAX_CITIES.get(tax_city, tax_city)}) · 구매세 {cfg['buyer_tax_rate']:.0%}")
+sb.html(f'<div class="sb-note tax"><span>적용 판매세</span>'
+        f'<b>{seller_tax:.0%} ({TAX_CITIES.get(tax_city, tax_city)})</b></div>')
 
-if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바뀌었을 때만"):
+if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바뀌었을 때만", width="stretch"):
     download_csvs(cfg["datamining_base_url"], force=True)
     load_gamedata.clear()
     st.rerun()
@@ -149,92 +158,59 @@ rows, trees, calc = analyze(
     sell_world=None if sell_scope == "dc" else home, buy_world=None if buy_scope == "dc" else home,
     world_names=server["world_names"],
 )
-df = pd.DataFrame(rows)
-
-st.title("🪑 파판14 제작 수익 분석")
-st.caption(f"{server['world']} · 판매 시세 {scope_names[sell_scope]} · 재료 구매 {scope_names[buy_scope]} · 레시피 레벨 {level_range[0]}~{level_range[1]} · "
-           f"{'전체 제작품' if include_all else '하우징 가구'} · 시세 갱신 {fmt_time(cache.updated_at)}")
-
-if df.empty:
-    st.info("조건에 맞는 레시피가 없습니다.")
-    st.stop()
-
-stale = df["업데이트"].fillna(0) < now - stale_hours * 3600
-df["기타"] = [(["⚠ 데이터 오래됨"] if s else []) + extra for s, extra in zip(stale, df["기타"])]
-df["기타"] = df["기타"].apply(" · ".join)
-df["업데이트"] = pd.to_datetime(df["업데이트"], unit="s", utc=True).dt.tz_convert(KST)
-
-calculable = df["순수익"].notna()
-passed = (
-    calculable
-    & (df["판매 건수"] >= min_sales)
-    & (df["재료 여유 배수"] >= mat_ratio)
-    & (df["수익률(%)"].fillna(-math.inf) >= min_margin)
-    & (df["순수익"] >= min_profit)
-    & (df["현재 매물 수"] <= max_listings)
-)
-result = df[passed].sort_values(sort_by, ascending=False)
-
-m1, m2, m3 = st.columns(3)
-m1.metric("분석한 레시피", f"{len(df)}개")
-m2.metric("계산 가능", f"{int(calculable.sum())}개")
-m3.metric("필터 통과", f"{len(result)}개")
-
-COLUMNS = ["순위", "아이템명", "직업", "레시피 레벨", "판매 예상가", "원가", "순수익", "수익률(%)",
-           "판매 건수", "현재 매물 수", "하루 잠재 이익", "업데이트", "기타"]
-COLUMN_CONFIG = {
-    "판매 예상가": st.column_config.NumberColumn(format="localized"),
-    "원가": st.column_config.NumberColumn(format="localized"),
-    "순수익": st.column_config.NumberColumn(format="localized"),
-    "수익률(%)": st.column_config.NumberColumn(format="%.1f%%"),
-    "판매 건수": st.column_config.NumberColumn(f"{PERIOD} 판매 건수"),
-    "하루 잠재 이익": st.column_config.NumberColumn(
-        format="localized", help="순수익 × 시장 전체 하루 판매량. 내가 다 팔 수 있다는 뜻은 아닌 상한값."),
-    "업데이트": st.column_config.DatetimeColumn("데이터 업데이트", format="MM-DD HH:mm"),
-}
 
 
-def show_detail(recipe_id):
-    recipe, tree = trees[recipe_id]
-    row = df[df["recipe_id"] == recipe_id].iloc[0]
-    st.subheader(f"📦 {row['아이템명']} — 재료 상세")
-    ratio = row["재료 여유 배수"]
-    ratio_text = "∞ (거래소 재료 없음)" if math.isinf(ratio) else f"{ratio:.1f}배"
-    st.caption(f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
-               f"{batch_size}회 제작 기준 · 재료 여유 배수 {ratio_text}"
-               + (f" · {row['기타']}" if row["기타"] else ""))
-    st.dataframe(
-        pd.DataFrame(detail_rows(calc, tree)), hide_index=True, width="stretch",
-        column_config={
-            "단가": st.column_config.NumberColumn(format="localized"),
-            "소계(1회 제작)": st.column_config.NumberColumn(format="localized"),
-            "판매 수량(기간)": st.column_config.NumberColumn(f"{PERIOD} 판매 수량"),
-        },
-    )
+def passes(r):
+    return (r["순수익"] is not None
+            and r["판매 건수"] >= min_sales
+            and r["재료 여유 배수"] >= mat_ratio
+            and (r["수익률(%)"] if r["수익률(%)"] is not None else -math.inf) >= min_margin
+            and r["순수익"] >= min_profit
+            and r["현재 매물 수"] <= max_listings)
 
 
-def show_table(data, key):
-    if data.empty:
-        st.info("필터를 통과한 아이템이 없습니다. 사이드바에서 조건을 완화해 보세요.")
-        return
-    data = data.reset_index(drop=True)
-    data.insert(0, "순위", range(1, len(data) + 1))
-    event = st.dataframe(
-        data[COLUMNS], hide_index=True, width="stretch", column_config=COLUMN_CONFIG,
-        on_select="rerun", selection_mode="single-row", key=key,
-    )
-    st.caption("행을 클릭하면 재료 상세가 아래에 나옵니다. 컬럼 제목을 클릭하면 정렬됩니다.")
-    if event.selection.rows:
-        show_detail(int(data.iloc[event.selection.rows[0]]["recipe_id"]))
+def row_data(r):
+    recipe, tree = trees[r["recipe_id"]]
+    stale = (r["업데이트"] or 0) < now - stale_hours * 3600
+    notes = (["⚠ 데이터 오래됨"] if stale else []) + r["기타"]
+    ratio = r["재료 여유 배수"]
+    ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
+    materials = []
+    for d in detail_rows(calc, tree):
+        note = d["비고(구매 서버)"]
+        materials.append({
+            "depth": d["depth"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
+            "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
+            "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
+            "world": note if d["구매처"] == "거래소" else "",
+        })
+    return {
+        "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
+        "level": r["레시피 레벨"], "sell": r["판매 예상가"], "cost": r["원가"], "net": r["순수익"],
+        "margin": r["수익률(%)"], "sales": r["판매 건수"], "listings": r["현재 매물 수"],
+        "daily": r["하루 잠재 이익"], "updated": r["업데이트"] or 0,
+        "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
+        "badges": [{"kind": ui.badge_kind(t), "text": t} for t in notes],
+        "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
+                      f"{batch_size}회 제작 기준 · {ratio_text}",
+        "materials": materials,
+    }
 
 
-tabs = st.tabs(["🏆 통합 순위"] + JOB_NAMES)
-with tabs[0]:
-    show_table(result, "all")
-for tab, job in zip(tabs[1:], JOB_NAMES):
-    with tab:
-        show_table(result[result["직업"] == job], f"job_{job}")
+calculable = [r for r in rows if r["순수익"] is not None]
+passed = [r for r in rows if passes(r)]
+failed = [r for r in rows if r["순수익"] is None]
 
-with st.expander(f"계산할 수 없었던 레시피 ({int((~calculable).sum())}개)"):
-    st.dataframe(df[~calculable][["아이템명", "직업", "레시피 레벨", "제외 사유"]],
-                 hide_index=True, width="stretch")
+ui.dashboard({
+    "subtitle": [server["world"], f"판매 시세 {scope_names[sell_scope]}", f"재료 구매 {scope_names[buy_scope]}",
+                 f"레시피 레벨 {level_range[0]}~{level_range[1]}", "전체 제작품" if include_all else "하우징 가구",
+                 f"시세 갱신 {fmt_time(cache.updated_at)}"],
+    "stats": {"total": len(rows), "calculable": len(calculable), "passed": len(passed)},
+    "jobs": JOB_NAMES,
+    "period": PERIOD,
+    "sort": sort_by,
+    "taxNote": f"판매세 {seller_tax:.0%} 반영",
+    "rows": [row_data(r) for r in passed],
+    "failed": [{"name": gd.name(trees[r["recipe_id"]][0].result_id), "stars": trees[r["recipe_id"]][0].stars,
+                "job": r["직업"], "level": r["레시피 레벨"], "reason": r["제외 사유"]} for r in failed],
+})

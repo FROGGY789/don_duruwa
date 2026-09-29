@@ -244,6 +244,8 @@ def detail_rows(calc, tree):
     def add(node, amt, depth):
         st = market_stats(calc.market.get(node.item_id), None, calc.hours, world=calc.buy_world)
         rows.append({
+            "depth": depth,
+            "name": calc.gd.name(node.item_id),
             "재료": "　" * depth + ("└ " if depth else "") + calc.gd.name(node.item_id),
             "1회 제작당 수량": amt,
             "총 필요 수량": node.need,

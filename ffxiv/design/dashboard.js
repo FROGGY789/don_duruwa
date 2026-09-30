@@ -108,7 +108,9 @@ function renderTable(d, rows) {
     return `<div class="table-wrap"><div class="empty">필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
   }
   const body = rows.map((r, i) => {
-    const badges = r.badges.map((b) => `<span class="badge ${esc(b.kind)}">${esc(b.text)}</span>`).join("");
+    const badges = r.badges.map((b) => b.detail
+      ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
+      : `<span class="badge ${esc(b.kind)}">${esc(b.text)}</span>`).join("");
     return `
       <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">
         <td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>
@@ -229,7 +231,40 @@ export default function (component) {
       renderFailed(data);
   }
 
+  // 비전서 팝오버: 뱃지를 누르면 뜨고, 다른 데를 누르거나 스크롤하면 닫힌다
+  function closePop() {
+    root.querySelector(".pop")?.remove();
+  }
+  function openPop(btn) {
+    closePop();
+    const pop = document.createElement("div");
+    pop.className = "pop";
+    pop.innerHTML = `<div class="pop-title">📖 필요한 비전서</div><div class="pop-body">${esc(btn.dataset.pop)}</div>
+      <div class="pop-hint">이 비전서 읽어야 만들 수 있데이.</div>`;
+    root.appendChild(pop);
+    const b = btn.getBoundingClientRect();
+    const w = pop.offsetWidth;
+    pop.style.left = Math.max(8, Math.min(b.right - w, window.innerWidth - w - 8)) + "px";
+    pop.style.top = b.bottom + 6 + "px";
+  }
+  if (!root.__popBound) {
+    root.__popBound = true;
+    window.addEventListener("scroll", closePop, true);
+    window.addEventListener("resize", closePop);
+    document.addEventListener("click", (e) => { if (!e.composedPath().includes(root)) closePop(); });
+  }
+
   root.onclick = (e) => {
+    const popBtn = e.target.closest(".has-pop");
+    if (popBtn) {
+      e.stopPropagation();
+      const open = root.querySelector(".pop");
+      if (open && open.dataset.for === popBtn.dataset.pop + popBtn.closest("tr")?.dataset.id) return closePop();
+      openPop(popBtn);
+      root.querySelector(".pop").dataset.for = popBtn.dataset.pop + popBtn.closest("tr")?.dataset.id;
+      return;
+    }
+    if (!e.target.closest(".pop")) closePop();
     const cat = e.target.closest("[data-cat]");
     if (cat) {
       state.cat = cat.dataset.cat;

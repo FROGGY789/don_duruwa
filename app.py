@@ -230,7 +230,7 @@ def row_data(r):
         "margin": r["수익률(%)"], "sales": r["판매 건수"], "listings": r["현재 매물 수"],
         "daily": r["하루 잠재 이익"], "updated": r["업데이트"] or 0,
         "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
-        "badges": [{"kind": ui.badge_kind(t), "text": t} for t in notes],
+        "badges": [ui.badge(t) for t in notes],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,

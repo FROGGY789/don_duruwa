@@ -94,12 +94,13 @@ def ago(ts, now):
     return f"{int(sec // 86400)}일 전"
 
 
-def badge_kind(text):
+def badge(text):
+    """기타 칸 뱃지. 비전서는 짧게 '비전서'만 보이고, 누르면 어떤 비전서인지 팝오버로."""
     if text.startswith("비전서"):
-        return "book"
+        return {"kind": "book", "text": "📖 비전서", "detail": text.split(":", 1)[-1].strip()}
     if text.startswith("⚠"):
-        return "stale"
-    return "nq"
+        return {"kind": "stale", "text": text}
+    return {"kind": "nq", "text": text}
 
 
 def _app_password():

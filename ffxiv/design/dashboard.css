@@ -137,3 +137,12 @@ thead th.sorted.asc::after{content:" ▲"}
 .notice{display:flex;gap:var(--space-3);align-items:flex-start;margin:0 0 var(--space-6);padding:var(--space-3) var(--space-4);border-radius:var(--radius);
   font-size:var(--fs-sm);line-height:1.6;color:var(--text-muted);background:var(--primary-soft);border:1px solid color-mix(in oklab,var(--primary) 30%,transparent)}
 .notice.error{color:var(--negative);background:var(--negative-soft);border-color:color-mix(in oklab,var(--negative) 30%,transparent)}
+
+/* 비전서 뱃지 + 팝오버 */
+button.badge{border:0;cursor:pointer;font-family:inherit}
+button.badge.book:hover{box-shadow:inset 0 0 0 1px var(--violet)}
+.pop{position:fixed;z-index:1000;min-width:200px;max-width:280px;padding:var(--space-3) var(--space-4);background:var(--surface);
+  border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--shadow);font-size:var(--fs-sm);white-space:normal}
+.pop-title{font-size:var(--fs-xs);color:var(--violet);font-weight:600;margin-bottom:4px}
+.pop-body{color:var(--text);font-weight:600}
+.pop-hint{margin-top:6px;font-size:var(--fs-xs);color:var(--text-faint)}

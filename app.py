@@ -205,7 +205,7 @@ if not cache.updated_at:
 rows, trees, calc = analyze(
     gd, cache.items, cfg, targets, seller_tax, sell_hq=sell_hq, batch_size=batch_size, job_levels=job_levels,
     sell_world=None if sell_scope == "dc" else home, buy_world=None if buy_scope == "dc" else home,
-    world_names=server["world_names"],
+    world_names=server["world_names"], home_world=home,
 )
 
 
@@ -244,6 +244,7 @@ def row_data(r):
             f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다. 지금 게임 시세랑 다를 수 있데이."
             if t.startswith("⚠ 데이터") else None)) for t in notes],
         "evidence": r["근거"],
+        "worlds": r["서버 비교"],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,

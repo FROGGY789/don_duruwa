@@ -108,13 +108,14 @@ class CostNode:
 
 class Calculator:
     def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1, job_levels=None,
-                 sell_world=None, buy_world=None, world_names=None):
+                 sell_world=None, buy_world=None, world_names=None, home_world=None):
         self.gd = gd
         self.job_levels = job_levels or cfg["job_levels"]
         # None = 데이터센터 전체, 월드ID = 그 서버만
         self.sell_world = sell_world
         self.buy_world = buy_world
         self.world_names = world_names or {}
+        self.home_world = home_world
         self.market = market
         self.cfg = cfg
         self.seller_tax = seller_tax
@@ -250,6 +251,7 @@ class Calculator:
             "품질 비교": None,
             "결과물 개수": recipe.result_amount,
             "뱃지 설명": tips,
+            "서버 비교": [],
             "근거": None,
         }
 
@@ -297,6 +299,20 @@ class Calculator:
                 text = f"📉 하락 중 {change:.0f}%"
                 extra.append(text)
                 tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
+            worlds = self.world_compare(recipe.result_id, hq, tree.unit_cost) if len(self.world_names) > 1 else []
+            row["서버 비교"] = worlds
+            best = next((w for w in worlds if w["best"]), None)
+            home = next((w for w in worlds if w["home"]), None)
+            # 내 서버보다 확실히 더 남는 서버가 있으믄 뱃지 (둘 다 판매 기록이 있을 때만)
+            base = home["net"] if home else None
+            if best and not best["home"] and base is not None and best["net"] > 0:
+                diff = best["net"] - base
+                if diff >= 1000 and diff >= abs(base) * 0.1:
+                    text = f"🌐 {best['world']} +{diff:,.0f}"
+                    extra.append(text)
+                    tips[text] = (f"{best['world']} 서버에서 팔믄 개당 {best['net']:,.0f}길, "
+                                  f"{eun(home['world'])} {base:,.0f}길 남는다. "
+                                  "거기 리테이너 있는 캐릭터가 있어야 올릴 수 있데이. 서버별 비교는 재료 상세에 있다.")
             if item.can_hq:
                 row["품질 비교"] = self.quality_compare(recipe.result_id, tree.unit_cost)
                 other_name = "HQ" if not self.sell_hq else "NQ"
@@ -308,14 +324,15 @@ class Calculator:
                                   f"대신 {other_name} 로 만들 수 있어야 된데이.")
         return row, tree
 
-    def sale_price(self, item_id, hq, st):
+    def sale_price(self, item_id, hq, st, world="scope"):
         """(판매 예상가, HQ 매물 때문에 깎은 값 또는 None).
 
         min(기간 중앙값, 최저 매물). NQ 로 팔 때는 HQ 가 더 싸게 올라와 있으믄 그 값 이상은 못 받는다.
         """
+        world = self.sell_world if world == "scope" else world
         sell = min(st.median, st.min_listing) if st.min_listing else st.median
         if hq is False:
-            hq_min = self.stats(item_id, True, self.outlier_ratio, self.sell_world).min_listing
+            hq_min = self.stats(item_id, True, self.outlier_ratio, world).min_listing
             if hq_min is not None and hq_min < sell:
                 return hq_min, hq_min
         return sell, None
@@ -351,6 +368,24 @@ class Calculator:
         daily = st.sold_qty / (self.hours / 24)
         days = (ahead + 1) / daily if daily > 0 else None
         return days, sorted(l[0] for l in listings)[:2]
+
+    def world_compare(self, item_id, hq, unit_cost):
+        """서버별로 올렸을 때 판매가·순수익. 그 서버 판매 기록·매물만 본다."""
+        out = []
+        for wid, name in self.world_names.items():
+            wid = int(wid)
+            st = self.stats(item_id, hq, self.outlier_ratio, wid)
+            sell = self.sale_price(item_id, hq, st, wid)[0] if st.median is not None else None
+            out.append({
+                "world": name, "home": wid == self.home_world, "sales": st.sale_count, "median": st.median,
+                "minListing": st.min_listing, "listings": st.listing_count, "sell": sell,
+                "net": sell * (1 - self.seller_tax) - unit_cost if sell is not None else None,
+            })
+        ranked = [w for w in out if w["net"] is not None and w["sales"] >= 2]
+        best = max(ranked, key=lambda w: w["net"]) if ranked else None
+        for w in out:
+            w["best"] = w is best
+        return sorted(out, key=lambda w: (w["net"] is None, -(w["net"] or 0)))
 
     def quality_compare(self, item_id, unit_cost):
         """NQ 로 팔 때와 HQ 로 팔 때 비교 (재료비는 같다고 보고)."""
@@ -399,6 +434,12 @@ class Calculator:
                 sold = self.stats(node.item_id, world=self.buy_world).sold_qty
                 ratio = min(ratio, sold / node.need)
         return ratio
+
+
+def eun(word):
+    """받침 있으믄 '은', 없으믄 '는'."""
+    last = word[-1] if word else ""
+    return word + ("은" if "가" <= last <= "힣" and (ord(last) - 0xAC00) % 28 else "는")
 
 
 def walk(node):

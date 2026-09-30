@@ -252,3 +252,8 @@ tr.flash td{animation:flash 1.6s ease-out}
 .badge.odd{background:var(--negative-soft);color:var(--negative);font-weight:600}
 .ev-grid tr.odd td{color:var(--negative);text-decoration:line-through;opacity:.8}
 .ev-grid tr.odd td:first-child{text-decoration:none}
+
+/* 서버별 판매 비교 */
+.badge.world{background:var(--info-soft);color:var(--info);font-weight:600}
+.worlds .table-wrap{box-shadow:none;margin-top:var(--space-2)}
+.worlds tr.best td{background:var(--primary-soft);font-weight:600}

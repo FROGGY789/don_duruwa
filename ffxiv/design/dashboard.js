@@ -264,7 +264,30 @@ function renderInsights(d, row) {
         <div class="q-grid">${box("NQ")}${box("HQ")}</div>
       </div>`;
   }
-  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderEvidence(d, row);
+  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderWorlds(row) + renderEvidence(d, row);
+}
+
+// ── 서버별 판매 비교 ──
+function renderWorlds(row) {
+  const ws = row.worlds || [];
+  if (ws.length < 2) return "";
+  const body = ws.map((w) => `
+    <tr class="${w.best ? "best" : ""}">
+      <td>${w.best ? "👑 " : ""}${esc(w.world)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
+      <td class="num">${w.sales}</td><td class="num">${gil(w.median)}</td><td class="num">${gil(w.minListing)}</td>
+      <td class="num">${w.listings}</td><td class="num">${gil(w.sell)}</td>
+      <td class="num">${w.net == null ? '<span class="dash">-</span>' : signed(w.net)}</td>
+    </tr>`).join("");
+  return `
+    <div class="evidence worlds">
+      <div class="insight-head"><h3>🌐 서버별 판매 비교</h3>
+        <span class="faint">그 서버 판매 기록·매물만 보고 계산했다. 다른 서버에 올리려믄 거기 리테이너 있는 캐릭터가 있어야 된데이. 👑 = 판매 2건 이상 중 제일 많이 남는 곳</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>서버</th><th class="num">판매 건수</th><th class="num">판매 중앙값</th><th class="num">최저 매물</th>
+          <th class="num">매물 수</th><th class="num">예상 판매가</th><th class="num">순수익</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </div>`;
 }
 
 // ── 판매가 근거: 이 값이 어디서 나왔는지 ──

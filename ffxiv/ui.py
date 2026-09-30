@@ -121,5 +121,5 @@ def password_gate():
         if hmac.compare_digest(typed.encode(), str(password).encode()):
             st.session_state["authed"] = True
             st.rerun()
-        st.error("비밀번호가 맞지 않아요.")
+        st.html('<div class="login-error">비밀번호가 맞지 않아요. 다시 입력해 주세요.</div>')
     st.stop()

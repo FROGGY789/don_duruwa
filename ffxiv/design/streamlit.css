@@ -39,10 +39,10 @@ html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 [data-testid="stTooltipIcon"] svg { color: var(--text-faint) !important; }
 
 /* ---------- 버튼 ---------- */
-[data-testid="stBaseButton-primary"] { background: var(--primary) !important; color: var(--on-primary) !important; border: 0 !important;
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] { background: var(--primary) !important; color: var(--on-primary) !important; border: 0 !important;
   border-radius: var(--radius) !important; font-weight: 600 !important; padding: 11px var(--space-4) !important; box-shadow: var(--shadow-sm); }
-[data-testid="stBaseButton-primary"]:hover { background: var(--primary-strong) !important; }
-[data-testid="stBaseButton-primary"] p { color: var(--on-primary) !important; font-weight: 600; }
+[data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover { background: var(--primary-strong) !important; }
+[data-testid="stBaseButton-primary"] p, [data-testid="stBaseButton-primaryFormSubmit"] p { color: var(--on-primary) !important; font-weight: 600; }
 [data-testid="stBaseButton-secondary"] { background: var(--surface) !important; color: var(--text-muted) !important;
   border: 1px solid var(--border) !important; border-radius: var(--radius) !important; }
 [data-testid="stBaseButton-secondary"]:hover { border-color: var(--primary) !important; color: var(--text) !important; }
@@ -76,11 +76,18 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
 .st-key-palette button:nth-of-type(5) { background: #c9ccd4 !important; }
 
 /* ---------- 입력칸 ---------- */
-[data-baseweb="input"], [data-baseweb="base-input"], [data-testid="stNumberInputContainer"], [data-baseweb="select"] > div {
+[data-baseweb="input"], [data-baseweb="base-input"], [data-testid="stNumberInputContainer"], [data-testid="stTextInputRootElement"], [data-baseweb="select"] > div {
   background: var(--surface) !important; border-color: var(--border) !important; border-radius: var(--radius-sm) !important; }
-[data-testid="stNumberInputContainer"] { border: 1px solid var(--border) !important; }
+[data-testid="stNumberInputContainer"], [data-testid="stTextInputRootElement"] { border: 1px solid var(--border) !important; }
+[data-testid="stTextInputRootElement"]:focus-within { border-color: var(--primary) !important; box-shadow: var(--ring); }
+[data-testid="InputInstructions"] { display: none !important; }
 [data-testid="stNumberInputContainer"]:focus-within, [data-baseweb="select"] > div:focus-within { border-color: var(--primary) !important; box-shadow: var(--ring); }
 .stApp input, [data-baseweb="select"] div { color: var(--text) !important; font-variant-numeric: tabular-nums; }
+/* 입력칸 안쪽(실제 input)은 Streamlit 기본 다크 배경이 남아 있어서 투명하게 → 화이트 모드에서도 글자가 보이게 */
+.stApp input { background: transparent !important; -webkit-text-fill-color: var(--text) !important; caret-color: var(--primary); }
+.stApp input::placeholder { color: var(--text-faint) !important; -webkit-text-fill-color: var(--text-faint) !important; }
+[data-baseweb="input"] button, [data-baseweb="base-input"] + div button { background: transparent !important; color: var(--text-muted) !important; }
+[data-baseweb="input"] button svg { color: var(--text-muted) !important; fill: currentColor; }
 [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"] { background: var(--surface-2) !important; color: var(--text-muted) !important; }
 [data-testid="stNumberInputStepDown"]:hover, [data-testid="stNumberInputStepUp"]:hover { background: var(--primary-soft) !important; color: var(--primary-strong) !important; }
 [data-baseweb="select"] svg { color: var(--text-muted) !important; }

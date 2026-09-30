@@ -7,4 +7,7 @@
 .login-head p { color: var(--text-muted); font-size: var(--fs-sm); margin: var(--space-3) 0 0; }
 [data-testid="stForm"] { background: var(--surface); border: 1px solid var(--border) !important; border-radius: var(--radius-lg);
   padding: var(--space-5) !important; box-shadow: var(--shadow-sm); }
-[data-testid="stForm"] [data-baseweb="input"] { background: var(--surface-2) !important; }
+[data-testid="stForm"] [data-testid="stTextInputRootElement"], [data-testid="stForm"] [data-baseweb="input"],
+[data-testid="stForm"] [data-baseweb="base-input"] { background: var(--surface-2) !important; }
+.login-error { margin-top: var(--space-3); padding: 10px var(--space-4); border-radius: var(--radius); text-align: center;
+  font-size: var(--fs-sm); color: var(--negative); background: var(--negative-soft); border: 1px solid color-mix(in oklab, var(--negative) 30%, transparent); }

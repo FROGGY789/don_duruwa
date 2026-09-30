@@ -203,8 +203,14 @@ class Calculator:
             extra.append(f"비전서: {recipe.secret_book}")
         if recipe.quest_unlock:
             extra.append("퀘스트 해금")
+        tips = {}  # 뱃지 글자 → 마우스 올리믄 나오는 설명
+        if recipe.quest_unlock:
+            tips["퀘스트 해금"] = "퀘스트 깨야 배울 수 있는 레시피다."
         if item.can_hq:
-            extra.append("HQ 기준" if self.sell_hq else "NQ 기준")
+            q = "HQ 기준" if self.sell_hq else "NQ 기준"
+            extra.append(q)
+            tips[q] = (f"{q[:2]} 시세로 계산했다. 사이드바 'HQ 판매' 로 바꿀 수 있데이." if not self.sell_hq
+                       else "HQ 시세로 계산했다. HQ 로 만들 실력이 돼야 이 값 받는데이.")
 
         row = {
             "recipe_id": recipe.id,
@@ -228,6 +234,8 @@ class Calculator:
             "추이": self.trend(recipe.result_id, hq),
             "품질 비교": None,
             "결과물 개수": recipe.result_amount,
+            "뱃지 설명": tips,
+            "근거": None,
         }
 
         if st.median is None:
@@ -236,32 +244,80 @@ class Calculator:
             missing = sorted({self.gd.name(n.item_id) for n in walk(tree) if n.unit_cost is None and not n.children})
             row["제외 사유"] = "재료 시세 없음: " + ", ".join(missing)
         else:
-            sell = self.sale_price(st)
+            sell, cap = self.sale_price(recipe.result_id, hq, st)
+            row["근거"] = self.evidence(recipe.result_id, hq, st, sell, cap)
+            if cap is not None:
+                text = "🔻 HQ 매물가로 깎음"
+                extra.append(text)
+                tips[text] = f"HQ 가 {cap:,.0f}길에 올라와 있어가 NQ 를 그보다 비싸게는 몬 판다. 그래서 판매가를 {cap:,.0f}길로 잡았데이."
+            if st.sale_count < 5 and st.listing_count == 0:
+                text = "⚠ 근거 약함"
+                extra.append(text)
+                tips[text] = (f"{self.hours // 24:.0f}일 동안 {st.sale_count}건 팔린 게 다고 지금 매물도 없어가, "
+                              "몇 건 안 되는 기록으로 판매가를 잡았다. 게임에서 한번 확인해 봐라.")
             net = sell * (1 - self.seller_tax) - tree.unit_cost
             row["판매 예상가"] = sell
             row["순수익"] = net
             row["수익률(%)"] = net / tree.unit_cost * 100 if tree.unit_cost > 0 else None
             row["하루 잠재 이익"] = net * st.sold_qty / (self.hours / 24)
 
-            days, gap = self.sell_outlook(recipe.result_id, hq, sell, st)
+            days, cheapest = self.sell_outlook(recipe.result_id, hq, sell, st)
             row["판매 소요일"] = days
-            if gap is not None and gap < 0.02 and st.listing_count >= 5:
-                extra.append("🔥 덤핑 경쟁")
+            if len(cheapest) >= 2 and cheapest[0] > 0 and st.listing_count >= 5:
+                gap = (cheapest[1] - cheapest[0]) / cheapest[0]
+                if gap < 0.02:
+                    text = "🔥 덤핑 경쟁"
+                    extra.append(text)
+                    tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다. "
+                                  "서로 1길씩 깎아 파는 중이라, 올리믄 금방 밑으로 밀린데이.")
             change = row["추이"]["change"]
             if change is not None and change <= -10:
-                extra.append(f"📉 하락 중 {change:.0f}%")
+                text = f"📉 하락 중 {change:.0f}%"
+                extra.append(text)
+                tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
             if item.can_hq:
                 row["품질 비교"] = self.quality_compare(recipe.result_id, tree.unit_cost)
-                other = row["품질 비교"]["HQ" if not self.sell_hq else "NQ"]
+                other_name = "HQ" if not self.sell_hq else "NQ"
+                other = row["품질 비교"][other_name]
                 if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
-                    extra.append(f"✨ {'HQ' if not self.sell_hq else 'NQ'}면 +{other['net'] - net:,.0f}")
+                    text = f"✨ {other_name}면 +{other['net'] - net:,.0f}"
+                    extra.append(text)
+                    tips[text] = (f"{other_name} 로 팔믄 개당 {other['net']:,.0f}길 남는다 (지금 기준 {net:,.0f}길). "
+                                  f"대신 {other_name} 로 만들 수 있어야 된데이.")
         return row, tree
 
-    def sale_price(self, st):
-        return min(st.median, st.min_listing) if st.min_listing else st.median
+    def sale_price(self, item_id, hq, st):
+        """(판매 예상가, HQ 매물 때문에 깎은 값 또는 None).
+
+        min(기간 중앙값, 최저 매물). NQ 로 팔 때는 HQ 가 더 싸게 올라와 있으믄 그 값 이상은 못 받는다.
+        """
+        sell = min(st.median, st.min_listing) if st.min_listing else st.median
+        if hq is False:
+            hq_min = self.stats(item_id, True, self.outlier_ratio, self.sell_world).min_listing
+            if hq_min is not None and hq_min < sell:
+                return hq_min, hq_min
+        return sell, None
+
+    def evidence(self, item_id, hq, st, sell, cap):
+        """판매가를 어떻게 잡았는지 보여줄 근거: 최근 판매 기록, 지금 싼 매물."""
+        entry = self.market.get(item_id) or {"sales": [], "listings": []}
+        since = entry.get("fetched_at", time.time()) - self.hours * 3600
+        in_scope = lambda world, q: (hq is None or q == hq) and (self.sell_world is None or world == self.sell_world)
+        world = lambda w: self.world_names.get(str(w), str(w))
+        sales = sorted((x for x in entry["sales"] if x[3] >= since and in_scope(x[4], x[2])), key=lambda x: -x[3])
+        listings = sorted((x for x in entry["listings"] if in_scope(x[3], x[2])), key=lambda x: x[0])
+        bait = st.median * self.outlier_ratio if st.median and self.outlier_ratio else 0
+        return {
+            "median": st.median, "minListing": st.min_listing, "hqCap": cap, "sell": sell,
+            "quality": "전체" if hq is None else ("HQ" if hq else "NQ"),
+            "sales": [{"when": datetime.fromtimestamp(x[3], KST).strftime("%m/%d %H:%M"), "world": world(x[4]),
+                       "hq": x[2], "price": x[0], "qty": x[1]} for x in sales[:10]],
+            "listings": [{"world": world(x[3]), "hq": x[2], "price": x[0], "qty": x[1], "bait": x[0] < bait}
+                         for x in listings[:6]],
+        }
 
     def sell_outlook(self, item_id, hq, sell, st):
-        """(예상 판매 소요일, 최저가와 2번째 매물의 가격 차 비율).
+        """(예상 판매 소요일, 싼 매물 가격 앞의 몇 개).
 
         내 가격 이하로 올라온 매물 수량 + 내 1개를, 하루 평균 판매 수량으로 나눈다.
         """
@@ -271,16 +327,14 @@ class Calculator:
         ahead = sum(l[1] for l in listings if l[0] <= sell)
         daily = st.sold_qty / (self.hours / 24)
         days = (ahead + 1) / daily if daily > 0 else None
-        prices = sorted(l[0] for l in listings)
-        gap = (prices[1] - prices[0]) / prices[0] if len(prices) >= 2 and prices[0] > 0 else None
-        return days, gap
+        return days, sorted(l[0] for l in listings)[:2]
 
     def quality_compare(self, item_id, unit_cost):
         """NQ 로 팔 때와 HQ 로 팔 때 비교 (재료비는 같다고 보고)."""
         out = {}
         for name, hq in (("NQ", False), ("HQ", True)):
             st = self.stats(item_id, hq, self.outlier_ratio, self.sell_world)
-            sell = self.sale_price(st) if st.median is not None else None
+            sell = self.sale_price(item_id, hq, st)[0] if st.median is not None else None
             out[name] = {
                 "sell": sell,
                 "net": sell * (1 - self.seller_tax) - unit_cost if sell is not None else None,

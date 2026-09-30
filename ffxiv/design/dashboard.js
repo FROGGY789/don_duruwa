@@ -126,7 +126,7 @@ function renderTable(d, rows) {
   const body = rows.map((r, i) => {
     const badges = r.badges.map((b) => b.detail
       ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
-      : `<span class="badge ${esc(b.kind)}">${esc(b.text)}</span>`).join("");
+      : `<span class="badge ${esc(b.kind)}${b.tip ? " has-tip" : ""}"${b.tip ? ` data-tip="${esc(b.tip)}"` : ""}>${esc(b.text)}</span>`).join("");
     return `
       <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">
         <td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
@@ -264,7 +264,33 @@ function renderInsights(d, row) {
         <div class="q-grid">${box("NQ")}${box("HQ")}</div>
       </div>`;
   }
-  return charts || quality ? `<div class="insights">${charts}${quality}</div>` : "";
+  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderEvidence(d, row);
+}
+
+// ── 판매가 근거: 이 값이 어디서 나왔는지 ──
+function renderEvidence(d, row) {
+  const ev = row.evidence;
+  if (!ev) return "";
+  const q = (hq) => `<span class="badge ${hq ? "src-craft" : "nq"}">${hq ? "HQ" : "NQ"}</span>`;
+  let formula = `판매 예상가 = min(${esc(d.period)} 판매 중앙값 <b>${gil(ev.median)}</b>, 지금 최저 매물 <b>${ev.minListing == null ? "없음" : gil(ev.minListing)}</b>)`;
+  if (ev.hqCap != null) formula += ` → HQ 매물 <b>${gil(ev.hqCap)}</b> 보다 비싸게는 몬 파니까 깎음`;
+  formula += ` = <b class="ev-sell">${gil(ev.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준)</span>`;
+  const sales = ev.sales.length ? ev.sales.map((x) => `<tr><td>${esc(x.when)}</td><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
+      <td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="faint">팔린 기록이 없다</td></tr>`;
+  const listings = ev.listings.length ? ev.listings.map((x) => `<tr class="${x.bait ? "bait" : ""}"><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
+      <td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td><td>${x.bait ? '<span class="faint">미끼로 보고 뺐다</span>' : ""}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="faint">지금 올라온 매물이 없다</td></tr>`;
+  return `
+    <div class="evidence">
+      <div class="insight-head"><h3>💰 판매가 근거</h3><span class="ev-formula">${formula}</span></div>
+      <div class="ev-grid">
+        <div><div class="ev-cap">최근 판매 (최대 10건)</div>
+          <table><thead><tr><th>일시</th><th>서버</th><th>품질</th><th class="num">가격</th><th class="num">수량</th></tr></thead><tbody>${sales}</tbody></table></div>
+        <div><div class="ev-cap">지금 싼 매물 (최대 6개)</div>
+          <table><thead><tr><th>서버</th><th>품질</th><th class="num">가격</th><th class="num">수량</th><th></th></tr></thead><tbody>${listings}</tbody></table></div>
+      </div>
+    </div>`;
 }
 
 // ── 아이템 검색 결과 ──

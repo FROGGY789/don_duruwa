@@ -267,6 +267,39 @@ function renderInsights(d, row) {
   return charts || quality ? `<div class="insights">${charts}${quality}</div>` : "";
 }
 
+// ── 아이템 검색 결과 ──
+const SEARCH_KIND = {
+  ok: ["✅", "목록에 있데이 — 누르믄 표에서 보여준다"],
+  filtered: ["🚫", "필터에 걸렸다"],
+  nocalc: ["❓", "계산 몬 했다"],
+  out: ["⛔", "분석 범위 밖이다"],
+  norecipe: ["🙅", "제작 몬 하는 템이다"],
+};
+function renderSearch(d) {
+  const sr = d.search;
+  if (!sr) return "";
+  if (!sr.items.length) {
+    return `<section class="search-box"><div class="search-head"><b>🔍 "${esc(sr.query)}"</b><span class="faint">그런 이름은 하나도 없다. 글자 다시 봐 봐라.</span></div></section>`;
+  }
+  const items = sr.items.map((x) => {
+    const [icon, label] = SEARCH_KIND[x.kind];
+    const meta = [x.job, x.level != null ? `Lv${x.level}` : ""].filter(Boolean).join(" · ");
+    const money = x.net != null ? `<span class="sr-money">순수익 ${signed(x.net)}</span>` : "";
+    return `
+      <div class="sr ${x.kind}${x.id ? " go" : ""}" ${x.id ? `data-goto="${x.id}"` : ""}>
+        <div class="sr-main">${itemName(x.name, x.stars)}${meta ? `<span class="sr-meta">${esc(meta)}</span>` : ""}${money}</div>
+        <div class="sr-why"><span class="sr-kind">${icon} ${esc(label)}</span>${x.why ? ` — ${esc(x.why)}` : ""}</div>
+      </div>`;
+  }).join("");
+  const more = sr.total > sr.items.length ? `<div class="sr-more faint">… ${sr.total - sr.items.length}개 더 있다. 좀 더 자세히 쳐 봐라.</div>` : "";
+  return `
+    <section class="search-box">
+      <div class="search-head"><b>🔍 "${esc(sr.query)}" 검색 결과 ${sr.total.toLocaleString("ko-KR")}개</b>
+        <span class="faint">필터랑 상관없이 다 찾아준데이</span></div>
+      <div class="sr-list">${items}</div>${more}
+    </section>`;
+}
+
 // ── 장보기 목록 ──
 function renderCart(d) {
   const ids = Object.keys(state.cart).map(Number);
@@ -374,6 +407,7 @@ export default function (component) {
       : "";
     root.innerHTML =
       notice +
+      renderSearch(data) +
       renderHeader(data) +
       renderTabs(data) +
       `<div class="section-head"><h2>순위</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이 · <b>+</b> 누르믄 장보기에 담긴다</span>
@@ -430,6 +464,17 @@ export default function (component) {
     if (e.target.closest("[data-clear]")) { state.cart = {}; saveCart(); return render(); }
     if (e.target.closest("[data-jump]")) return root.querySelector("#cart")?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (e.target.closest(".cart")) return;
+    const go = e.target.closest("[data-goto]");
+    if (go) {
+      state.cat = "all";
+      state.tab = "all";
+      state.selected = Number(go.dataset.goto);
+      render();
+      const row = root.querySelector(`tr[data-id="${state.selected}"]`);
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+      row?.classList.add("flash");
+      return;
+    }
     const cat = e.target.closest("[data-cat]");
     if (cat) {
       state.cat = cat.dataset.cat;

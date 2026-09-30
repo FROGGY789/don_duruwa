@@ -150,3 +150,7 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
 [role="listbox"] [role="option"] { color: var(--text) !important; background: transparent !important; }
 [role="listbox"] [role="option"][data-focused], [role="listbox"] [role="option"]:hover { background: var(--surface-hover) !important; }
 [role="listbox"] [role="option"][aria-selected="true"] { color: var(--primary-strong) !important; font-weight: 600; }
+
+/* 메인 위 검색창 */
+.st-key-search { max-width: 560px; }
+.st-key-search [data-testid="stTextInputRootElement"] { border-radius: var(--radius-pill) !important; padding: 2px 8px; box-shadow: var(--shadow-sm); }

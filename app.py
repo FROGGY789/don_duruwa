@@ -253,6 +253,72 @@ def row_data(r):
     }
 
 
+# ── 아이템 검색: 필터와 상관없이 그 아이템이 어디 있고, 없으면 왜 빠졌는지 ──
+MAX_RESULTS = 30
+query = st.text_input("아이템 검색", key="search", placeholder="🔍 아이템 이름으로 찾기 (예: 모그루 모그, 루비)",
+                      label_visibility="collapsed").strip()
+row_by_recipe = {x["recipe_id"]: x for x in rows}
+
+
+def fail_reasons(r):
+    out = []
+    if r["판매 건수"] < min_sales:
+        out.append(f"{PERIOD} 판매 {r['판매 건수']}건 (기준 {min_sales}건↑)")
+    if r["재료 여유 배수"] < mat_ratio:
+        out.append(f"재료 판매량 {r['재료 여유 배수']:.1f}배 (기준 {mat_ratio:g}배↑)")
+    margin = r["수익률(%)"]
+    if (margin if margin is not None else -math.inf) < min_margin:
+        out.append(f"수익률 {margin:.0f}% (기준 {min_margin:g}%↑)" if margin is not None else "수익률 계산 몬 함")
+    if r["순수익"] < min_profit:
+        out.append(f"순수익 {r['순수익']:,.0f}길 (기준 {min_profit:,}길↑)")
+    if r["현재 매물 수"] > max_listings:
+        out.append(f"매물 {r['현재 매물 수']}건 (기준 {max_listings}건↓)")
+    if max_days and (r["판매 소요일"] is None or r["판매 소요일"] > max_days):
+        out.append("판매 소요일 모름" if r["판매 소요일"] is None else f"판매 소요 ~{math.ceil(r['판매 소요일'])}일 (기준 {max_days:g}일↓)")
+    return out
+
+
+def recipe_status(recipe, item):
+    """(상태 종류, 설명). 종류: ok / filtered / nocalc / out"""
+    r = row_by_recipe.get(recipe.id)
+    if r is not None:
+        if r["순수익"] is None:
+            return "nocalc", r["제외 사유"]
+        reasons = fail_reasons(r)
+        return ("filtered", " · ".join(reasons)) if reasons else ("ok", "")
+    if recipe.expert or recipe.specialist:
+        return "out", "전문·고난도 레시피라 뺐다"
+    if not item.marketable:
+        return "out", "거래소에 몬 파는 템이다"
+    if not level_range[0] <= recipe.job_level <= level_range[1]:
+        return "out", f"레시피 Lv{recipe.job_level} — 레벨 범위 {level_range[0]}~{level_range[1]} 밖이다"
+    return "out", f"{recipe.job_name} 레벨 {job_levels[recipe.job_name]} < 레시피 Lv{recipe.job_level}"
+
+
+def search_results(q):
+    key = q.replace(" ", "")
+    found, total = [], 0
+    for item in gd.items.values():
+        if key not in item.name.replace(" ", ""):
+            continue
+        recipes = gd.recipes_by_result.get(item.id, [])
+        total += max(1, len(recipes))
+        if len(found) >= MAX_RESULTS:
+            continue
+        if not recipes:
+            found.append({"name": item.name, "stars": 0, "job": "", "level": None, "kind": "norecipe",
+                          "why": "제작 레시피가 없다 (드롭·교환템)", "id": None})
+        for recipe in recipes:
+            kind, why = recipe_status(recipe, item)
+            r = row_by_recipe.get(recipe.id)
+            found.append({"name": item.name, "stars": recipe.stars, "job": recipe.job_name, "level": recipe.job_level,
+                          "kind": kind, "why": why, "id": recipe.id if kind == "ok" else None,
+                          "net": r["순수익"] if r else None, "sell": r["판매 예상가"] if r else None})
+    order = {"ok": 0, "filtered": 1, "nocalc": 2, "out": 3, "norecipe": 4}
+    found.sort(key=lambda x: (order[x["kind"]], x["name"]))
+    return {"query": q, "items": found[:MAX_RESULTS], "total": total}
+
+
 CATS = {"all": "전체", "가구": "가구", "일반": "일반 제작템"}
 MAX_FAILED = 400  # 계산 불가 목록은 너무 길어지지 않게
 
@@ -274,6 +340,7 @@ ui.dashboard({
     "subtitle": [server["world"], f"판매 시세 {scope_names[sell_scope]}", f"재료 구매 {scope_names[buy_scope]}",
                  f"레시피 레벨 {level_range[0]}~{level_range[1]}", f"시세 갱신 {fmt_time(cache.updated_at)}"],
     "notice": notice,
+    "search": search_results(query) if query else None,
     "cats": CATS,
     "stats": {c: cat_stats(c) for c in CATS},
     "jobs": JOB_NAMES,

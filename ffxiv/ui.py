@@ -17,7 +17,8 @@ FONTS = ("@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR
          "&family=Noto+Serif+KR:wght@600&display=swap');")
 # 화면에 보이는 이름 → 디자인 내부 이름. 주소창(?theme=화이트)에도 이 이름이 들어간다.
 THEMES = {"다크": "dark", "화이트": "light"}
-PALETTES = {"골드": "gold", "크리스탈": "crystal", "에테르": "aether", "로즈": "rose", "실버": "silver"}
+PALETTES = {"초록": "jade", "골드": "gold", "크리스탈": "crystal", "에테르": "aether", "로즈": "rose", "실버": "silver"}
+DEFAULT_THEME, DEFAULT_PALETTE = "화이트", "초록"  # 처음 열었을 때
 
 
 def _read(name):
@@ -38,7 +39,7 @@ def theme_tokens(theme, palette):
 
 
 def apply_theme(theme, palette):
-    tokens = theme_tokens(THEMES.get(theme, "dark"), PALETTES.get(palette, "gold"))
+    tokens = theme_tokens(THEMES.get(theme, "light"), PALETTES.get(palette, "jade"))
     st.html(f"<style>{FONTS}{tokens}{_read('streamlit.css')}</style>")
 
 
@@ -116,9 +117,9 @@ def password_gate():
     password = _app_password()
     if password is None or st.session_state.get("authed"):
         return
-    theme = st.query_params.get("theme", "다크")
-    palette = st.query_params.get("palette", "골드")
-    apply_theme(theme if theme in THEMES else "다크", palette if palette in PALETTES else "골드")
+    theme = st.query_params.get("theme", DEFAULT_THEME)
+    palette = st.query_params.get("palette", DEFAULT_PALETTE)
+    apply_theme(theme if theme in THEMES else DEFAULT_THEME, palette if palette in PALETTES else DEFAULT_PALETTE)
     st.html("<style>" + _read("login.css") + "</style>")
     st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
             '<h1>파판14 제작 수익 분석</h1><p>비밀번호 쳐야 화면 열어준데이.</p></div>')

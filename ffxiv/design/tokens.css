@@ -76,6 +76,9 @@
 }
 
 /* ---------- 색감 팔레트 (data-palette) — 기본은 골드 ---------- */
+/* 초록 (추가) */
+[data-theme="dark"][data-palette="jade"]{--bg:#0b1310;--sidebar-bg:#0f1915;--surface:#14201b;--surface-2:#1a2a23;--surface-hover:#1f3129;--row-selected:#1c3328;--border:#243a31;--border-strong:#315042;--primary:#6fcf9f;--primary-strong:#95dfb8;--primary-soft:rgba(111,207,159,.14);--on-primary:#0a1a12;--star:#e2c07a;--ring:0 0 0 3px rgba(111,207,159,.3)}
+[data-theme="light"][data-palette="jade"]{--bg:#eff4f0;--sidebar-bg:#e3ece6;--surface:#ffffff;--surface-2:#f5f9f6;--surface-hover:#edf4ef;--row-selected:#e3f2e8;--border:#d3e0d7;--border-strong:#bccfc2;--primary:#2e7d57;--primary-strong:#226444;--primary-soft:rgba(46,125,87,.1);--on-primary:#ffffff;--star:#a8791f;--ring:0 0 0 3px rgba(46,125,87,.22)}
 [data-theme="dark"][data-palette="crystal"]{--bg:#0a1019;--sidebar-bg:#0e1522;--surface:#131c2b;--surface-2:#192436;--surface-hover:#1d2a3f;--row-selected:#16283d;--border:#233049;--border-strong:#31415e;--primary:#7fb4e3;--primary-strong:#a5cbee;--primary-soft:rgba(127,180,227,.14);--on-primary:#0a1422;--star:#a5cbee;--ring:0 0 0 3px rgba(127,180,227,.3)}
 [data-theme="light"][data-palette="crystal"]{--bg:#eef1f5;--sidebar-bg:#e4e9f0;--surface:#ffffff;--surface-2:#f5f7fa;--surface-hover:#eef2f7;--row-selected:#e6eff9;--border:#d6dde7;--border-strong:#c2ccda;--primary:#2f6aa3;--primary-strong:#22548a;--primary-soft:rgba(47,106,163,.1);--on-primary:#ffffff;--star:#2f6aa3;--ring:0 0 0 3px rgba(47,106,163,.22)}
 [data-theme="dark"][data-palette="aether"]{--bg:#0e0d17;--sidebar-bg:#13121f;--surface:#191827;--surface-2:#211f33;--surface-hover:#26243b;--row-selected:#28213d;--border:#2c2942;--border-strong:#3d3959;--primary:#b69cf0;--primary-strong:#cdbaf6;--primary-soft:rgba(182,156,240,.14);--on-primary:#150f24;--star:#e2c07a;--ring:0 0 0 3px rgba(182,156,240,.3)}

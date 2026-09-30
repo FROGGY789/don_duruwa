@@ -69,11 +69,12 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
   border-radius: 50% !important; border: 2px solid var(--sidebar-bg) !important; box-shadow: 0 0 0 1px var(--border-strong) !important; }
 .st-key-palette button[data-variant="segmented_control"][aria-checked="true"] { box-shadow: 0 0 0 2px var(--text) !important; }
 .st-key-palette button p { display: none; }
-.st-key-palette button:nth-of-type(1) { background: #cfa95e !important; }
-.st-key-palette button:nth-of-type(2) { background: #7fb4e3 !important; }
-.st-key-palette button:nth-of-type(3) { background: #b69cf0 !important; }
-.st-key-palette button:nth-of-type(4) { background: #e0a283 !important; }
-.st-key-palette button:nth-of-type(5) { background: #c9ccd4 !important; }
+.st-key-palette button:nth-of-type(1) { background: #4fb886 !important; }
+.st-key-palette button:nth-of-type(2) { background: #cfa95e !important; }
+.st-key-palette button:nth-of-type(3) { background: #7fb4e3 !important; }
+.st-key-palette button:nth-of-type(4) { background: #b69cf0 !important; }
+.st-key-palette button:nth-of-type(5) { background: #e0a283 !important; }
+.st-key-palette button:nth-of-type(6) { background: #c9ccd4 !important; }
 
 /* ---------- 입력칸 ---------- */
 [data-baseweb="input"], [data-baseweb="base-input"], [data-testid="stNumberInputContainer"], [data-testid="stTextInputRootElement"], [data-baseweb="select"] > div {

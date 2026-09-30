@@ -74,9 +74,9 @@ def fmt_time(ts):
 # ── 테마 (사이드바 맨 위에서 고르고, 주소에 기억해서 새로고침해도 유지) ──
 sb = st.sidebar
 ui.sidebar_brand(sb)
-theme = sb.segmented_control("화면 모드", list(ui.THEMES), default="다크", required=True,
+theme = sb.segmented_control("화면 모드", list(ui.THEMES), default=ui.DEFAULT_THEME, required=True,
                              key="theme", bind="query-params", label_visibility="collapsed", width="stretch")
-palette = sb.segmented_control("색감", list(ui.PALETTES), default="골드", required=True,
+palette = sb.segmented_control("색감", list(ui.PALETTES), default=ui.DEFAULT_PALETTE, required=True,
                                key="palette", bind="query-params", width="stretch")
 ui.apply_theme(theme, palette)
 

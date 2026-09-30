@@ -62,7 +62,13 @@ def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None):
     st.sold_qty = sum(s[1] for s in sales)
     if sales:
         st.median = statistics.median(s[0] for s in sales)
-    st.listing_count = len(listings)
+    counts = entry.get("counts")
+    if counts is None:  # 예전 캐시 형식
+        st.listing_count = len(listings)
+    else:  # 저장은 싼 매물만 했으니 개수는 따로 센 값으로
+        st.listing_count = sum(n for key, n in counts.items()
+                               if (world is None or key.split(":")[0] == str(world))
+                               and (hq is None or key.split(":")[1] == str(int(hq))))
     prices = [l[0] for l in listings]
     if st.median and outlier_ratio:
         prices = [p for p in prices if p >= st.median * outlier_ratio]
@@ -103,6 +109,15 @@ class Calculator:
         self.self_gathered = gd.ids_by_name(cfg.get("self_gathered_items"))
         self.npc_ignore = gd.ids_by_name(cfg.get("npc_ignore_items"))
         self._memo = {}
+        self._stats = {}
+        self.furniture = set(cfg["furniture_ui_categories"])
+
+    def stats(self, item_id, hq=None, outlier_ratio=0.0, world=None):
+        """market_stats 결과를 기억해 둔다 (같은 재료를 여러 레시피가 쓰니까)."""
+        key = (item_id, hq, outlier_ratio, world)
+        if key not in self._stats:
+            self._stats[key] = market_stats(self.market.get(item_id), hq, self.hours, outlier_ratio, world)
+        return self._stats[key]
 
     # ── 재료 구매 ──
     def market_buy_price(self, item_id, need):
@@ -122,7 +137,7 @@ class Calculator:
                 worlds.append(name)
             if bought >= need:
                 return spent / bought, ", ".join(worlds)
-        median = market_stats(entry, None, self.hours, world=self.buy_world).median
+        median = self.stats(item_id, world=self.buy_world).median
         where = ", ".join(worlds)
         if bought and median:
             return max(spent / bought, median), f"{where} (매물 부족)"
@@ -177,7 +192,7 @@ class Calculator:
     def evaluate(self, recipe):
         item = self.gd.items[recipe.result_id]
         hq = self.sell_hq if item.can_hq else None
-        st = market_stats(self.market.get(recipe.result_id), hq, self.hours, self.outlier_ratio, self.sell_world)
+        st = self.stats(recipe.result_id, hq, self.outlier_ratio, self.sell_world)
         tree = self.craft(recipe, self.batch, ())
 
         extra = []
@@ -203,6 +218,7 @@ class Calculator:
             "하루 잠재 이익": None,
             "업데이트": st.last_upload or None,
             "기타": extra,
+            "분류": "가구" if item.ui_category in self.furniture else "일반",
             "재료 여유 배수": self.material_ratio(tree),
             "제외 사유": "",
         }
@@ -226,7 +242,7 @@ class Calculator:
         ratio = math.inf
         for node in walk(tree):
             if node.source == "거래소":
-                sold = market_stats(self.market.get(node.item_id), None, self.hours, world=self.buy_world).sold_qty
+                sold = self.stats(node.item_id, world=self.buy_world).sold_qty
                 ratio = min(ratio, sold / node.need)
         return ratio
 
@@ -242,7 +258,7 @@ def detail_rows(calc, tree):
     rows = []
 
     def add(node, amt, depth):
-        st = market_stats(calc.market.get(node.item_id), None, calc.hours, world=calc.buy_world)
+        st = calc.stats(node.item_id, world=calc.buy_world)
         rows.append({
             "depth": depth,
             "name": calc.gd.name(node.item_id),
@@ -302,7 +318,7 @@ if __name__ == "__main__":
     server = resolve_server(api, cfg)
     cache = MarketCache(server)
     tax, city = seller_tax_rate(cfg, cache.tax_rates)
-    targets = list(target_recipes(gd, cfg, cfg["include_all_crafts"], cfg["recipe_level_min"], cfg["recipe_level_max"]))
+    targets = list(target_recipes(gd, cfg, True, cfg["recipe_level_min"], cfg["recipe_level_max"]))
     rows, trees, calc = analyze(
         gd, cache.items, cfg, targets, tax, sell_hq=cfg["sell_hq"], batch_size=cfg["batch_size"],
         sell_world=None if cfg["sell_scope"] == "dc" else server["world_id"],

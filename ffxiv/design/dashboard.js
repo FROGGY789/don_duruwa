@@ -20,7 +20,13 @@ const COLUMNS = [
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather" };
 
 // 탭·정렬·선택 상태는 다시 그려져도 유지되게 페이지에 보관
-const state = (window.__ffxivDash = window.__ffxivDash || { tab: "all", sort: null, dir: -1, selected: null, sortSeed: null });
+const state = (window.__ffxivDash = window.__ffxivDash || { cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null });
+const CAT_ICON = { all: "✦", "가구": "🪑", "일반": "⚒" };
+
+// 지금 고른 분류(전체/가구/일반)에 해당하는 행만
+function catRows(d) {
+  return d.rows.filter((r) => state.cat === "all" || r.cat === state.cat);
+}
 
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,6 +44,7 @@ function itemName(name, stars) {
 
 function renderHeader(d) {
   const sub = d.subtitle.map((s) => `<span>${esc(s)}</span>`).join("");
+  const stats = d.stats[state.cat];
   const stat = (label, value, sub, accent) => `
     <div class="stat${accent ? " accent" : ""}">
       <div class="stat-label">${esc(label)}</div>
@@ -50,25 +57,34 @@ function renderHeader(d) {
       <h1>파판14 제작 수익 분석</h1>
       <div class="subtitle">${sub}</div>
     </header>
+    ${renderCats(d)}
     <div class="stats">
-      ${stat("분석한 레시피", d.stats.total, "조건에 맞는 전체 레시피")}
-      ${stat("계산 가능", d.stats.calculable, "시세 데이터가 모두 있는 레시피")}
-      ${stat("필터 통과", d.stats.passed, "현재 필터 기준 추천 대상", true)}
+      ${stat("분석한 레시피", stats.total, "조건에 맞는 전체 레시피")}
+      ${stat("계산 가능", stats.calculable, "시세 데이터가 모두 있는 레시피")}
+      ${stat("필터 통과", stats.passed, "현재 필터 기준 추천 대상", true)}
     </div>`;
+}
+
+function renderCats(d) {
+  const btn = (key) =>
+    `<button class="cat${state.cat === key ? " active" : ""}" data-cat="${esc(key)}">${CAT_ICON[key] || ""} ${esc(d.cats[key])}` +
+    `<span class="cnt">${d.stats[key].passed}</span></button>`;
+  return `<div class="cats">${Object.keys(d.cats).map(btn).join("")}</div>`;
 }
 
 function renderTabs(d) {
   const counts = {};
-  d.rows.forEach((r) => (counts[r.job] = (counts[r.job] || 0) + 1));
+  const rows = catRows(d);
+  rows.forEach((r) => (counts[r.job] = (counts[r.job] || 0) + 1));
   const tab = (key, label) =>
     `<button class="tab${state.tab === key ? " active" : ""}" data-tab="${esc(key)}">${label}<span class="cnt">${
-      key === "all" ? d.rows.length : counts[key] || 0
+      key === "all" ? rows.length : counts[key] || 0
     }</span></button>`;
   return `<nav class="tabs">${tab("all", "🏆 통합 순위")}${d.jobs.map((j) => tab(j, esc(j))).join("")}</nav>`;
 }
 
 function sortedRows(d) {
-  const rows = d.rows.filter((r) => state.tab === "all" || r.job === state.tab);
+  const rows = catRows(d).filter((r) => state.tab === "all" || r.job === state.tab);
   const key = state.sort;
   return rows.slice().sort((a, b) => {
     const x = a[key], y = b[key];
@@ -158,16 +174,19 @@ function renderDetail(d, row) {
 }
 
 function renderFailed(d) {
-  if (!d.failed.length) return "";
-  const body = d.failed.map((f) => `
+  const failed = d.failed[state.cat];
+  if (!failed.total) return "";
+  const more = failed.total > failed.items.length
+    ? `<tr><td colspan="4" class="faint">… 외 ${(failed.total - failed.items.length).toLocaleString("ko-KR")}개</td></tr>` : "";
+  const body = failed.items.map((f) => `
     <tr><td>${itemName(f.name, f.stars)}</td><td><span class="job">${esc(f.job)}</span></td>
     <td class="num">${f.level}</td><td class="reason">${esc(f.reason)}</td></tr>`).join("");
   return `
     <details class="failed"${state.failedOpen ? " open" : ""}>
-      <summary>계산할 수 없었던 레시피 (${d.failed.length}개)<span class="muted">판매 기록이나 재료 시세가 없는 레시피</span></summary>
+      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">판매 기록이나 재료 시세가 없는 레시피</span></summary>
       <div class="failed-body"><div class="table-wrap"><table>
         <thead><tr><th>아이템명</th><th>직업</th><th class="num">레시피 레벨</th><th>제외 사유</th></tr></thead>
-        <tbody>${body}</tbody>
+        <tbody>${body}${more}</tbody>
       </table></div></div>
     </details>`;
 }
@@ -190,6 +209,7 @@ export default function (component) {
     state.dir = -1;
   }
   if (state.tab !== "all" && !data.jobs.includes(state.tab)) state.tab = "all";
+  if (!(state.cat in data.cats)) state.cat = "all";
 
   function render() {
     const rows = sortedRows(data);
@@ -206,6 +226,13 @@ export default function (component) {
   }
 
   root.onclick = (e) => {
+    const cat = e.target.closest("[data-cat]");
+    if (cat) {
+      state.cat = cat.dataset.cat;
+      state.tab = "all";
+      state.selected = null;
+      return render();
+    }
     const tab = e.target.closest("[data-tab]");
     if (tab) {
       state.tab = tab.dataset.tab;

@@ -3,6 +3,7 @@
 실행:  streamlit run app.py
 """
 import math
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -37,9 +38,33 @@ def load_market_cache(world_id, dc):
 
 
 @st.cache_resource
-def auto_refresh_state():
-    """자동 갱신을 마지막으로 시도한 시각. 실패해도 매 클릭마다 재시도하지 않게 기억해 둔다."""
-    return {"last_try": 0.0}
+def refresher():
+    """뒤에서 도는 시세 갱신 상태. 모든 접속자가 같이 보고, 한 번에 하나만 돈다."""
+    return {"thread": None, "progress": 0.0, "msg": "", "error": None, "finished_at": 0.0, "last_try": 0.0}
+
+
+@st.cache_resource(show_spinner=False)
+def all_market_ids():
+    """시세를 받아둘 아이템 전체: 모든 제작품(레벨 무관) + 재료."""
+    return market_item_ids(gd, list(scope_recipes(gd, cfg, True)))
+
+
+def start_refresh(full, ids):
+    """시세 갱신을 뒤에서 시작한다. 그동안 화면은 저장된 시세로 계속 쓸 수 있다."""
+    r = refresher()
+    if r["thread"] is not None and r["thread"].is_alive():
+        return
+    r.update(progress=0.0, msg="시세 받을 준비 중…", error=None, last_try=time.time())
+
+    def run():
+        try:
+            refresh(api, cache, server, ids, H, full=full, progress=lambda p, msg: r.update(progress=p, msg=msg))
+        except Exception as e:  # 네트워크 오류 등 — 저장된 시세는 그대로 둔다
+            r["error"] = str(e)
+        r["finished_at"] = time.time()
+
+    r["thread"] = threading.Thread(target=run, daemon=True)
+    r["thread"].start()
 
 
 def fmt_time(ts):
@@ -73,8 +98,28 @@ home, dc = server["world_id"], server["dc"]
 # ── 사이드바 ──
 refresh_clicked = sb.button("🔄 데이터 갱신", type="primary", width="stretch")
 auto_min = cfg.get("auto_refresh_minutes", 0)
-ui.sidebar_note(sb, f"마지막 갱신: {fmt_time(cache.updated_at)}"
-                + (f" · {auto_min}분 지나면 자동 갱신" if auto_min else ""))
+st.session_state.setdefault("seen_refresh", refresher()["finished_at"])
+
+
+@st.fragment(run_every=3)
+def refresh_status():
+    """갱신 진행 상황. 끝나면 화면 전체를 새 시세로 다시 계산한다."""
+    r = refresher()
+    if r["thread"] is not None and r["thread"].is_alive():
+        st.progress(r["progress"], r["msg"])
+    else:
+        ui.sidebar_note(st, f"마지막 갱신: {fmt_time(cache.updated_at)}"
+                        + (f" · {auto_min}분 지나면 자동 갱신" if auto_min else ""))
+        if r["error"]:
+            ui.sidebar_note(st, "⚠ 마지막 갱신 실패 — 저장된 시세로 보는 중")
+    if r["finished_at"] > st.session_state["seen_refresh"]:
+        st.session_state["seen_refresh"] = r["finished_at"]
+        st.session_state["just_refreshed"] = not r["error"]
+        st.rerun(scope="app")
+
+
+with sb:
+    refresh_status()
 
 ui.sidebar_title(sb, "서버 범위")
 scope_names = {"dc": f"{dc} 전체" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
@@ -90,7 +135,6 @@ buy_scope = sb.segmented_control(
          "재료 상세의 '구매 서버'에 어디로 가면 되는지 나옵니다.")
 
 ui.sidebar_title(sb, "분석 대상")
-include_all = sb.toggle("전체 제작품", value=cfg["include_all_crafts"], help="끄면 하우징 가구만 봅니다.")
 level_range = sb.slider("레시피 레벨 범위", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
 with sb.expander(f"직업별 레벨 · {len(JOB_NAMES)}개 직업", expanded=False):
     st.caption("이 레벨보다 높은 레시피는 빠지고, 중간재료 직접 제작도 이 레벨까지만 고려합니다.")
@@ -126,32 +170,26 @@ sb.html(f'<div class="sb-note tax"><span>적용 판매세</span>'
 if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바뀌었을 때만", width="stretch"):
     download_csvs(cfg["datamining_base_url"], force=True)
     load_gamedata.clear()
+    all_market_ids.clear()
     st.rerun()
 
 # ── 시세 데이터 준비 ──
-# 시세는 레벨과 상관없이 전체 범위를 받아둔다 → 레벨 범위/직업 레벨을 바꿔도 다시 받지 않음
-ids = market_item_ids(gd, scope_recipes(gd, cfg, include_all))
-targets = list(target_recipes(gd, cfg, include_all, *level_range, job_levels))
-missing = cache.missing(ids)
-auto = auto_refresh_state()
+# 시세는 모든 제작품·모든 레벨을 받아둔다 → 분류·레벨을 바꿔도 다시 받지 않음. 받는 건 뒤에서 돈다.
+ids = all_market_ids()
+targets = list(target_recipes(gd, cfg, True, *level_range, job_levels))
+r = refresher()
 now = time.time()
 auto_due = (bool(auto_min) and cache.updated_at and now - cache.updated_at > auto_min * 60
-            and now - auto["last_try"] > auto_min * 60)
-full = refresh_clicked or auto_due
-if full or missing:
-    auto["last_try"] = now
-    todo = len(ids) if full else len(missing)
-    why = "시세가 오래돼서 자동으로 " if auto_due and not refresh_clicked else ""
-    bar = st.progress(0.0, f"{why}시세 받는 중… ({todo:,}개 아이템, 1~5분 걸릴 수 있어요)")
-    try:
-        n = refresh(api, cache, server, ids, cfg["history_hours"], full=full,
-                    progress=lambda p, msg: bar.progress(p, msg))
-        bar.empty()
-        if full:
-            st.toast(f"{n}개 아이템 시세를 새로 받았습니다.")
-    except requests.RequestException as e:
-        bar.empty()
-        st.warning(f"Universalis 에서 시세를 받지 못했습니다. 저장된 데이터로 계산합니다. ({e})")
+            and now - r["last_try"] > auto_min * 60)
+if refresh_clicked or auto_due:
+    start_refresh(True, ids)
+elif cache.missing(ids) and now - r["last_try"] > 120:
+    start_refresh(False, ids)
+if st.session_state.pop("just_refreshed", False):
+    st.toast("시세를 새로 받았어요.")
+if not cache.updated_at:
+    st.info("처음이라 시세를 받는 중이에요. 아이템이 많아서 5~10분쯤 걸리고, 다 받으면 화면이 자동으로 채워져요. "
+            "진행 상황은 왼쪽 사이드바에 나와요.")
 
 # ── 계산 ──
 rows, trees, calc = analyze(
@@ -198,20 +236,32 @@ def row_data(r):
     }
 
 
-calculable = [r for r in rows if r["순수익"] is not None]
-passed = [r for r in rows if passes(r)]
-failed = [r for r in rows if r["순수익"] is None]
+CATS = {"all": "전체", "가구": "가구", "일반": "일반 제작템"}
+MAX_FAILED = 400  # 계산 불가 목록은 너무 길어지지 않게
+
+
+def cat_stats(cat):
+    rs = [x for x in rows if cat == "all" or x["분류"] == cat]
+    return {"total": len(rs), "calculable": sum(x["순수익"] is not None for x in rs),
+            "passed": sum(passes(x) for x in rs)}
+
+
+def failed_data(cat):
+    rs = [x for x in rows if x["순수익"] is None and (cat == "all" or x["분류"] == cat)]
+    return {"total": len(rs), "items": [
+        {"name": gd.name(trees[x["recipe_id"]][0].result_id), "stars": trees[x["recipe_id"]][0].stars,
+         "job": x["직업"], "level": x["레시피 레벨"], "reason": x["제외 사유"]} for x in rs[:MAX_FAILED]]}
+
 
 ui.dashboard({
     "subtitle": [server["world"], f"판매 시세 {scope_names[sell_scope]}", f"재료 구매 {scope_names[buy_scope]}",
-                 f"레시피 레벨 {level_range[0]}~{level_range[1]}", "전체 제작품" if include_all else "하우징 가구",
-                 f"시세 갱신 {fmt_time(cache.updated_at)}"],
-    "stats": {"total": len(rows), "calculable": len(calculable), "passed": len(passed)},
+                 f"레시피 레벨 {level_range[0]}~{level_range[1]}", f"시세 갱신 {fmt_time(cache.updated_at)}"],
+    "cats": CATS,
+    "stats": {c: cat_stats(c) for c in CATS},
     "jobs": JOB_NAMES,
     "period": PERIOD,
     "sort": sort_by,
     "taxNote": f"판매세 {seller_tax:.0%} 반영",
-    "rows": [row_data(r) for r in passed],
-    "failed": [{"name": gd.name(trees[r["recipe_id"]][0].result_id), "stars": trees[r["recipe_id"]][0].stars,
-                "job": r["직업"], "level": r["레시피 레벨"], "reason": r["제외 사유"]} for r in failed],
+    "rows": [{**row_data(x), "cat": x["분류"]} for x in rows if passes(x)],
+    "failed": {c: failed_data(c) for c in CATS},
 })

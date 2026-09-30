@@ -53,8 +53,6 @@ batch_size: 1
 outlier_ratio: 0.5
 # HQ 가 있는 아이템을 HQ 로 판다고 가정할지 (false 면 NQ 시세 기준)
 sell_hq: false
-# true 면 가구 외 모든 제작품도 분석 (사이드바 토글 기본값)
-include_all_crafts: false
 # 중간재료를 직접 만들 때 비전서가 필요한 레시피도 쓸지 (비전서가 있으면 true)
 allow_secret_recipe_intermediates: false
 

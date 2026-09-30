@@ -17,6 +17,7 @@ import requests
 from .config import CACHE_DIR, load_config
 
 BATCH = 100
+KEEP_LISTINGS = 30  # 서버·품질별로 싼 매물 몇 개까지 저장할지 (메모리 절약). 전체 개수는 따로 센다.
 
 
 class Universalis:
@@ -101,11 +102,12 @@ class Universalis:
             for iid in chunk:
                 cur = current.get(iid, {})
                 hist = history.get(iid, {})
+                listings, counts = _trim_listings(cur.get("listings", []), default_world)
                 out[iid] = {
-                    # [단가(세금 제외), 수량, HQ여부, 월드ID]
-                    "listings": [[l["pricePerUnit"], l["quantity"], bool(l.get("hq")),
-                                  l.get("worldID", default_world)]
-                                 for l in cur.get("listings", [])],
+                    # [단가(세금 제외), 수량, HQ여부, 월드ID] — 서버·품질별 싼 순 KEEP_LISTINGS 개
+                    "listings": listings,
+                    # {"월드ID:0 또는 1(HQ)": 전체 매물 수}
+                    "counts": counts,
                     # [단가, 수량, HQ여부, 판매 시각(초), 월드ID]
                     "sales": [[s["pricePerUnit"], s["quantity"], bool(s.get("hq")), s["timestamp"],
                                s.get("worldID", default_world)]
@@ -116,6 +118,20 @@ class Universalis:
         if progress:
             progress(1.0, "완료")
         return out
+
+
+def _trim_listings(raw, default_world):
+    groups = {}
+    for l in raw:
+        world = l.get("worldID", default_world)
+        hq = bool(l.get("hq"))
+        groups.setdefault((world, hq), []).append([l["pricePerUnit"], l["quantity"], hq, world])
+    listings, counts = [], {}
+    for (world, hq), group in groups.items():
+        group.sort(key=lambda x: x[0])
+        listings.extend(group[:KEEP_LISTINGS])
+        counts[f"{world}:{int(hq)}"] = len(group)
+    return listings, counts
 
 
 class MarketCache:
@@ -146,11 +162,13 @@ class MarketCache:
         return [i for i in item_ids if str(i) not in have]
 
     def update(self, items, tax_rates=None, full=False):
-        if full:
-            self.data["items"] = {}
-            self.data["updated_at"] = time.time()
+        # 새 dict 를 다 만든 뒤 한 번에 바꿔 끼운다 → 뒤에서 갱신하는 동안 화면이 읽어도 안전
+        new = {} if full else dict(self.data["items"])
         for iid, entry in items.items():
-            self.data["items"][str(iid)] = entry
+            new[str(iid)] = entry
+        self.data["items"] = new
+        if full:
+            self.data["updated_at"] = time.time()
         if tax_rates:
             self.data["tax_rates"] = tax_rates
         if not self.data["updated_at"]:
@@ -203,7 +221,7 @@ if __name__ == "__main__":
     server = resolve_server(api, cfg)
     print(f"월드: {server['world']} (ID {server['world_id']}) / 데이터센터: {server['dc']} "
           f"({', '.join(server['world_names'].values())})")
-    recipes = list(scope_recipes(gd, cfg, cfg["include_all_crafts"]))
+    recipes = list(scope_recipes(gd, cfg, True))
     ids = market_item_ids(gd, recipes)
     print(f"레시피 {len(recipes)}개 (전체 레벨), 시세 조회할 아이템 {len(ids)}개")
     cache = MarketCache(server)

@@ -125,3 +125,10 @@ thead th.sorted.asc::after{content:" ▲"}
 .kv b span.pos, .kv b span.neg { font-size: inherit; }
 .kv b span.pos { color: var(--positive); }
 .kv b span.neg { color: var(--negative); }
+
+/* 분류 선택 (전체 / 가구 / 일반 제작템) */
+.cats{display:inline-flex;gap:3px;padding:3px;margin:0 0 var(--space-5);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);max-width:100%;overflow-x:auto}
+.cat{background:none;border:0;border-radius:calc(var(--radius) - 3px);padding:7px var(--space-4);font-size:var(--fs-md);color:var(--text-muted);cursor:pointer;white-space:nowrap}
+.cat:hover{color:var(--text)}
+.cat.active{background:var(--primary-soft);color:var(--primary-strong);font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--primary) 40%,transparent)}
+.cat .cnt{font-size:var(--fs-xs);color:var(--text-faint);margin-left:6px;font-weight:400}

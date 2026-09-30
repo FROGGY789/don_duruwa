@@ -247,3 +247,8 @@ tr.flash td{animation:flash 1.6s ease-out}
 .ev-grid tr.bait td{color:var(--text-faint);text-decoration:line-through}
 .ev-grid tr.bait td:last-child{text-decoration:none}
 @media (max-width:900px){.ev-grid{grid-template-columns:1fr}}
+
+/* 이상 거래 */
+.badge.odd{background:var(--negative-soft);color:var(--negative);font-weight:600}
+.ev-grid tr.odd td{color:var(--negative);text-decoration:line-through;opacity:.8}
+.ev-grid tr.odd td:first-child{text-decoration:none}

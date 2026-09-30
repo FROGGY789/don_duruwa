@@ -274,8 +274,9 @@ function renderEvidence(d, row) {
   const q = (hq) => `<span class="badge ${hq ? "src-craft" : "nq"}">${hq ? "HQ" : "NQ"}</span>`;
   let formula = `판매 예상가 = min(${esc(d.period)} 판매 중앙값 <b>${gil(ev.median)}</b>, 지금 최저 매물 <b>${ev.minListing == null ? "없음" : gil(ev.minListing)}</b>)`;
   if (ev.hqCap != null) formula += ` → HQ 매물 <b>${gil(ev.hqCap)}</b> 보다 비싸게는 몬 파니까 깎음`;
-  formula += ` = <b class="ev-sell">${gil(ev.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준)</span>`;
-  const sales = ev.sales.length ? ev.sales.map((x) => `<tr><td>${esc(x.when)}</td><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
+  formula += ` = <b class="ev-sell">${gil(ev.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준${ev.dropped ? ` · 이상 거래 ${ev.dropped}건 빼고` : ""})</span>`;
+  const sales = ev.sales.length ? ev.sales.map((x) => `<tr class="${x.odd ? "odd" : ""}"${x.odd ? ' data-tip="보통 가격이랑 너무 달라가 이상 거래로 보고 계산에서 뺐다"' : ""}>
+      <td>${x.odd ? "❗ " : ""}${esc(x.when)}</td><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
       <td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td></tr>`).join("")
     : `<tr><td colspan="5" class="faint">팔린 기록이 없다</td></tr>`;
   const listings = ev.listings.length ? ev.listings.map((x) => `<tr class="${x.bait ? "bait" : ""}"><td>${esc(x.world)}</td><td>${q(x.hq)}</td>

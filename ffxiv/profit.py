@@ -50,9 +50,22 @@ class Stats:
     listing_count: int = 0
     min_listing: float = None
     last_upload: float = 0  # 초
+    dropped: list = field(default_factory=list)  # 이상 거래로 뺀 판매 기록
 
 
-def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None):
+def split_odd_sales(sales, ratio):
+    """중앙값보다 ratio 배 넘게 비싸거나 1/ratio 보다 싼 거래를 이상 거래로 뺀다. (남긴 것, 뺀 것)
+
+    판매가 3건 이상일 때만 따진다. ratio 가 0 이면 안 거른다.
+    """
+    if not ratio or len(sales) < 3:
+        return sales, []
+    mid = statistics.median(s[0] for s in sales)
+    kept = [s for s in sales if mid / ratio <= s[0] <= mid * ratio]
+    return kept, [s for s in sales if s not in kept]
+
+
+def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0):
     """hq=None 이면 품질 구분 없이, True/False 면 그 품질만. world=None 이면 데이터센터 전체, 월드ID 면 그 서버만."""
     st = Stats()
     if not entry:
@@ -61,6 +74,7 @@ def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None):
     sales = [s for s in entry["sales"]
              if s[3] >= since and (hq is None or s[2] == hq) and (world is None or s[4] == world)]
     listings = [l for l in entry["listings"] if (hq is None or l[2] == hq) and (world is None or l[3] == world)]
+    sales, st.dropped = split_odd_sales(sales, odd_ratio)
     st.sale_count = len(sales)
     st.sold_qty = sum(s[1] for s in sales)
     if sales:
@@ -113,13 +127,14 @@ class Calculator:
         self.npc_ignore = gd.ids_by_name(cfg.get("npc_ignore_items"))
         self._memo = {}
         self._stats = {}
+        self.odd_ratio = cfg.get("odd_sale_ratio", 3)
         self.furniture = set(cfg["furniture_ui_categories"])
 
     def stats(self, item_id, hq=None, outlier_ratio=0.0, world=None):
         """market_stats 결과를 기억해 둔다 (같은 재료를 여러 레시피가 쓰니까)."""
         key = (item_id, hq, outlier_ratio, world)
         if key not in self._stats:
-            self._stats[key] = market_stats(self.market.get(item_id), hq, self.hours, outlier_ratio, world)
+            self._stats[key] = market_stats(self.market.get(item_id), hq, self.hours, outlier_ratio, world, self.odd_ratio)
         return self._stats[key]
 
     # ── 재료 구매 ──
@@ -250,6 +265,13 @@ class Calculator:
                 text = "🔻 HQ 매물가로 깎음"
                 extra.append(text)
                 tips[text] = f"HQ 가 {cap:,.0f}길에 올라와 있어가 NQ 를 그보다 비싸게는 몬 판다. 그래서 판매가를 {cap:,.0f}길로 잡았데이."
+            if st.dropped:
+                text = "❗ 이상 거래 포착"
+                extra.append(text)
+                shown = ", ".join(f"{x[0]:,}길×{x[1]}" for x in sorted(st.dropped, key=lambda x: -x[0])[:3])
+                tips[text] = (f"{self.hours // 24:.0f}일 판매 {st.sale_count + len(st.dropped)}건 중 {len(st.dropped)}건이 "
+                              f"보통 가격(중앙값)이랑 {self.odd_ratio:g}배 넘게 차이 나가 뺐다 ({shown}). "
+                              "실수로 잘못 판 거나 짜고 치는 거래일 수 있어가 판매가·판매량 계산에 안 넣었데이.")
             if st.sale_count < 5 and st.listing_count == 0:
                 text = "⚠ 근거 약함"
                 extra.append(text)
@@ -311,7 +333,8 @@ class Calculator:
             "median": st.median, "minListing": st.min_listing, "hqCap": cap, "sell": sell,
             "quality": "전체" if hq is None else ("HQ" if hq else "NQ"),
             "sales": [{"when": datetime.fromtimestamp(x[3], KST).strftime("%m/%d %H:%M"), "world": world(x[4]),
-                       "hq": x[2], "price": x[0], "qty": x[1]} for x in sales[:10]],
+                       "hq": x[2], "price": x[0], "qty": x[1], "odd": x in st.dropped} for x in sales[:10]],
+            "dropped": len(st.dropped),
             "listings": [{"world": world(x[3]), "hq": x[2], "price": x[0], "qty": x[1], "bait": x[0] < bait}
                          for x in listings[:6]],
         }
@@ -352,9 +375,9 @@ class Calculator:
         end = entry.get("fetched_at", time.time())
         start = end - n_days * 86400
         buckets = [[] for _ in range(n_days)]
-        for s in entry["sales"]:
-            if s[3] < start or (hq is not None and s[2] != hq) or (self.sell_world is not None and s[4] != self.sell_world):
-                continue
+        sales = [s for s in entry["sales"]
+                 if s[3] >= start and (hq is None or s[2] == hq) and (self.sell_world is None or s[4] == self.sell_world)]
+        for s in split_odd_sales(sales, self.odd_ratio)[0]:
             buckets[min(n_days - 1, int((s[3] - start) // 86400))].append(s)
         days = []
         for i, b in enumerate(buckets):

@@ -26,13 +26,13 @@ PERIOD = f"{H // 24}일" if H % 24 == 0 else f"{H}시간"
 KST = timezone(timedelta(hours=9), "KST")  # 클라우드 서버는 시간대가 달라서 한국 시간으로 고정
 
 
-@st.cache_resource(show_spinner="게임 데이터(레시피/아이템) 불러오는 중…")
+@st.cache_resource(show_spinner="게임 데이터(레시피·아이템) 불러오는 중이데이…")
 def load_gamedata(base_url):
     download_csvs(base_url)
     return GameData()
 
 
-@st.cache_resource(show_spinner="저장된 시세 불러오는 중…")
+@st.cache_resource(show_spinner="저장해 둔 시세 불러오는 중이데이…")
 def load_market_cache(world_id, dc):
     return MarketCache({"world_id": world_id, "dc": dc})
 
@@ -54,7 +54,7 @@ def start_refresh(full, ids):
     r = refresher()
     if r["thread"] is not None and r["thread"].is_alive():
         return
-    r.update(progress=0.0, msg="시세 받을 준비 중…", error=None, last_try=time.time())
+    r.update(progress=0.0, msg="시세 받을 채비 하는 중이데이…", error=None, last_try=time.time())
 
     def run():
         try:
@@ -83,14 +83,14 @@ ui.apply_theme(theme, palette)
 try:
     gd = load_gamedata(cfg["datamining_base_url"])
 except requests.RequestException as e:
-    st.error(f"게임 데이터 CSV 를 받지 못했습니다: {e}")
+    ui.notice(st, f"게임 데이터 CSV 를 몬 받아왔다. 쪼매 있다가 새로고침 해 봐라. ({e})", "error")
     st.stop()
 
 api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"])
 try:
     server = resolve_server(api, cfg)
 except (requests.RequestException, ValueError) as e:
-    st.error(f"월드 정보를 확인하지 못했습니다: {e}")
+    ui.notice(st, f"월드 정보를 몬 찾았다. 쪼매 있다가 새로고침 해 봐라. ({e})", "error")
     st.stop()
 cache = load_market_cache(server["world_id"], server["dc"])
 home, dc = server["world_id"], server["dc"]
@@ -109,9 +109,9 @@ def refresh_status():
         st.progress(r["progress"], r["msg"])
     else:
         ui.sidebar_note(st, f"마지막 갱신: {fmt_time(cache.updated_at)}"
-                        + (f" · {auto_min}분 지나면 자동 갱신" if auto_min else ""))
+                        + (f" · {auto_min}분 지나믄 알아서 갱신한데이" if auto_min else ""))
         if r["error"]:
-            ui.sidebar_note(st, "⚠ 마지막 갱신 실패 — 저장된 시세로 보는 중")
+            ui.sidebar_note(st, "⚠ 이번 갱신은 안 됐다 — 전에 받아둔 시세로 보는 중이데이")
     if r["finished_at"] > st.session_state["seen_refresh"]:
         st.session_state["seen_refresh"] = r["finished_at"]
         st.session_state["just_refreshed"] = not r["error"]
@@ -126,29 +126,29 @@ scope_names = {"dc": f"{dc} 전체" if dc else "데이터센터 전체", "world"
 sell_scope = sb.segmented_control(
     "판매 시세 기준", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
     default="dc" if cfg["sell_scope"] == "dc" else "world",
-    help="등록은 내 서버에서만 되지만, 사는 사람들이 서버를 돌아다니며 제일 싼 걸 사가니 "
-         "경쟁 매물과 판매량을 데이터센터 전체로 보는 게 기본입니다.")
+    help="등록은 내 서버에서만 되는데, 사는 사람들이 서버 돌아댕기믄서 제일 싼 거 사 가니까 "
+         "경쟁 매물이랑 판매량은 데이터센터 전체로 보는 기 기본이데이.")
 buy_scope = sb.segmented_control(
     "재료 구매", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
     default="dc" if cfg["buy_scope"] == "dc" else "world",
-    help="데이터센터 전체면 다른 서버에 가서 제일 싼 매물을 사 온다고 가정합니다. "
-         "재료 상세의 '구매 서버'에 어디로 가면 되는지 나옵니다.")
+    help="데이터센터 전체믄 다른 서버 가가 제일 싼 매물 사 온다 치는 기다. "
+         "재료 상세 '구매 서버'에 어데 가믄 되는지 나온데이.")
 
 ui.sidebar_title(sb, "분석 대상")
 level_range = sb.slider("레시피 레벨 범위", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
 with sb.expander(f"직업별 레벨 · {len(JOB_NAMES)}개 직업", expanded=False):
-    st.caption("이 레벨보다 높은 레시피는 빠지고, 중간재료 직접 제작도 이 레벨까지만 고려합니다.")
+    st.caption("이 레벨보다 높은 레시피는 빼고, 중간재료 직접 만드는 것도 이 레벨까지만 친데이.")
     cols = st.columns(2)
     job_levels = {job: cols[i % 2].number_input(job, 1, 100, cfg["job_levels"][job], key=f"lv_{job}")
                   for i, job in enumerate(JOB_NAMES)}
-sell_hq = sb.toggle("HQ 판매", value=cfg["sell_hq"], help="HQ 가 있는 아이템을 HQ 시세로 판다고 가정합니다.")
+sell_hq = sb.toggle("HQ 판매", value=cfg["sell_hq"], help="HQ 있는 아이템은 HQ 시세로 판다 치는 기다.")
 batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_size"],
-                             help="재료를 싼 매물부터 이 횟수만큼 사는 비용으로 원가를 계산합니다.")
+                             help="재료를 싼 매물부터 이 횟수만큼 산다 치고 원가 계산한데이.")
 
 ui.sidebar_title(sb, "필터")
 min_sales = sb.number_input(f"{PERIOD} 판매 건수 ≥", 0, 999, F["min_sales"])
 mat_ratio = sb.number_input("재료 판매 수량 배수 ≥", 0.0, 100.0, float(F["material_ratio"]), 0.5,
-                            help="재료별 판매 수량이 필요 수량의 몇 배 이상인지. NPC·직접 채집 재료는 검사하지 않습니다.")
+                            help="재료마다 팔린 수량이 필요한 수량의 몇 배는 돼야 되는지. NPC·직접 채집 재료는 안 따진데이.")
 min_margin = sb.number_input("최소 수익률(%)", -100.0, 10000.0, float(F["min_margin_pct"]), 5.0)
 min_profit = sb.number_input("개당 최소 순수익(길)", -1_000_000, 10_000_000, F["min_profit"], 500)
 max_listings = sb.number_input("현재 등록 건수 ≤", 0, 999, F["max_listings"])
@@ -167,7 +167,7 @@ seller_tax, tax_city = seller_tax_rate(cfg, cache.tax_rates, city)
 sb.html(f'<div class="sb-note tax"><span>적용 판매세</span>'
         f'<b>{seller_tax:.0%} ({TAX_CITIES.get(tax_city, tax_city)})</b></div>')
 
-if sb.button("게임 데이터 다시 받기", help="패치 후 레시피가 바뀌었을 때만", width="stretch"):
+if sb.button("게임 데이터 다시 받기", help="패치로 레시피 바뀌었을 때만 누르래이", width="stretch"):
     download_csvs(cfg["datamining_base_url"], force=True)
     load_gamedata.clear()
     all_market_ids.clear()
@@ -186,10 +186,11 @@ if refresh_clicked or auto_due:
 elif cache.missing(ids) and now - r["last_try"] > 120:
     start_refresh(False, ids)
 if st.session_state.pop("just_refreshed", False):
-    st.toast("시세를 새로 받았어요.")
+    st.toast("시세 새로 받아왔데이!")
+notice = None
 if not cache.updated_at:
-    st.info("처음이라 시세를 받는 중이에요. 아이템이 많아서 5~10분쯤 걸리고, 다 받으면 화면이 자동으로 채워져요. "
-            "진행 상황은 왼쪽 사이드바에 나와요.")
+    notice = {"kind": "info", "text": "처음이라 시세 받아오는 중이데이. 아이템이 억수로 많아가 5~10분쯤 걸리니까 "
+                                      "쪼매만 기다리래이. 다 받으믄 화면 알아서 채워진다. 우째 돼 가는지는 왼쪽에 나온데이."}
 
 # ── 계산 ──
 rows, trees, calc = analyze(
@@ -256,6 +257,7 @@ def failed_data(cat):
 ui.dashboard({
     "subtitle": [server["world"], f"판매 시세 {scope_names[sell_scope]}", f"재료 구매 {scope_names[buy_scope]}",
                  f"레시피 레벨 {level_range[0]}~{level_range[1]}", f"시세 갱신 {fmt_time(cache.updated_at)}"],
+    "notice": notice,
     "cats": CATS,
     "stats": {c: cat_stats(c) for c in CATS},
     "jobs": JOB_NAMES,

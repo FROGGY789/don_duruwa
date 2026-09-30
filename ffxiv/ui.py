@@ -5,6 +5,7 @@
 - design/dashboard.*    메인 영역(헤더·카드·탭·순위 표·재료 상세)을 그리는 컴포넌트
 """
 import hmac
+from html import escape as html_escape
 import math
 import re
 from pathlib import Path
@@ -47,6 +48,12 @@ def sidebar_brand(sb):
 
 def sidebar_title(sb, text):
     sb.html(f'<div class="sb-title">{text}</div>')
+
+
+def notice(where, text, kind="info"):
+    """디자인 색에 맞춘 안내 상자 (st.info / st.error 대신)."""
+    icon = {"info": "⏳", "error": "⚠"}.get(kind, "")
+    where.html(f'<div class="ffx-notice {kind}"><span>{icon}</span><span>{html_escape(text)}</span></div>')
 
 
 def sidebar_note(sb, html):
@@ -113,7 +120,7 @@ def password_gate():
     apply_theme(theme if theme in THEMES else "다크", palette if palette in PALETTES else "골드")
     st.html("<style>" + _read("login.css") + "</style>")
     st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
-            '<h1>파판14 제작 수익 분석</h1><p>비밀번호를 입력하면 화면이 열립니다.</p></div>')
+            '<h1>파판14 제작 수익 분석</h1><p>비밀번호 쳐야 화면 열어준데이.</p></div>')
     with st.form("login", border=False):
         typed = st.text_input("비밀번호", type="password", placeholder="비밀번호")
         ok = st.form_submit_button("들어가기", type="primary", width="stretch")
@@ -121,5 +128,5 @@ def password_gate():
         if hmac.compare_digest(typed.encode(), str(password).encode()):
             st.session_state["authed"] = True
             st.rerun()
-        st.html('<div class="login-error">비밀번호가 맞지 않아요. 다시 입력해 주세요.</div>')
+        st.html('<div class="login-error">비밀번호가 틀렸다 아이가. 다시 쳐 봐라.</div>')
     st.stop()

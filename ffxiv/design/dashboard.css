@@ -132,3 +132,8 @@ thead th.sorted.asc::after{content:" ▲"}
 .cat:hover{color:var(--text)}
 .cat.active{background:var(--primary-soft);color:var(--primary-strong);font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--primary) 40%,transparent)}
 .cat .cnt{font-size:var(--fs-xs);color:var(--text-faint);margin-left:6px;font-weight:400}
+
+/* 안내 상자 */
+.notice{display:flex;gap:var(--space-3);align-items:flex-start;margin:0 0 var(--space-6);padding:var(--space-3) var(--space-4);border-radius:var(--radius);
+  font-size:var(--fs-sm);line-height:1.6;color:var(--text-muted);background:var(--primary-soft);border:1px solid color-mix(in oklab,var(--primary) 30%,transparent)}
+.notice.error{color:var(--negative);background:var(--negative-soft);border-color:color-mix(in oklab,var(--negative) 30%,transparent)}

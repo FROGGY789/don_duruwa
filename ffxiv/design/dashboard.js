@@ -105,7 +105,7 @@ function renderTable(d, rows) {
   }).join("");
 
   if (!rows.length) {
-    return `<div class="table-wrap"><div class="empty">필터를 통과한 아이템이 없습니다. 사이드바에서 조건을 완화해 보세요.</div></div>`;
+    return `<div class="table-wrap"><div class="empty">필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
   }
   const body = rows.map((r, i) => {
     const badges = r.badges.map((b) => `<span class="badge ${esc(b.kind)}">${esc(b.text)}</span>`).join("");
@@ -130,7 +130,7 @@ function renderTable(d, rows) {
 }
 
 function renderDetail(d, row) {
-  if (!row) return `<div class="detail-hint">표에서 아이템을 선택하면 재료 상세가 여기에 표시됩니다.</div>`;
+  if (!row) return `<div class="detail-hint">표에서 아이템 하나 눌러 봐라. 재료 상세 여기 뜬데이.</div>`;
   const body = row.materials.map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
@@ -183,7 +183,7 @@ function renderFailed(d) {
     <td class="num">${f.level}</td><td class="reason">${esc(f.reason)}</td></tr>`).join("");
   return `
     <details class="failed"${state.failedOpen ? " open" : ""}>
-      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">판매 기록이나 재료 시세가 없는 레시피</span></summary>
+      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">팔린 기록이나 재료 시세가 없어가 계산 몬 한 기다</span></summary>
       <div class="failed-body"><div class="table-wrap"><table>
         <thead><tr><th>아이템명</th><th>직업</th><th class="num">레시피 레벨</th><th>제외 사유</th></tr></thead>
         <tbody>${body}${more}</tbody>
@@ -215,10 +215,14 @@ export default function (component) {
     const rows = sortedRows(data);
     if (!rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
     const selected = data.rows.find((r) => r.id === state.selected);
+    const notice = data.notice
+      ? `<div class="notice ${esc(data.notice.kind)}"><span>${data.notice.kind === "error" ? "⚠" : "⏳"}</span><span>${esc(data.notice.text)}</span></div>`
+      : "";
     root.innerHTML =
+      notice +
       renderHeader(data) +
       renderTabs(data) +
-      `<div class="section-head"><h2>순위</h2><span class="desc">행을 선택하면 아래에 재료 상세가 표시됩니다</span>
+      `<div class="section-head"><h2>순위</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이</span>
          <span class="right">${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderDetail(data, selected) +

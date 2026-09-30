@@ -119,3 +119,13 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
 /* 스크롤바 */
 [data-testid="stSidebarContent"]::-webkit-scrollbar { width: 6px; }
 [data-testid="stSidebarContent"]::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* 안내 상자 (ui.notice) */
+.ffx-notice { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); border-radius: var(--radius);
+  font-size: var(--fs-sm); line-height: 1.6; color: var(--text-muted); background: var(--primary-soft);
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent); }
+.ffx-notice.error { color: var(--negative); background: var(--negative-soft); border-color: color-mix(in oklab, var(--negative) 30%, transparent); }
+/* 진행 막대 · 토스트 · 로딩 문구 */
+[data-testid="stProgress"] p, [data-testid="stSpinner"], [data-testid="stSpinner"] p { color: var(--text-muted) !important; font-size: var(--fs-sm); }
+[data-testid="stToast"] { box-shadow: var(--shadow) !important; border-radius: var(--radius) !important; }
+[data-testid="stToast"] p { color: var(--text) !important; }

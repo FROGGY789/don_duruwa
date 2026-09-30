@@ -14,8 +14,11 @@ import math
 import statistics
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 from .gamedata import can_craft_intermediate
+
+KST = timezone(timedelta(hours=9), "KST")
 
 
 def market_item_ids(gd, recipes):
@@ -221,6 +224,10 @@ class Calculator:
             "분류": "가구" if item.ui_category in self.furniture else "일반",
             "재료 여유 배수": self.material_ratio(tree),
             "제외 사유": "",
+            "판매 소요일": None,
+            "추이": self.trend(recipe.result_id, hq),
+            "품질 비교": None,
+            "결과물 개수": recipe.result_amount,
         }
 
         if st.median is None:
@@ -229,13 +236,83 @@ class Calculator:
             missing = sorted({self.gd.name(n.item_id) for n in walk(tree) if n.unit_cost is None and not n.children})
             row["제외 사유"] = "재료 시세 없음: " + ", ".join(missing)
         else:
-            sell = min(st.median, st.min_listing) if st.min_listing else st.median
+            sell = self.sale_price(st)
             net = sell * (1 - self.seller_tax) - tree.unit_cost
             row["판매 예상가"] = sell
             row["순수익"] = net
             row["수익률(%)"] = net / tree.unit_cost * 100 if tree.unit_cost > 0 else None
             row["하루 잠재 이익"] = net * st.sold_qty / (self.hours / 24)
+
+            days, gap = self.sell_outlook(recipe.result_id, hq, sell, st)
+            row["판매 소요일"] = days
+            if gap is not None and gap < 0.02 and st.listing_count >= 5:
+                extra.append("🔥 덤핑 경쟁")
+            change = row["추이"]["change"]
+            if change is not None and change <= -10:
+                extra.append(f"📉 하락 중 {change:.0f}%")
+            if item.can_hq:
+                row["품질 비교"] = self.quality_compare(recipe.result_id, tree.unit_cost)
+                other = row["품질 비교"]["HQ" if not self.sell_hq else "NQ"]
+                if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
+                    extra.append(f"✨ {'HQ' if not self.sell_hq else 'NQ'}면 +{other['net'] - net:,.0f}")
         return row, tree
+
+    def sale_price(self, st):
+        return min(st.median, st.min_listing) if st.min_listing else st.median
+
+    def sell_outlook(self, item_id, hq, sell, st):
+        """(예상 판매 소요일, 최저가와 2번째 매물의 가격 차 비율).
+
+        내 가격 이하로 올라온 매물 수량 + 내 1개를, 하루 평균 판매 수량으로 나눈다.
+        """
+        entry = self.market.get(item_id) or {"listings": []}
+        listings = [l for l in entry["listings"]
+                    if (hq is None or l[2] == hq) and (self.sell_world is None or l[3] == self.sell_world)]
+        ahead = sum(l[1] for l in listings if l[0] <= sell)
+        daily = st.sold_qty / (self.hours / 24)
+        days = (ahead + 1) / daily if daily > 0 else None
+        prices = sorted(l[0] for l in listings)
+        gap = (prices[1] - prices[0]) / prices[0] if len(prices) >= 2 and prices[0] > 0 else None
+        return days, gap
+
+    def quality_compare(self, item_id, unit_cost):
+        """NQ 로 팔 때와 HQ 로 팔 때 비교 (재료비는 같다고 보고)."""
+        out = {}
+        for name, hq in (("NQ", False), ("HQ", True)):
+            st = self.stats(item_id, hq, self.outlier_ratio, self.sell_world)
+            sell = self.sale_price(st) if st.median is not None else None
+            out[name] = {
+                "sell": sell,
+                "net": sell * (1 - self.seller_tax) - unit_cost if sell is not None else None,
+                "sales": st.sale_count,
+                "listings": st.listing_count,
+            }
+        return out
+
+    def trend(self, item_id, hq):
+        """기간 내 하루 단위 판매가 중앙값·판매 수량, 그리고 최근 2일 vs 그 전 가격 변화(%)."""
+        entry = self.market.get(item_id)
+        n_days = max(1, int(self.hours // 24))
+        if not entry:
+            return {"days": [], "change": None}
+        end = entry.get("fetched_at", time.time())
+        start = end - n_days * 86400
+        buckets = [[] for _ in range(n_days)]
+        for s in entry["sales"]:
+            if s[3] < start or (hq is not None and s[2] != hq) or (self.sell_world is not None and s[4] != self.sell_world):
+                continue
+            buckets[min(n_days - 1, int((s[3] - start) // 86400))].append(s)
+        days = []
+        for i, b in enumerate(buckets):
+            label = datetime.fromtimestamp(start + (i + 1) * 86400 - 1, KST).strftime("%m/%d")
+            days.append({"date": label, "median": statistics.median(x[0] for x in b) if b else None,
+                         "units": sum(x[1] for x in b), "count": len(b)})
+        recent = [x[0] for b in buckets[-2:] for x in b]
+        before = [x[0] for b in buckets[:-2] for x in b]
+        change = None
+        if len(recent) >= 2 and len(before) >= 2:
+            change = (statistics.median(recent) / statistics.median(before) - 1) * 100
+        return {"days": days, "change": change}
 
     def material_ratio(self, tree):
         """거래소에서 사는 재료들 중 (기간 내 판매 수량 ÷ 필요 수량) 의 최솟값. 거래소 재료가 없으면 무한대."""
@@ -251,6 +328,28 @@ def walk(node):
     yield node
     for child, _ in node.children:
         yield from walk(child)
+
+
+def shopping_list(tree):
+    """1회 제작에 실제로 사야 하는 것들 (직접 제작하는 중간재료는 그 재료로 풀어서)."""
+    out = {}
+
+    def go(node, qty):
+        if node.source == "직접 제작" and node.children:
+            for child, amt in node.children:
+                go(child, qty * amt / node.recipe.result_amount)
+            return
+        world = ""
+        if node.source == "거래소":
+            world = node.note.split(" (")[0] if node.note and not node.note.startswith("매물 없음") else "서버 미정"
+        key = (node.item_id, node.source, world)
+        if key not in out:
+            out[key] = {"id": node.item_id, "qty": 0.0, "unit": node.unit_cost, "source": node.source, "world": world}
+        out[key]["qty"] += qty
+
+    for child, amt in tree.children:
+        go(child, amt)
+    return list(out.values())
 
 
 def detail_rows(calc, tree):

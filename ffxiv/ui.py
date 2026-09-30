@@ -57,6 +57,15 @@ def notice(where, text, kind="info"):
     where.html(f'<div class="ffx-notice {kind}"><span>{icon}</span><span>{html_escape(text)}</span></div>')
 
 
+def changelog_html(log):
+    parts = []
+    for entry in log:
+        items = "".join(f"<li>{html_escape(x)}</li>" for x in entry["changes"])
+        parts.append(f'<div class="cl-entry"><div class="cl-head"><b>v{html_escape(entry["version"])}</b>'
+                     f'<span>{html_escape(entry["date"])}</span></div><ul>{items}</ul></div>')
+    return '<div class="changelog">' + "".join(parts) + "</div>"
+
+
 def sidebar_note(sb, html):
     sb.html(f'<div class="sb-note">{html}</div>')
 

@@ -14,7 +14,8 @@ from ffxiv import ui
 from ffxiv.config import JOB_NAMES, TAX_CITIES, load_config
 from ffxiv.gamedata import GameData, download_csvs, scope_recipes, target_recipes
 from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
-from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate
+from ffxiv.changelog import CHANGELOG
+from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 
 st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🪑", layout="wide")
 ui.password_gate()  # Streamlit Secrets 에 app_password 가 있으면 비밀번호 화면부터
@@ -152,6 +153,9 @@ mat_ratio = sb.number_input("재료 판매 수량 배수 ≥", 0.0, 100.0, float
 min_margin = sb.number_input("최소 수익률(%)", -100.0, 10000.0, float(F["min_margin_pct"]), 5.0)
 min_profit = sb.number_input("개당 최소 순수익(길)", -1_000_000, 10_000_000, F["min_profit"], 500)
 max_listings = sb.number_input("현재 등록 건수 ≤", 0, 999, F["max_listings"])
+max_days = sb.number_input("예상 판매 소요일 ≤ (0 = 안 따짐)", 0.0, 365.0, float(F.get("max_sell_days", 0)), 1.0,
+                           help="내 가격 이하 매물이 다 팔리고 내 거까지 팔리는 데 걸리는 날 수. "
+                                "하루 판매량으로 어림잡은 기라 대충 감만 잡아라.")
 stale_hours = sb.number_input("데이터 오래됨 기준(시간)", 1, 720, F["stale_hours"])
 
 ui.sidebar_title(sb, "정렬 · 세금")
@@ -172,6 +176,11 @@ if sb.button("게임 데이터 다시 받기", help="패치로 레시피 바뀌�
     load_gamedata.clear()
     all_market_ids.clear()
     st.rerun()
+
+# ── 업데이트 내역 (사이드바 맨 아래) ──
+ui.sidebar_title(sb, "업데이트 내역")
+with sb.expander(f"v{CHANGELOG[0]['version']} · {CHANGELOG[0]['date'][5:]}", expanded=False):
+    st.html(ui.changelog_html(CHANGELOG))
 
 # ── 시세 데이터 준비 ──
 # 시세는 모든 제작품·모든 레벨을 받아둔다 → 분류·레벨을 바꿔도 다시 받지 않음. 받는 건 뒤에서 돈다.
@@ -206,7 +215,8 @@ def passes(r):
             and r["재료 여유 배수"] >= mat_ratio
             and (r["수익률(%)"] if r["수익률(%)"] is not None else -math.inf) >= min_margin
             and r["순수익"] >= min_profit
-            and r["현재 매물 수"] <= max_listings)
+            and r["현재 매물 수"] <= max_listings
+            and (not max_days or (r["판매 소요일"] is not None and r["판매 소요일"] <= max_days)))
 
 
 def row_data(r):
@@ -234,6 +244,12 @@ def row_data(r):
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,
+        "sellDays": r["판매 소요일"],
+        "trend": r["추이"],
+        "quality": r["품질 비교"],
+        "sellingHq": sell_hq,
+        "resultAmount": r["결과물 개수"],
+        "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
     }
 
 
@@ -264,6 +280,7 @@ ui.dashboard({
     "period": PERIOD,
     "sort": sort_by,
     "taxNote": f"판매세 {seller_tax:.0%} 반영",
+    "taxRate": seller_tax,
     "rows": [{**row_data(x), "cat": x["분류"]} for x in rows if passes(x)],
     "failed": {c: failed_data(c) for c in CATS},
 })

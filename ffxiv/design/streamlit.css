@@ -130,3 +130,23 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
 [data-testid="stProgress"] p, [data-testid="stSpinner"], [data-testid="stSpinner"] p { color: var(--text-muted) !important; font-size: var(--fs-sm); }
 [data-testid="stToast"] { box-shadow: var(--shadow) !important; border-radius: var(--radius) !important; }
 [data-testid="stToast"] p { color: var(--text) !important; }
+
+/* 업데이트 내역 */
+.changelog { max-height: 360px; overflow-y: auto; padding-right: 4px; }
+.cl-entry + .cl-entry { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.cl-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.cl-head b { color: var(--primary-strong); font-size: var(--fs-sm); }
+.cl-head span { color: var(--text-faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.changelog ul { margin: 4px 0 0; padding-left: 16px; }
+.changelog li { color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.6; }
+
+/* 드롭다운 (새 Streamlit 은 react-aria ComboBox 구조) */
+[data-testid="stSelectbox"] [role="group"] { background: var(--surface) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important; }
+[data-testid="stSelectbox"] [role="group"]:focus-within { border-color: var(--primary) !important; box-shadow: var(--ring); }
+[data-testid="stSelectbox"] button svg { color: var(--text-muted) !important; }
+.react-aria-Popover, [role="listbox"] { background: var(--surface) !important; color: var(--text) !important;
+  border: 1px solid var(--border) !important; border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+[role="listbox"] [role="option"] { color: var(--text) !important; background: transparent !important; }
+[role="listbox"] [role="option"][data-focused], [role="listbox"] [role="option"]:hover { background: var(--surface-hover) !important; }
+[role="listbox"] [role="option"][aria-selected="true"] { color: var(--primary-strong) !important; font-weight: 600; }

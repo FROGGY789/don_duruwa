@@ -124,11 +124,6 @@ with sb:
 
 ui.sidebar_title(sb, "서버 범위")
 scope_names = {"dc": f"{dc} 전체" if dc else "데이터센터 전체", "world": f"{server['world']}만"}
-sell_scope = sb.segmented_control(
-    "판매 시세 기준", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
-    default="dc" if cfg["sell_scope"] == "dc" else "world",
-    help="등록은 내 서버에서만 되는데, 사는 사람들이 서버 돌아댕기믄서 제일 싼 거 사 가니까 "
-         "경쟁 매물이랑 판매량은 데이터센터 전체로 보는 기 기본이데이.")
 buy_scope = sb.segmented_control(
     "재료 구매", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
     default="dc" if cfg["buy_scope"] == "dc" else "world",
@@ -204,25 +199,55 @@ if not cache.updated_at:
 # ── 계산 ──
 rows, trees, calc = analyze(
     gd, cache.items, cfg, targets, seller_tax, sell_hq=sell_hq, batch_size=batch_size, job_levels=job_levels,
-    sell_world=None if sell_scope == "dc" else home, buy_world=None if buy_scope == "dc" else home,
-    world_names=server["world_names"], home_world=home,
+    buy_world=None if buy_scope == "dc" else home, world_names=server["world_names"], home_world=home,
 )
+# 순위 보기: 통합 + 서버별 (내 서버 먼저)
+world_keys = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))
+VIEWS = {"dc": "통합"} | {w: server["world_names"][w] for w in world_keys}
 
 
-def passes(r):
-    return (r["순수익"] is not None
-            and r["판매 건수"] >= min_sales
-            and r["재료 여유 배수"] >= mat_ratio
-            and (r["수익률(%)"] if r["수익률(%)"] is not None else -math.inf) >= min_margin
-            and r["순수익"] >= min_profit
-            and r["현재 매물 수"] <= max_listings
-            and (not max_days or (r["판매 소요일"] is not None and r["판매 소요일"] <= max_days)))
+def fail_reasons(r, v):
+    """필터에 걸린 이유들. 빈 목록이믄 통과."""
+    out = []
+    if v["sales"] < min_sales:
+        out.append(f"{PERIOD} 판매 {v['sales']}건 (기준 {min_sales}건↑)")
+    if r["재료 여유 배수"] < mat_ratio:
+        out.append(f"재료 판매량 {r['재료 여유 배수']:.1f}배 (기준 {mat_ratio:g}배↑)")
+    margin = v["margin"]
+    if (margin if margin is not None else -math.inf) < min_margin:
+        out.append(f"수익률 {margin:.0f}% (기준 {min_margin:g}%↑)" if margin is not None else "수익률 계산 몬 함")
+    if v["net"] < min_profit:
+        out.append(f"순수익 {v['net']:,.0f}길 (기준 {min_profit:,}길↑)")
+    if v["listings"] > max_listings:
+        out.append(f"매물 {v['listings']}건 (기준 {max_listings}건↓)")
+    if max_days and (v["sellDays"] is None or v["sellDays"] > max_days):
+        out.append("판매 소요일 모름" if v["sellDays"] is None else f"판매 소요 ~{math.ceil(v['sellDays'])}일 (기준 {max_days:g}일↓)")
+    return out
+
+
+def passes(r, key):
+    v = r["보기"][key]
+    return v["net"] is not None and r["원가"] is not None and not fail_reasons(r, v)
+
+
+def view_data(r, key, stale_badge):
+    v = r["보기"][key]
+    tips = {**r["뱃지 설명"], **v["tips"]}
+    texts = stale_badge + r["기타"] + v["badges"]
+    return {
+        "sell": v["sell"], "net": v["net"], "margin": v["margin"], "sales": v["sales"], "listings": v["listings"],
+        "daily": v["daily"], "sellDays": v["sellDays"], "median": v["median"], "minListing": v["minListing"],
+        "cap": v["cap"], "dropped": v["dropped"], "trend": v["trend"], "quality": v["quality"],
+        "passes": passes(r, key),
+        "badges": [ui.badge(t, tips.get(t) or (
+            f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다. 지금 게임 시세랑 다를 수 있데이."
+            if t.startswith("⚠ 데이터") else None)) for t in texts],
+    }
 
 
 def row_data(r):
     recipe, tree = trees[r["recipe_id"]]
     stale = (r["업데이트"] or 0) < now - stale_hours * 3600
-    notes = (["⚠ 데이터 오래됨"] if stale else []) + r["기타"]
     ratio = r["재료 여유 배수"]
     ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
     materials = []
@@ -234,62 +259,42 @@ def row_data(r):
             "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
             "world": note if d["구매처"] == "거래소" else "",
         })
+    stale_badge = ["⚠ 데이터 오래됨"] if stale else []
     return {
         "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
-        "level": r["레시피 레벨"], "sell": r["판매 예상가"], "cost": r["원가"], "net": r["순수익"],
-        "margin": r["수익률(%)"], "sales": r["판매 건수"], "listings": r["현재 매물 수"],
-        "daily": r["하루 잠재 이익"], "updated": r["업데이트"] or 0,
-        "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
-        "badges": [ui.badge(t, r["뱃지 설명"].get(t) or (
-            f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다. 지금 게임 시세랑 다를 수 있데이."
-            if t.startswith("⚠ 데이터") else None)) for t in notes],
+        "level": r["레시피 레벨"], "cost": r["원가"], "cat": r["분류"],
+        "updated": r["업데이트"] or 0, "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
+        "views": {key: view_data(r, key, stale_badge) for key in VIEWS},
         "evidence": r["근거"],
-        "worlds": r["서버 비교"],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,
-        "sellDays": r["판매 소요일"],
-        "trend": r["추이"],
-        "quality": r["품질 비교"],
         "sellingHq": sell_hq,
         "resultAmount": r["결과물 개수"],
         "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
     }
 
 
-# ── 아이템 검색: 필터와 상관없이 그 아이템이 어디 있고, 없으면 왜 빠졌는지 ──
+# ── 아이템 검색: 필터와 상관없이 그 아이템이 어디 있고, 없으면 왜 빠졌는지 (통합 기준) ──
 MAX_RESULTS = 30
 query = st.text_input("아이템 검색", key="search", placeholder="🔍 아이템 이름으로 찾기 (예: 모그루 모그, 루비)",
                       label_visibility="collapsed").strip()
 row_by_recipe = {x["recipe_id"]: x for x in rows}
 
 
-def fail_reasons(r):
-    out = []
-    if r["판매 건수"] < min_sales:
-        out.append(f"{PERIOD} 판매 {r['판매 건수']}건 (기준 {min_sales}건↑)")
-    if r["재료 여유 배수"] < mat_ratio:
-        out.append(f"재료 판매량 {r['재료 여유 배수']:.1f}배 (기준 {mat_ratio:g}배↑)")
-    margin = r["수익률(%)"]
-    if (margin if margin is not None else -math.inf) < min_margin:
-        out.append(f"수익률 {margin:.0f}% (기준 {min_margin:g}%↑)" if margin is not None else "수익률 계산 몬 함")
-    if r["순수익"] < min_profit:
-        out.append(f"순수익 {r['순수익']:,.0f}길 (기준 {min_profit:,}길↑)")
-    if r["현재 매물 수"] > max_listings:
-        out.append(f"매물 {r['현재 매물 수']}건 (기준 {max_listings}건↓)")
-    if max_days and (r["판매 소요일"] is None or r["판매 소요일"] > max_days):
-        out.append("판매 소요일 모름" if r["판매 소요일"] is None else f"판매 소요 ~{math.ceil(r['판매 소요일'])}일 (기준 {max_days:g}일↓)")
-    return out
-
-
 def recipe_status(recipe, item):
     """(상태 종류, 설명). 종류: ok / filtered / nocalc / out"""
     r = row_by_recipe.get(recipe.id)
     if r is not None:
-        if r["순수익"] is None:
+        v = r["보기"]["dc"]
+        if v["net"] is None or r["원가"] is None:
             return "nocalc", r["제외 사유"]
-        reasons = fail_reasons(r)
-        return ("filtered", " · ".join(reasons)) if reasons else ("ok", "")
+        reasons = fail_reasons(r, v)
+        if not reasons:
+            return "ok", ""
+        ok_worlds = [VIEWS[k] for k in world_keys if passes(r, k)]
+        extra = f" — 서버별로는 {', '.join(ok_worlds)} 순위에 있데이" if ok_worlds else ""
+        return ("ok" if ok_worlds else "filtered"), "통합: " + " · ".join(reasons) + extra
     if recipe.expert or recipe.specialist:
         return "out", "전문·고난도 레시피라 뺐다"
     if not item.marketable:
@@ -315,9 +320,10 @@ def search_results(q):
         for recipe in recipes:
             kind, why = recipe_status(recipe, item)
             r = row_by_recipe.get(recipe.id)
+            v = r["보기"]["dc"] if r else {}
             found.append({"name": item.name, "stars": recipe.stars, "job": recipe.job_name, "level": recipe.job_level,
                           "kind": kind, "why": why, "id": recipe.id if kind == "ok" else None,
-                          "net": r["순수익"] if r else None, "sell": r["판매 예상가"] if r else None})
+                          "net": v.get("net"), "sell": v.get("sell")})
     order = {"ok": 0, "filtered": 1, "nocalc": 2, "out": 3, "norecipe": 4}
     found.sort(key=lambda x: (order[x["kind"]], x["name"]))
     return {"query": q, "items": found[:MAX_RESULTS], "total": total}
@@ -325,33 +331,36 @@ def search_results(q):
 
 CATS = {"all": "전체", "가구": "가구", "일반": "일반 제작템"}
 MAX_FAILED = 400  # 계산 불가 목록은 너무 길어지지 않게
+passed = {x["recipe_id"]: {k for k in VIEWS if passes(x, k)} for x in rows}
 
 
-def cat_stats(cat):
+def cat_stats(cat, key):
     rs = [x for x in rows if cat == "all" or x["분류"] == cat]
-    return {"total": len(rs), "calculable": sum(x["순수익"] is not None for x in rs),
-            "passed": sum(passes(x) for x in rs)}
+    return {"total": len(rs),
+            "calculable": sum(x["보기"][key]["net"] is not None and x["원가"] is not None for x in rs),
+            "passed": sum(key in passed[x["recipe_id"]] for x in rs)}
 
 
 def failed_data(cat):
-    rs = [x for x in rows if x["순수익"] is None and (cat == "all" or x["분류"] == cat)]
+    rs = [x for x in rows if (x["보기"]["dc"]["net"] is None or x["원가"] is None) and (cat == "all" or x["분류"] == cat)]
     return {"total": len(rs), "items": [
         {"name": gd.name(trees[x["recipe_id"]][0].result_id), "stars": trees[x["recipe_id"]][0].stars,
          "job": x["직업"], "level": x["레시피 레벨"], "reason": x["제외 사유"]} for x in rs[:MAX_FAILED]]}
 
 
 ui.dashboard({
-    "subtitle": [server["world"], f"판매 시세 {scope_names[sell_scope]}", f"재료 구매 {scope_names[buy_scope]}",
+    "subtitle": [server["world"], f"판매 시세 {dc} 서버별", f"재료 구매 {scope_names[buy_scope]}",
                  f"레시피 레벨 {level_range[0]}~{level_range[1]}", f"시세 갱신 {fmt_time(cache.updated_at)}"],
     "notice": notice,
     "search": search_results(query) if query else None,
+    "servers": [{"key": k, "name": n, "home": k == str(home)} for k, n in VIEWS.items()],
     "cats": CATS,
-    "stats": {c: cat_stats(c) for c in CATS},
+    "stats": {k: {c: cat_stats(c, k) for c in CATS} for k in VIEWS},
     "jobs": JOB_NAMES,
     "period": PERIOD,
     "sort": sort_by,
     "taxNote": f"판매세 {seller_tax:.0%} 반영",
     "taxRate": seller_tax,
-    "rows": [{**row_data(x), "cat": x["분류"]} for x in rows if passes(x)],
+    "rows": [row_data(x) for x in rows if passed[x["recipe_id"]]],
     "failed": {c: failed_data(c) for c in CATS},
 })

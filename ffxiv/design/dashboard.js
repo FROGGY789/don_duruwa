@@ -22,7 +22,7 @@ const COLUMNS = [
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather" };
 
 // 탭·정렬·선택 상태는 다시 그려져도 유지되게 페이지에 보관
-const state = (window.__ffxivDash = window.__ffxivDash || { cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null, cart: loadCart() });
+const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null, cart: loadCart() });
 
 // 장보기에 담은 것 {레시피ID: 제작 횟수} — 브라우저에 기억해 둔다
 function loadCart() {
@@ -39,9 +39,13 @@ function fmtDays(v) {
 }
 const CAT_ICON = { all: "✦", "가구": "🪑", "일반": "⚒" };
 
-// 지금 고른 분류(전체/가구/일반)에 해당하는 행만
+// 지금 고른 서버 보기(통합 또는 서버 하나)의 값
+function V(r) {
+  return r.views[state.server];
+}
+// 지금 고른 서버에서 필터 통과했고, 고른 분류(전체/가구/일반)에 해당하는 행만
 function catRows(d) {
-  return d.rows.filter((r) => state.cat === "all" || r.cat === state.cat);
+  return d.rows.filter((r) => V(r).passes && (state.cat === "all" || r.cat === state.cat));
 }
 
 function esc(v) {
@@ -60,7 +64,7 @@ function itemName(name, stars) {
 
 function renderHeader(d) {
   const sub = d.subtitle.map((s) => `<span>${esc(s)}</span>`).join("");
-  const stats = d.stats[state.cat];
+  const stats = d.stats[state.server][state.cat];
   const stat = (label, value, sub, accent) => `
     <div class="stat${accent ? " accent" : ""}">
       <div class="stat-label">${esc(label)}</div>
@@ -73,6 +77,7 @@ function renderHeader(d) {
       <h1>파판14 제작 수익 분석</h1>
       <div class="subtitle">${sub}</div>
     </header>
+    ${renderServers(d)}
     ${renderCats(d)}
     <div class="stats">
       ${stat("분석한 레시피", stats.total, "조건에 맞는 전체 레시피")}
@@ -81,10 +86,21 @@ function renderHeader(d) {
     </div>`;
 }
 
+function renderServers(d) {
+  const btn = (s) =>
+    `<button class="cat server${state.server === s.key ? " active" : ""}" data-server="${esc(s.key)}">${s.key === "dc" ? "🌏 " : s.home ? "🏠 " : ""}${esc(s.name)}` +
+    `${s.home ? '<small class="home">내 서버</small>' : ""}<span class="cnt">${d.stats[s.key].all.passed}</span></button>`;
+  return `<div class="cats servers">${d.servers.map(btn).join("")}</div>`;
+}
+
+function serverName(d) {
+  return (d.servers.find((s) => s.key === state.server) || { name: "통합" }).name;
+}
+
 function renderCats(d) {
   const btn = (key) =>
     `<button class="cat${state.cat === key ? " active" : ""}" data-cat="${esc(key)}">${CAT_ICON[key] || ""} ${esc(d.cats[key])}` +
-    `<span class="cnt">${d.stats[key].passed}</span></button>`;
+    `<span class="cnt">${d.stats[state.server][key].passed}</span></button>`;
   return `<div class="cats">${Object.keys(d.cats).map(btn).join("")}</div>`;
 }
 
@@ -103,7 +119,8 @@ function sortedRows(d) {
   const rows = catRows(d).filter((r) => state.tab === "all" || r.job === state.tab);
   const key = state.sort;
   return rows.slice().sort((a, b) => {
-    const x = a[key], y = b[key];
+    const val = (r) => (key in V(r) ? V(r)[key] : r[key]);
+    const x = val(a), y = val(b);
     if (x == null && y == null) return 0;
     if (x == null) return 1;
     if (y == null) return -1;
@@ -124,7 +141,8 @@ function renderTable(d, rows) {
     return `<div class="table-wrap"><div class="empty">필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
   }
   const body = rows.map((r, i) => {
-    const badges = r.badges.map((b) => b.detail
+    const v = V(r);
+    const badges = v.badges.map((b) => b.detail
       ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
       : `<span class="badge ${esc(b.kind)}${b.tip ? " has-tip" : ""}"${b.tip ? ` data-tip="${esc(b.tip)}"` : ""}>${esc(b.text)}</span>`).join("");
     return `
@@ -135,14 +153,14 @@ function renderTable(d, rows) {
         <td>${itemName(r.name, r.stars)}</td>
         <td><span class="job">${esc(r.job)}</span></td>
         <td class="num">${r.level}</td>
-        <td class="num">${gil(r.sell)}</td>
+        <td class="num">${gil(v.sell)}</td>
         <td class="num">${gil(r.cost)}</td>
-        <td class="num">${signed(r.net)}</td>
-        <td class="num">${r.margin == null ? "-" : `<span class="pct ${r.margin >= 0 ? "pos" : "neg"}">${r.margin.toFixed(1)}%</span>`}</td>
-        <td class="num">${r.sales}</td>
-        <td class="num">${r.listings}</td>
-        <td class="num">${fmtDays(r.sellDays)}</td>
-        <td class="num">${gil(r.daily)}</td>
+        <td class="num">${signed(v.net)}</td>
+        <td class="num">${v.margin == null ? "-" : `<span class="pct ${v.margin >= 0 ? "pos" : "neg"}">${v.margin.toFixed(1)}%</span>`}</td>
+        <td class="num">${v.sales}</td>
+        <td class="num">${v.listings}</td>
+        <td class="num">${fmtDays(v.sellDays)}</td>
+        <td class="num">${gil(v.daily)}</td>
         <td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>
         <td><div class="badges">${badges}</div></td>
       </tr>`;
@@ -179,8 +197,8 @@ function renderDetail(d, row) {
           </div>
           <div class="kv">
             <div><span>원가</span><b>${gil(row.cost)}</b></div>
-            <div><span>판매 예상가</span><b>${gil(row.sell)}</b></div>
-            <div><span>순수익</span><b>${signed(row.net)}</b></div>
+            <div><span>판매 예상가 · ${esc(serverName(d))}</span><b>${gil(V(row).sell)}</b></div>
+            <div><span>순수익</span><b>${V(row).net == null ? '<span class="dash">-</span>' : signed(V(row).net)}</b></div>
           </div>
         </div>
         ${renderInsights(d, row)}
@@ -235,7 +253,8 @@ function barChart(days) {
 }
 
 function renderInsights(d, row) {
-  const t = row.trend || { days: [] };
+  const v = V(row);
+  const t = v.trend || { days: [] };
   let change = "";
   if (t.change != null) {
     const down = t.change <= -10, up = t.change >= 10;
@@ -243,16 +262,16 @@ function renderInsights(d, row) {
   }
   const charts = t.days.length ? `
     <div class="insight">
-      <div class="insight-head"><h3>📈 ${esc(d.period)} 시세 추이</h3>${change}</div>
+      <div class="insight-head"><h3>📈 ${esc(d.period)} 시세 추이 · ${esc(serverName(d))}</h3>${change}</div>
       <div class="charts">
         <figure><figcaption>하루 판매가 (중앙값, 길)</figcaption>${lineChart(t.days)}</figure>
         <figure><figcaption>하루 판매 수량 (개)</figcaption>${barChart(t.days)}</figure>
       </div>
     </div>` : "";
   let quality = "";
-  if (row.quality) {
+  if (v.quality) {
     const box = (name) => {
-      const q = row.quality[name], cur = (name === "HQ") === row.sellingHq;
+      const q = v.quality[name], cur = (name === "HQ") === row.sellingHq;
       return `<div class="q-box${cur ? " current" : ""}"><div class="q-name">${name}${cur ? " <small>지금 기준</small>" : ""}</div>
         <div class="q-row"><span>판매 예상가</span><b>${gil(q.sell)}</b></div>
         <div class="q-row"><span>순수익</span><b>${q.net == null ? '<span class="dash">-</span>' : signed(q.net)}</b></div>
@@ -260,60 +279,78 @@ function renderInsights(d, row) {
     };
     quality = `
       <div class="insight">
-        <div class="insight-head"><h3>✨ NQ · HQ 비교</h3><span class="faint">재료비는 똑같이 쳤다. HQ 로 팔라믄 HQ 재료나 제작 실력이 받쳐줘야 된데이.</span></div>
+        <div class="insight-head"><h3>✨ NQ · HQ 비교 · ${esc(serverName(d))}</h3><span class="faint">재료비는 똑같이 쳤다. HQ 로 팔라믄 HQ 재료나 제작 실력이 받쳐줘야 된데이.</span></div>
         <div class="q-grid">${box("NQ")}${box("HQ")}</div>
       </div>`;
   }
-  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderWorlds(row) + renderEvidence(d, row);
+  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderWorlds(d, row) + renderEvidence(d, row);
 }
 
-// ── 서버별 판매 비교 ──
-function renderWorlds(row) {
-  const ws = row.worlds || [];
+// ── 서버별 판매 비교 (서버별 순위 값 그대로) ──
+function renderWorlds(d, row) {
+  const ws = d.servers.filter((s) => s.key !== "dc").map((s) => ({ ...s, v: row.views[s.key] }));
   if (ws.length < 2) return "";
+  const ranked = ws.filter((w) => w.v.net != null && w.v.sales >= 2);
+  const best = ranked.length ? ranked.reduce((a, b) => (b.v.net > a.v.net ? b : a)).key : null;
   const body = ws.map((w) => `
-    <tr class="${w.best ? "best" : ""}">
-      <td>${w.best ? "👑 " : ""}${esc(w.world)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
-      <td class="num">${w.sales}</td><td class="num">${gil(w.median)}</td><td class="num">${gil(w.minListing)}</td>
-      <td class="num">${w.listings}</td><td class="num">${gil(w.sell)}</td>
-      <td class="num">${w.net == null ? '<span class="dash">-</span>' : signed(w.net)}</td>
+    <tr class="clickable${w.key === best ? " best" : ""}${w.key === state.server ? " selected" : ""}" data-server="${esc(w.key)}">
+      <td>${w.key === best ? "👑 " : ""}${esc(w.name)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
+      <td class="num">${w.v.sales}${w.v.dropped ? ` <span class="faint" data-tip="이상 거래 ${w.v.dropped}건 빼고">(−${w.v.dropped})</span>` : ""}</td>
+      <td class="num">${gil(w.v.median)}</td><td class="num">${gil(w.v.minListing)}</td>
+      <td class="num">${w.v.listings}</td><td class="num">${gil(w.v.sell)}</td>
+      <td class="num">${w.v.net == null ? '<span class="dash">-</span>' : signed(w.v.net)}</td>
+      <td>${w.v.passes ? "✅" : '<span class="faint">필터 밖</span>'}</td>
     </tr>`).join("");
   return `
     <div class="evidence worlds">
       <div class="insight-head"><h3>🌐 서버별 판매 비교</h3>
-        <span class="faint">그 서버 판매 기록·매물만 보고 계산했다. 다른 서버에 올리려믄 거기 리테이너 있는 캐릭터가 있어야 된데이. 👑 = 판매 2건 이상 중 제일 많이 남는 곳</span></div>
+        <span class="faint">서버마다 그 서버 기록·매물만 보고 계산했다. 줄 누르믄 그 서버 순위로 넘어간데이. 👑 = 판매 2건 이상 중 제일 많이 남는 곳</span></div>
       <div class="table-wrap"><table>
         <thead><tr><th>서버</th><th class="num">판매 건수</th><th class="num">판매 중앙값</th><th class="num">최저 매물</th>
-          <th class="num">매물 수</th><th class="num">예상 판매가</th><th class="num">순수익</th></tr></thead>
+          <th class="num">매물 수</th><th class="num">예상 판매가</th><th class="num">순수익</th><th>순위</th></tr></thead>
         <tbody>${body}</tbody>
       </table></div>
     </div>`;
 }
 
-// ── 판매가 근거: 이 값이 어디서 나왔는지 ──
+// ── 판매가 근거: 서버마다 그 서버 중앙값 기준으로 이상 거래·미끼를 가른다 ──
 function renderEvidence(d, row) {
   const ev = row.evidence;
-  if (!ev) return "";
+  if (!ev || !ev.worlds) return "";
+  const v = V(row);
   const q = (hq) => `<span class="badge ${hq ? "src-craft" : "nq"}">${hq ? "HQ" : "NQ"}</span>`;
-  let formula = `판매 예상가 = min(${esc(d.period)} 판매 중앙값 <b>${gil(ev.median)}</b>, 지금 최저 매물 <b>${ev.minListing == null ? "없음" : gil(ev.minListing)}</b>)`;
-  if (ev.hqCap != null) formula += ` → HQ 매물 <b>${gil(ev.hqCap)}</b> 보다 비싸게는 몬 파니까 깎음`;
-  formula += ` = <b class="ev-sell">${gil(ev.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준${ev.dropped ? ` · 이상 거래 ${ev.dropped}건 빼고` : ""})</span>`;
-  const sales = ev.sales.length ? ev.sales.map((x) => `<tr class="${x.odd ? "odd" : ""}"${x.odd ? ' data-tip="보통 가격이랑 너무 달라가 이상 거래로 보고 계산에서 뺐다"' : ""}>
-      <td>${x.odd ? "❗ " : ""}${esc(x.when)}</td><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
-      <td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td></tr>`).join("")
-    : `<tr><td colspan="5" class="faint">팔린 기록이 없다</td></tr>`;
-  const listings = ev.listings.length ? ev.listings.map((x) => `<tr class="${x.bait ? "bait" : ""}"><td>${esc(x.world)}</td><td>${q(x.hq)}</td>
-      <td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td><td>${x.bait ? '<span class="faint">미끼로 보고 뺐다</span>' : ""}</td></tr>`).join("")
-    : `<tr><td colspan="5" class="faint">지금 올라온 매물이 없다</td></tr>`;
+  const name = serverName(d);
+  let formula;
+  if (state.server === "dc") {
+    formula = `통합 판매 예상가 = 서버마다 이상 거래 뺀 ${esc(d.period)} 판매 전체의 중앙값 <b>${gil(v.median)}</b>`;
+  } else {
+    formula = `${esc(name)} 판매 예상가 = min(판매 중앙값 <b>${gil(v.median)}</b>, 최저 매물 <b>${v.minListing == null ? "없음" : gil(v.minListing)}</b>)`;
+  }
+  if (v.cap != null) formula += ` → HQ <b>${gil(v.cap)}</b> 보다 비싸게는 몬 파니까 깎음`;
+  formula += ` = <b class="ev-sell">${gil(v.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준${v.dropped ? ` · 이상 거래 ${v.dropped}건 빼고` : ""})</span>`;
+  const worlds = ev.worlds.slice().sort((a, b) => (b.world === name) - (a.world === name));
+  const blocks = worlds.map((w) => {
+    const sales = w.recent.length ? w.recent.map((x) => `<tr class="${x.odd ? "odd" : ""}"${x.odd ? ` data-tip="${esc(w.world)} 보통 가격(${gil(w.median)}길)이랑 너무 달라가 이상 거래로 보고 뺐다"` : ""}>
+        <td>${x.odd ? "❗ " : ""}${esc(x.when)}</td><td>${q(x.hq)}</td><td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="faint">팔린 기록이 없다</td></tr>`;
+    const cheap = w.cheap.length ? w.cheap.map((x) => `<tr class="${x.bait ? "bait" : ""}"${x.bait ? ` data-tip="${esc(w.world)} 보통 가격의 절반도 안 돼가 미끼 매물로 보고 뺐다"` : ""}>
+        <td>${q(x.hq)}</td><td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td><td>${x.bait ? '<span class="faint">미끼</span>' : ""}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="faint">지금 매물이 없다</td></tr>`;
+    return `
+      <div class="ev-world${w.world === name ? " current" : ""}">
+        <div class="ev-world-head"><b>${esc(w.world)}</b>${w.home ? ' <span class="badge nq">내 서버</span>' : ""}
+          <span class="faint">중앙값 ${gil(w.median)} · 최저 ${w.minListing == null ? "없음" : gil(w.minListing)} · 판매 ${w.sales}건${w.dropped ? ` (❗${w.dropped}건 뺌)` : ""} · 매물 ${w.listings}</span></div>
+        <div class="ev-cap">최근 판매</div>
+        <table><thead><tr><th>일시</th><th>품질</th><th class="num">가격</th><th class="num">수량</th></tr></thead><tbody>${sales}</tbody></table>
+        <div class="ev-cap">지금 싼 매물</div>
+        <table><thead><tr><th>품질</th><th class="num">가격</th><th class="num">수량</th><th></th></tr></thead><tbody>${cheap}</tbody></table>
+      </div>`;
+  }).join("");
   return `
     <div class="evidence">
       <div class="insight-head"><h3>💰 판매가 근거</h3><span class="ev-formula">${formula}</span></div>
-      <div class="ev-grid">
-        <div><div class="ev-cap">최근 판매 (최대 10건)</div>
-          <table><thead><tr><th>일시</th><th>서버</th><th>품질</th><th class="num">가격</th><th class="num">수량</th></tr></thead><tbody>${sales}</tbody></table></div>
-        <div><div class="ev-cap">지금 싼 매물 (최대 6개)</div>
-          <table><thead><tr><th>서버</th><th>품질</th><th class="num">가격</th><th class="num">수량</th><th></th></tr></thead><tbody>${listings}</tbody></table></div>
-      </div>
+      <div class="faint ev-note">이상 거래(❗)랑 미끼 매물은 서버마다 <b>그 서버</b> 보통 가격 기준으로 가른다. 원래 싼 서버를 싸다고 빼진 않는데이.</div>
+      <div class="ev-worlds">${blocks}</div>
     </div>`;
 }
 
@@ -360,7 +397,7 @@ function renderCart(d) {
   let cost = 0, revenue = 0;
   for (const r of rows) {
     const n = state.cart[r.id];
-    revenue += (r.sell || 0) * (1 - d.taxRate) * n * r.resultAmount;
+    revenue += (V(r).sell || 0) * (1 - d.taxRate) * n * r.resultAmount;
     for (const s of r.shopping) {
       const g = s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
@@ -395,7 +432,7 @@ function renderCart(d) {
         <div class="detail-top">
           <div>
             <h2>🛒 장보기 목록</h2>
-            <div class="desc">담은 거 ${rows.length}개 · 거래소 ${worlds}곳 돌믄 된데이 (재료비 큰 서버부터)${missing ? ` · 필터에 안 걸려서 빠진 거 ${missing}개` : ""}</div>
+            <div class="desc">담은 거 ${rows.length}개 · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌믄 된데이 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어가 빠진 거 ${missing}개` : ""}</div>
           </div>
           <div class="kv">
             <div><span>재료비</span><b>${gil(cost)}</b></div>
@@ -446,10 +483,11 @@ export default function (component) {
   }
   if (state.tab !== "all" && !data.jobs.includes(state.tab)) state.tab = "all";
   if (!(state.cat in data.cats)) state.cat = "all";
+  if (!data.servers.some((s) => s.key === state.server)) state.server = "dc";
 
   function render() {
     const rows = sortedRows(data);
-    if (!rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
+    if (!data.rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
     const selected = data.rows.find((r) => r.id === state.selected);
     const cartCount = Object.keys(state.cart).length;
     const notice = data.notice
@@ -460,7 +498,7 @@ export default function (component) {
       renderSearch(data) +
       renderHeader(data) +
       renderTabs(data) +
-      `<div class="section-head"><h2>순위</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이 · <b>+</b> 누르믄 장보기에 담긴다</span>
+      `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이 · <b>+</b> 누르믄 장보기에 담긴다</span>
          <span class="right">${cartCount ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 보기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderDetail(data, selected) +
@@ -519,10 +557,25 @@ export default function (component) {
       state.cat = "all";
       state.tab = "all";
       state.selected = Number(go.dataset.goto);
+      // 지금 서버 순위에 없으믄 들어 있는 서버(통합 먼저)로 넘어간다
+      const target = data.rows.find((r) => r.id === state.selected);
+      if (target && !V(target).passes) {
+        const where = data.servers.find((s) => target.views[s.key].passes);
+        if (where) state.server = where.key;
+      }
       render();
       const row = root.querySelector(`tr[data-id="${state.selected}"]`);
       row?.scrollIntoView({ behavior: "smooth", block: "center" });
       row?.classList.add("flash");
+      return;
+    }
+    const server = e.target.closest("[data-server]");
+    if (server) {
+      state.server = server.dataset.server;
+      const fromDetail = !!server.closest(".worlds");
+      if (!fromDetail) { state.tab = "all"; state.selected = null; }
+      render();
+      if (fromDetail) root.querySelector(".detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       return;
     }
     const cat = e.target.closest("[data-cat]");

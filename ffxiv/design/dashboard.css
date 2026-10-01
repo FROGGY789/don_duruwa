@@ -237,21 +237,27 @@ tr.flash td{animation:flash 1.6s ease-out}
 .ev-formula{font-size:var(--fs-sm);color:var(--text-muted)}
 .ev-formula b{color:var(--text);font-variant-numeric:tabular-nums}
 .ev-formula .ev-sell{color:var(--primary-strong)}
-.ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-top:var(--space-2)}
+.ev-worlds{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--space-4);margin-top:var(--space-3)}
+.ev-world{border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-3);background:var(--surface)}
+.ev-world.current{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.ev-world-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin-bottom:var(--space-2)}
+.ev-world-head .faint{font-size:var(--fs-xs);width:100%}
+.ev-world table{width:100%;margin-bottom:var(--space-2)}
+.ev-note{font-size:var(--fs-sm);margin-top:var(--space-2)}
 .ev-cap{font-size:var(--fs-xs);color:var(--text-faint);margin-bottom:4px}
-.ev-grid table{font-size:var(--fs-sm);border:1px solid var(--border);border-radius:var(--radius-sm)}
-.ev-grid th{font-size:var(--fs-xs);color:var(--text-faint);font-weight:500;text-align:left;padding:6px 10px;background:var(--surface-2);border-bottom:1px solid var(--border)}
-.ev-grid th.num{text-align:right}
-.ev-grid td{padding:5px 10px;border-bottom:1px solid var(--border)}
-.ev-grid tr:last-child td{border-bottom:0}
-.ev-grid tr.bait td{color:var(--text-faint);text-decoration:line-through}
-.ev-grid tr.bait td:last-child{text-decoration:none}
-@media (max-width:900px){.ev-grid{grid-template-columns:1fr}}
+.ev-world table{font-size:var(--fs-sm);border:1px solid var(--border);border-radius:var(--radius-sm)}
+.ev-world th{font-size:var(--fs-xs);color:var(--text-faint);font-weight:500;text-align:left;padding:6px 10px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.ev-world th.num{text-align:right}
+.ev-world td{padding:5px 10px;border-bottom:1px solid var(--border)}
+.ev-world tr:last-child td{border-bottom:0}
+.ev-world tr.bait td{color:var(--text-faint);text-decoration:line-through}
+.ev-world tr.bait td:last-child{text-decoration:none}
+
 
 /* 이상 거래 */
 .badge.odd{background:var(--negative-soft);color:var(--negative);font-weight:600}
-.ev-grid tr.odd td{color:var(--negative);text-decoration:line-through;opacity:.8}
-.ev-grid tr.odd td:first-child{text-decoration:none}
+.ev-world tr.odd td{color:var(--negative);text-decoration:line-through;opacity:.8}
+.ev-world tr.odd td:first-child{text-decoration:none}
 
 /* 서버별 판매 비교 */
 .badge.world{background:var(--info-soft);color:var(--info);font-weight:600}
@@ -260,3 +266,7 @@ tr.flash td{animation:flash 1.6s ease-out}
 
 /* 기타 칸: 뱃지가 넘치믄 다음 줄로 */
 td:has(> .badges){white-space:normal;min-width:200px}
+/* 서버 고르기 (통합 / 서버별 순위) */
+.cats.servers{display:flex;width:fit-content;margin-bottom:var(--space-3)}
+.cat .home{font-size:var(--fs-xs);color:var(--primary-strong);margin-left:4px}
+.worlds tr.selected td{box-shadow:inset 0 -2px 0 var(--primary)}

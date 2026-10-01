@@ -1,6 +1,9 @@
 """수익 계산.
 
-판매 예상가 = min(기간 내 판매 중앙값, 현재 최저 등록가)   ※ 중앙값의 outlier_ratio 미만 등록가는 미끼로 보고 무시
+판매 예상가 — 보기마다 다르다
+  · 서버별: min(그 서버 기간 중앙값, 그 서버 최저 매물)
+  · 통합:   서버별로 거른 판매 기록을 모은 중앙값 (최저 매물은 안 씀 — 제일 싼 서버로 끌려 내려가니까)
+  ※ 이상 거래·미끼 매물은 '그 서버' 중앙값 기준으로만 판단한다 (서버마다 시세 수준이 달라서)
 재료 단가   = min(거래소 구매가 × (1 + 구매세), NPC 상점가, 직접 제작 원가)
               거래소 구매가는 싼 매물부터 필요 수량만큼 사들인 평균 단가
               직접 제작 원가는 하위 재료까지 재귀로 계산 (내 레벨로 가능한 레시피만)
@@ -51,30 +54,57 @@ class Stats:
     min_listing: float = None
     last_upload: float = 0  # 초
     dropped: list = field(default_factory=list)  # 이상 거래로 뺀 판매 기록
+    good_listings: list = field(default_factory=list)  # 미끼로 안 본 매물
+    bait: list = field(default_factory=list)  # 미끼로 본 매물
 
 
 def split_odd_sales(sales, ratio):
     """중앙값보다 ratio 배 넘게 비싸거나 1/ratio 보다 싼 거래를 이상 거래로 뺀다. (남긴 것, 뺀 것)
 
     판매가 3건 이상일 때만 따진다. ratio 가 0 이면 안 거른다.
+    기준은 가운데 두 값 중 낮은 쪽 (정상 3건 + 비싼 3건일 때 비싼 쪽이 기준 되는 걸 막는다).
     """
     if not ratio or len(sales) < 3:
         return sales, []
-    mid = statistics.median(s[0] for s in sales)
+    mid = statistics.median_low(s[0] for s in sales)
     kept = [s for s in sales if mid / ratio <= s[0] <= mid * ratio]
     return kept, [s for s in sales if s not in kept]
 
 
+def clean_by_world(sales, listings, odd_ratio, outlier_ratio):
+    """서버마다 따로 이상 거래·미끼 매물을 가른다. (남긴 판매, 뺀 판매, 남긴 매물, 미끼 매물)
+
+    톤베리가 원래 1,000길대면 1,000길은 정상이다. 그 서버 중앙값이랑만 비교한다.
+    """
+    kept, dropped, good, bait = [], [], [], []
+    for w in {s[4] for s in sales} | {l[3] for l in listings}:
+        k, d = split_odd_sales([s for s in sales if s[4] == w], odd_ratio)
+        kept += k
+        dropped += d
+        mid = statistics.median(s[0] for s in k) if k else None
+        for l in listings:
+            if l[3] == w:
+                (bait if mid and outlier_ratio and l[0] < mid * outlier_ratio else good).append(l)
+    return kept, dropped, good, bait
+
+
 def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0):
-    """hq=None 이면 품질 구분 없이, True/False 면 그 품질만. world=None 이면 데이터센터 전체, 월드ID 면 그 서버만."""
+    """hq=None 이면 품질 구분 없이, True/False 면 그 품질만. world=None 이면 데이터센터 전체, 월드ID 면 그 서버만.
+
+    이상 거래(odd_ratio)와 미끼 매물(outlier_ratio)은 서버마다 그 서버 중앙값 기준으로 거른다.
+    """
     st = Stats()
     if not entry:
         return st
     since = entry.get("fetched_at", time.time()) - hours * 3600
-    sales = [s for s in entry["sales"]
-             if s[3] >= since and (hq is None or s[2] == hq) and (world is None or s[4] == world)]
-    listings = [l for l in entry["listings"] if (hq is None or l[2] == hq) and (world is None or l[3] == world)]
-    sales, st.dropped = split_odd_sales(sales, odd_ratio)
+    sales = [s for s in entry["sales"] if s[3] >= since and (hq is None or s[2] == hq)]
+    listings = [l for l in entry["listings"] if hq is None or l[2] == hq]
+    kept, dropped, good, bait = clean_by_world(sales, listings, odd_ratio, outlier_ratio)
+    mine = lambda w: world is None or w == world
+    sales = [s for s in kept if mine(s[4])]
+    st.dropped = [s for s in dropped if mine(s[4])]
+    st.good_listings = sorted((l for l in good if mine(l[3])), key=lambda l: l[0])
+    st.bait = [l for l in bait if mine(l[3])]
     st.sale_count = len(sales)
     st.sold_qty = sum(s[1] for s in sales)
     if sales:
@@ -86,11 +116,8 @@ def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0)
         st.listing_count = sum(n for key, n in counts.items()
                                if (world is None or key.split(":")[0] == str(world))
                                and (hq is None or key.split(":")[1] == str(int(hq))))
-    prices = [l[0] for l in listings]
-    if st.median and outlier_ratio:
-        prices = [p for p in prices if p >= st.median * outlier_ratio]
-    if prices:
-        st.min_listing = min(prices)
+    if st.good_listings:
+        st.min_listing = st.good_listings[0][0]
     st.last_upload = (entry.get("last_upload") or 0) / 1000
     return st
 
@@ -108,14 +135,15 @@ class CostNode:
 
 class Calculator:
     def __init__(self, gd, market, cfg, seller_tax, sell_hq=False, batch_size=1, job_levels=None,
-                 sell_world=None, buy_world=None, world_names=None, home_world=None):
+                 buy_world=None, world_names=None, home_world=None):
         self.gd = gd
         self.job_levels = job_levels or cfg["job_levels"]
-        # None = 데이터센터 전체, 월드ID = 그 서버만
-        self.sell_world = sell_world
+        # 재료 구매 범위: None = 데이터센터 전체, 월드ID = 그 서버만
         self.buy_world = buy_world
         self.world_names = world_names or {}
         self.home_world = home_world
+        # 순위 '보기': 통합(dc) + 서버별. 판매 쪽은 전부 이 보기마다 따로 계산한다
+        self.views = [("dc", None)] + [(str(w), int(w)) for w in self.world_names]
         self.market = market
         self.cfg = cfg
         self.seller_tax = seller_tax
@@ -211,125 +239,137 @@ class Calculator:
     def evaluate(self, recipe):
         item = self.gd.items[recipe.result_id]
         hq = self.sell_hq if item.can_hq else None
-        st = self.stats(recipe.result_id, hq, self.outlier_ratio, self.sell_world)
         tree = self.craft(recipe, self.batch, ())
 
-        extra = []
+        extra = []  # 보기와 상관없는 뱃지
+        tips = {}   # 뱃지 글자 → 마우스 올리믄 나오는 설명
         if recipe.secret_book:
             extra.append(f"비전서: {recipe.secret_book}")
         if recipe.quest_unlock:
             extra.append("퀘스트 해금")
-        tips = {}  # 뱃지 글자 → 마우스 올리믄 나오는 설명
-        if recipe.quest_unlock:
             tips["퀘스트 해금"] = "퀘스트 깨야 배울 수 있는 레시피다."
         if item.can_hq:
             q = "HQ 기준" if self.sell_hq else "NQ 기준"
             extra.append(q)
-            tips[q] = (f"{q[:2]} 시세로 계산했다. 사이드바 'HQ 판매' 로 바꿀 수 있데이." if not self.sell_hq
+            tips[q] = ("NQ 시세로 계산했다. 사이드바 'HQ 판매' 로 바꿀 수 있데이." if not self.sell_hq
                        else "HQ 시세로 계산했다. HQ 로 만들 실력이 돼야 이 값 받는데이.")
 
+        dc = self.stats(recipe.result_id, hq, self.outlier_ratio, None)
         row = {
             "recipe_id": recipe.id,
             "아이템명": self.gd.display_name(recipe),
             "직업": recipe.job_name,
             "레시피 레벨": recipe.job_level,
-            "판매 예상가": None,
             "원가": tree.unit_cost,
-            "순수익": None,
-            "수익률(%)": None,
-            "판매 건수": st.sale_count,
-            "판매 수량": st.sold_qty,
-            "현재 매물 수": st.listing_count,
-            "하루 잠재 이익": None,
-            "업데이트": st.last_upload or None,
+            "업데이트": dc.last_upload or None,
             "기타": extra,
+            "뱃지 설명": tips,
             "분류": "가구" if item.ui_category in self.furniture else "일반",
             "재료 여유 배수": self.material_ratio(tree),
-            "제외 사유": "",
-            "판매 소요일": None,
-            "추이": self.trend(recipe.result_id, hq),
-            "품질 비교": None,
             "결과물 개수": recipe.result_amount,
-            "뱃지 설명": tips,
-            "서버 비교": [],
-            "근거": None,
+            "제외 사유": "",
+            "보기": {key: self.view(recipe.result_id, item, hq, world, tree.unit_cost) for key, world in self.views},
+            "근거": self.evidence(recipe.result_id, hq),
         }
-
-        if st.median is None:
-            row["제외 사유"] = "판매 기록 없음"
-        elif tree.unit_cost is None:
+        if tree.unit_cost is None:
             missing = sorted({self.gd.name(n.item_id) for n in walk(tree) if n.unit_cost is None and not n.children})
             row["제외 사유"] = "재료 시세 없음: " + ", ".join(missing)
-        else:
-            sell, cap = self.sale_price(recipe.result_id, hq, st)
-            row["근거"] = self.evidence(recipe.result_id, hq, st, sell, cap)
-            if cap is not None:
-                text = "🔻 HQ 매물가로 깎음"
-                extra.append(text)
-                tips[text] = f"HQ 가 {cap:,.0f}길에 올라와 있어가 NQ 를 그보다 비싸게는 몬 판다. 그래서 판매가를 {cap:,.0f}길로 잡았데이."
-            if st.dropped:
-                text = "❗ 이상 거래 포착"
-                extra.append(text)
-                shown = ", ".join(f"{x[0]:,}길×{x[1]}" for x in sorted(st.dropped, key=lambda x: -x[0])[:3])
-                tips[text] = (f"{self.hours // 24:.0f}일 판매 {st.sale_count + len(st.dropped)}건 중 {len(st.dropped)}건이 "
-                              f"보통 가격(중앙값)이랑 {self.odd_ratio:g}배 넘게 차이 나가 뺐다 ({shown}). "
-                              "실수로 잘못 판 거나 짜고 치는 거래일 수 있어가 판매가·판매량 계산에 안 넣었데이.")
-            if st.sale_count < 5 and st.listing_count == 0:
-                text = "⚠ 근거 약함"
-                extra.append(text)
-                tips[text] = (f"{self.hours // 24:.0f}일 동안 {st.sale_count}건 팔린 게 다고 지금 매물도 없어가, "
-                              "몇 건 안 되는 기록으로 판매가를 잡았다. 게임에서 한번 확인해 봐라.")
-            net = sell * (1 - self.seller_tax) - tree.unit_cost
-            row["판매 예상가"] = sell
-            row["순수익"] = net
-            row["수익률(%)"] = net / tree.unit_cost * 100 if tree.unit_cost > 0 else None
-            row["하루 잠재 이익"] = net * st.sold_qty / (self.hours / 24)
-
-            days, cheapest = self.sell_outlook(recipe.result_id, hq, sell, st)
-            row["판매 소요일"] = days
-            if len(cheapest) >= 2 and cheapest[0] > 0 and st.listing_count >= 5:
-                gap = (cheapest[1] - cheapest[0]) / cheapest[0]
-                if gap < 0.02:
-                    text = "🔥 덤핑 경쟁"
-                    extra.append(text)
-                    tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다. "
-                                  "서로 1길씩 깎아 파는 중이라, 올리믄 금방 밑으로 밀린데이.")
-            change = row["추이"]["change"]
-            if change is not None and change <= -10:
-                text = f"📉 하락 중 {change:.0f}%"
-                extra.append(text)
-                tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
-            worlds = self.world_compare(recipe.result_id, hq, tree.unit_cost) if len(self.world_names) > 1 else []
-            row["서버 비교"] = worlds
-            best = next((w for w in worlds if w["best"]), None)
-            home = next((w for w in worlds if w["home"]), None)
-            # 내 서버보다 확실히 더 남는 서버가 있으믄 뱃지 (둘 다 판매 기록이 있을 때만)
-            base = home["net"] if home else None
-            if best and not best["home"] and base is not None and best["net"] > 0:
-                diff = best["net"] - base
-                if diff >= 1000 and diff >= abs(base) * 0.1:
-                    text = f"🌐 {best['world']} +{diff:,.0f}"
-                    extra.append(text)
-                    tips[text] = (f"{best['world']} 서버에서 팔믄 개당 {best['net']:,.0f}길, "
-                                  f"{eun(home['world'])} {base:,.0f}길 남는다. "
-                                  "거기 리테이너 있는 캐릭터가 있어야 올릴 수 있데이. 서버별 비교는 재료 상세에 있다.")
-            if item.can_hq:
-                row["품질 비교"] = self.quality_compare(recipe.result_id, tree.unit_cost)
-                other_name = "HQ" if not self.sell_hq else "NQ"
-                other = row["품질 비교"][other_name]
-                if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
-                    text = f"✨ {other_name}면 +{other['net'] - net:,.0f}"
-                    extra.append(text)
-                    tips[text] = (f"{other_name} 로 팔믄 개당 {other['net']:,.0f}길 남는다 (지금 기준 {net:,.0f}길). "
-                                  f"대신 {other_name} 로 만들 수 있어야 된데이.")
+        elif dc.median is None:
+            row["제외 사유"] = "판매 기록 없음"
+        self.world_badge(row)
         return row, tree
 
-    def sale_price(self, item_id, hq, st, world="scope"):
-        """(판매 예상가, HQ 매물 때문에 깎은 값 또는 None).
+    def view(self, item_id, item, hq, world, unit_cost):
+        """한 '보기'(통합 또는 서버 하나)에서의 판매가·순수익·판매 지표·뱃지."""
+        st = self.stats(item_id, hq, self.outlier_ratio, world)
+        v = {"sales": st.sale_count, "soldQty": st.sold_qty, "listings": st.listing_count,
+             "median": st.median, "minListing": st.min_listing, "sell": None, "net": None, "margin": None,
+             "daily": None, "sellDays": None, "badges": [], "tips": {}, "cap": None, "dropped": len(st.dropped),
+             "trend": self.trend(item_id, hq, world), "quality": None}
+        if st.median is None or unit_cost is None:
+            return v
+        badges, tips = v["badges"], v["tips"]
+        sell, cap = self.sale_price(item_id, hq, st, world)
+        net = sell * (1 - self.seller_tax) - unit_cost
+        v.update(sell=sell, net=net, cap=cap, margin=net / unit_cost * 100 if unit_cost > 0 else None,
+                 daily=net * st.sold_qty / (self.hours / 24))
+        if cap is not None:
+            text = "🔻 HQ 시세로 깎음"
+            badges.append(text)
+            tips[text] = (f"HQ 가 보통 {cap:,.0f}길에 팔리는데 NQ 를 그보다 비싸게는 몬 판다. 그래서 {cap:,.0f}길로 잡았데이."
+                          if world is None else
+                          f"이 서버에 HQ 가 {cap:,.0f}길에 올라와 있어가 NQ 를 그보다 비싸게는 몬 판다. 그래서 {cap:,.0f}길로 잡았데이.")
+        if st.dropped:
+            text = "❗ 이상 거래 포착"
+            badges.append(text)
+            shown = ", ".join(f"{self.world_name(x[4])} {x[0]:,}길×{x[1]}" for x in sorted(st.dropped, key=lambda x: -x[0])[:3])
+            tips[text] = (f"{self.hours // 24:.0f}일 판매 {st.sale_count + len(st.dropped)}건 중 {len(st.dropped)}건이 "
+                          f"그 서버 보통 가격(중앙값)이랑 {self.odd_ratio:g}배 넘게 차이 나가 뺐다 ({shown}). "
+                          "실수로 잘못 판 거나 짜고 치는 거래일 수 있어가 판매가·판매량 계산에 안 넣었데이.")
+        if st.sale_count < 5 and st.listing_count == 0:
+            text = "⚠ 근거 약함"
+            badges.append(text)
+            tips[text] = (f"{self.hours // 24:.0f}일 동안 {st.sale_count}건 팔린 게 다고 지금 매물도 없어가, "
+                          "몇 건 안 되는 기록으로 판매가를 잡았다. 게임에서 한번 확인해 봐라.")
+        v["sellDays"], cheapest = self.sell_outlook(sell, st)
+        if len(cheapest) >= 2 and cheapest[0] > 0 and st.listing_count >= 5:
+            gap = (cheapest[1] - cheapest[0]) / cheapest[0]
+            if gap < 0.02:
+                text = "🔥 덤핑 경쟁"
+                badges.append(text)
+                tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다. "
+                              "서로 1길씩 깎아 파는 중이라, 올리믄 금방 밑으로 밀린데이.")
+        change = v["trend"]["change"]
+        if change is not None and change <= -10:
+            text = f"📉 하락 중 {change:.0f}%"
+            badges.append(text)
+            tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
+        if item.can_hq:
+            v["quality"] = self.quality_compare(item_id, unit_cost, world)
+            other_name = "HQ" if not self.sell_hq else "NQ"
+            other = v["quality"][other_name]
+            if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
+                text = f"✨ {other_name}면 +{other['net'] - net:,.0f}"
+                badges.append(text)
+                tips[text] = (f"{other_name} 로 팔믄 개당 {other['net']:,.0f}길 남는다 (지금 기준 {net:,.0f}길). "
+                              f"대신 {other_name} 로 만들 수 있어야 된데이.")
+        return v
 
-        min(기간 중앙값, 최저 매물). NQ 로 팔 때는 HQ 가 더 싸게 올라와 있으믄 그 값 이상은 못 받는다.
+    def world_badge(self, row):
+        """통합 보기에서: 내 서버보다 확실히 더 남는 서버가 있으믄 🌐 뱃지."""
+        worlds = [(key, v) for key, v in row["보기"].items() if key != "dc"]
+        ranked = [(key, v) for key, v in worlds if v["net"] is not None and v["sales"] >= 2]
+        if not ranked:
+            return
+        best_key, best = max(ranked, key=lambda kv: kv[1]["net"])
+        home = row["보기"].get(str(self.home_world))
+        if best_key == str(self.home_world) or not home or home["net"] is None or best["net"] <= 0:
+            return
+        diff = best["net"] - home["net"]
+        if diff >= 1000 and diff >= abs(home["net"]) * 0.1:
+            name, home_name = self.world_name(best_key), self.world_name(self.home_world)
+            text = f"🌐 {name} +{diff:,.0f}"
+            dc = row["보기"]["dc"]
+            dc["badges"].append(text)
+            dc["tips"][text] = (f"{name} 서버에서 팔믄 개당 {best['net']:,.0f}길, {eun(home_name)} {home['net']:,.0f}길 남는다. "
+                                "거기 리테이너 있는 캐릭터가 있어야 올릴 수 있데이. 위에서 서버를 고르믄 서버별 순위도 볼 수 있다.")
+
+    def world_name(self, wid):
+        return self.world_names.get(str(wid), str(wid))
+
+    def sale_price(self, item_id, hq, st, world):
+        """(판매 예상가, HQ 시세 때문에 깎은 값 또는 None).
+
+        서버별: min(중앙값, 최저 매물), NQ 로 팔 때는 그 서버 HQ 최저 매물보다 비싸게 몬 판다.
+        통합:   중앙값, NQ 로 팔 때는 HQ 중앙값보다 비싸게 몬 판다.
         """
-        world = self.sell_world if world == "scope" else world
+        if world is None:
+            sell = st.median
+            if hq is False:
+                hq_med = self.stats(item_id, True, self.outlier_ratio, None).median
+                if hq_med is not None and hq_med < sell:
+                    return hq_med, hq_med
+            return sell, None
         sell = min(st.median, st.min_listing) if st.min_listing else st.median
         if hq is False:
             hq_min = self.stats(item_id, True, self.outlier_ratio, world).min_listing
@@ -337,62 +377,44 @@ class Calculator:
                 return hq_min, hq_min
         return sell, None
 
-    def evidence(self, item_id, hq, st, sell, cap):
-        """판매가를 어떻게 잡았는지 보여줄 근거: 최근 판매 기록, 지금 싼 매물."""
-        entry = self.market.get(item_id) or {"sales": [], "listings": []}
+    def evidence(self, item_id, hq):
+        """판매가 근거를 서버별로: 서버마다 중앙값·최저 매물, 최근 판매, 싼 매물 (이상 거래·미끼 표시)."""
+        entry = self.market.get(item_id) or {"sales": [], "listings": [], "fetched_at": time.time()}
         since = entry.get("fetched_at", time.time()) - self.hours * 3600
-        in_scope = lambda world, q: (hq is None or q == hq) and (self.sell_world is None or world == self.sell_world)
-        world = lambda w: self.world_names.get(str(w), str(w))
-        sales = sorted((x for x in entry["sales"] if x[3] >= since and in_scope(x[4], x[2])), key=lambda x: -x[3])
-        listings = sorted((x for x in entry["listings"] if in_scope(x[3], x[2])), key=lambda x: x[0])
-        bait = st.median * self.outlier_ratio if st.median and self.outlier_ratio else 0
-        return {
-            "median": st.median, "minListing": st.min_listing, "hqCap": cap, "sell": sell,
-            "quality": "전체" if hq is None else ("HQ" if hq else "NQ"),
-            "sales": [{"when": datetime.fromtimestamp(x[3], KST).strftime("%m/%d %H:%M"), "world": world(x[4]),
-                       "hq": x[2], "price": x[0], "qty": x[1], "odd": x in st.dropped} for x in sales[:10]],
-            "dropped": len(st.dropped),
-            "listings": [{"world": world(x[3]), "hq": x[2], "price": x[0], "qty": x[1], "bait": x[0] < bait}
-                         for x in listings[:6]],
-        }
+        out = []
+        for wid in self.world_names:
+            wid = int(wid)
+            st = self.stats(item_id, hq, self.outlier_ratio, wid)
+            sales = sorted((x for x in entry["sales"] if x[3] >= since and x[4] == wid and (hq is None or x[2] == hq)),
+                           key=lambda x: -x[3])
+            out.append({
+                "world": self.world_name(wid), "home": wid == self.home_world, "median": st.median,
+                "sales": st.sale_count, "dropped": len(st.dropped), "minListing": st.min_listing,
+                "listings": st.listing_count,
+                "recent": [{"when": datetime.fromtimestamp(x[3], KST).strftime("%m/%d %H:%M"), "hq": x[2],
+                            "price": x[0], "qty": x[1], "odd": x in st.dropped} for x in sales[:5]],
+                "cheap": [{"hq": l[2], "price": l[0], "qty": l[1], "bait": l in st.bait}
+                          for l in sorted(st.good_listings + st.bait, key=lambda l: l[0])[:3]],
+            })
+        out.sort(key=lambda w: (not w["home"], w["median"] is None, -(w["median"] or 0)))
+        return {"quality": "전체" if hq is None else ("HQ" if hq else "NQ"), "worlds": out}
 
-    def sell_outlook(self, item_id, hq, sell, st):
-        """(예상 판매 소요일, 싼 매물 가격 앞의 몇 개).
+    def sell_outlook(self, sell, st):
+        """(예상 판매 소요일, 싼 매물 가격 앞의 2개).
 
         내 가격 이하로 올라온 매물 수량 + 내 1개를, 하루 평균 판매 수량으로 나눈다.
         """
-        entry = self.market.get(item_id) or {"listings": []}
-        listings = [l for l in entry["listings"]
-                    if (hq is None or l[2] == hq) and (self.sell_world is None or l[3] == self.sell_world)]
-        ahead = sum(l[1] for l in listings if l[0] <= sell)
+        ahead = sum(l[1] for l in st.good_listings if l[0] <= sell)
         daily = st.sold_qty / (self.hours / 24)
         days = (ahead + 1) / daily if daily > 0 else None
-        return days, sorted(l[0] for l in listings)[:2]
+        return days, [l[0] for l in st.good_listings[:2]]
 
-    def world_compare(self, item_id, hq, unit_cost):
-        """서버별로 올렸을 때 판매가·순수익. 그 서버 판매 기록·매물만 본다."""
-        out = []
-        for wid, name in self.world_names.items():
-            wid = int(wid)
-            st = self.stats(item_id, hq, self.outlier_ratio, wid)
-            sell = self.sale_price(item_id, hq, st, wid)[0] if st.median is not None else None
-            out.append({
-                "world": name, "home": wid == self.home_world, "sales": st.sale_count, "median": st.median,
-                "minListing": st.min_listing, "listings": st.listing_count, "sell": sell,
-                "net": sell * (1 - self.seller_tax) - unit_cost if sell is not None else None,
-            })
-        ranked = [w for w in out if w["net"] is not None and w["sales"] >= 2]
-        best = max(ranked, key=lambda w: w["net"]) if ranked else None
-        for w in out:
-            w["best"] = w is best
-        return sorted(out, key=lambda w: (w["net"] is None, -(w["net"] or 0)))
-
-    def quality_compare(self, item_id, unit_cost):
+    def quality_compare(self, item_id, unit_cost, world):
         """NQ 로 팔 때와 HQ 로 팔 때 비교 (재료비는 같다고 보고)."""
         out = {}
         for name, hq in (("NQ", False), ("HQ", True)):
-            st = self.stats(item_id, hq, self.outlier_ratio, self.sell_world)
-            sell = self.sale_price(item_id, hq, st)[0] if st.median is not None else None
+            st = self.stats(item_id, hq, self.outlier_ratio, world)
+            sell = self.sale_price(item_id, hq, st, world)[0] if st.median is not None else None
             out[name] = {
                 "sell": sell,
                 "net": sell * (1 - self.seller_tax) - unit_cost if sell is not None else None,
@@ -401,18 +423,18 @@ class Calculator:
             }
         return out
 
-    def trend(self, item_id, hq):
-        """기간 내 하루 단위 판매가 중앙값·판매 수량, 그리고 최근 2일 vs 그 전 가격 변화(%)."""
+    def trend(self, item_id, hq, world):
+        """기간 내 하루 단위 판매가 중앙값·판매 수량, 그리고 최근 2일 vs 그 전 가격 변화(%). 이상 거래는 뺀다."""
         entry = self.market.get(item_id)
         n_days = max(1, int(self.hours // 24))
         if not entry:
             return {"days": [], "change": None}
         end = entry.get("fetched_at", time.time())
         start = end - n_days * 86400
+        sales = [s for s in entry["sales"] if s[3] >= start and (hq is None or s[2] == hq)]
+        kept = [s for s in clean_by_world(sales, [], self.odd_ratio, 0)[0] if world is None or s[4] == world]
         buckets = [[] for _ in range(n_days)]
-        sales = [s for s in entry["sales"]
-                 if s[3] >= start and (hq is None or s[2] == hq) and (self.sell_world is None or s[4] == self.sell_world)]
-        for s in split_odd_sales(sales, self.odd_ratio)[0]:
+        for s in kept:
             buckets[min(n_days - 1, int((s[3] - start) // 86400))].append(s)
         days = []
         for i, b in enumerate(buckets):
@@ -512,7 +534,7 @@ def seller_tax_rate(cfg, tax_rates, city=None):
 def analyze(gd, market, cfg, targets, seller_tax, **options):
     """대상 레시피 전체를 평가해서 (rows, {recipe_id: (recipe, tree)}, calc) 를 돌려준다.
 
-    options 는 Calculator 인자 (sell_hq, batch_size, job_levels, sell_world, buy_world, world_names).
+    options 는 Calculator 인자 (sell_hq, batch_size, job_levels, buy_world, world_names, home_world).
     """
     calc = Calculator(gd, market, cfg, seller_tax, **options)
     trees = {}
@@ -538,17 +560,18 @@ if __name__ == "__main__":
     targets = list(target_recipes(gd, cfg, True, cfg["recipe_level_min"], cfg["recipe_level_max"]))
     rows, trees, calc = analyze(
         gd, cache.items, cfg, targets, tax, sell_hq=cfg["sell_hq"], batch_size=cfg["batch_size"],
-        sell_world=None if cfg["sell_scope"] == "dc" else server["world_id"],
         buy_world=None if cfg["buy_scope"] == "dc" else server["world_id"],
-        world_names=server["world_names"],
+        world_names=server["world_names"], home_world=server["world_id"],
     )
-    ok = sorted((r for r in rows if r["순수익"] is not None), key=lambda r: -r["순수익"])
-    scope = lambda v: f"{server['dc']} 전체" if v == "dc" else server["world"]
-    print(f"판매 시세: {scope(cfg['sell_scope'])} / 재료 구매: {scope(cfg['buy_scope'])} / 판매세 {tax:.0%} ({city})")
+    dc = lambda r: r["보기"]["dc"]
+    ok = sorted((r for r in rows if dc(r)["net"] is not None), key=lambda r: -dc(r)["net"])
+    buy = f"{server['dc']} 전체" if cfg["buy_scope"] == "dc" else server["world"]
+    print(f"판매 시세: {server['dc']} 통합 / 재료 구매: {buy} / 판매세 {tax:.0%} ({city})")
     print(f"레벨 {cfg['recipe_level_min']}~{cfg['recipe_level_max']} 계산된 레시피 {len(ok)}/{len(rows)}개 (필터 적용 전)\n")
     for i, r in enumerate(ok[:15], 1):
-        print(f"{i:>2}. [{r['직업']}] {r['아이템명']:<20} 판매 {r['판매 예상가']:>9,.0f}  원가 {r['원가']:>9,.0f}  "
-              f"순수익 {r['순수익']:>9,.0f}  수익률 {r['수익률(%)'] or 0:>6.1f}%  판매 {r['판매 건수']}건  매물 {r['현재 매물 수']}")
+        v = dc(r)
+        print(f"{i:>2}. [{r['직업']}] {r['아이템명']:<20} 판매 {v['sell']:>9,.0f}  원가 {r['원가']:>9,.0f}  "
+              f"순수익 {v['net']:>9,.0f}  수익률 {v['margin'] or 0:>6.1f}%  판매 {v['sales']}건  매물 {v['listings']}")
     for r in ok[:3]:
         print(f"\n── {r['아이템명']} 원가 내역 ──")
         for d in detail_rows(calc, trees[r["recipe_id"]][1]):

@@ -66,7 +66,7 @@ tbody tr.selected td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
 .upd.stale{color:var(--warning)}
 
 /* 뱃지 */
-.badges{display:flex;gap:4px;flex-wrap:nowrap}
+.badges{display:flex;gap:4px;flex-wrap:wrap;width:max-content;max-width:280px}
 .badge{display:inline-flex;align-items:center;gap:3px;font-size:var(--fs-xs);line-height:1.4;padding:2px 7px;border-radius:var(--radius-pill);white-space:nowrap;font-weight:500}
 .badge.book{background:var(--violet-soft);color:var(--violet)}
 .badge.stale{background:var(--warning-soft);color:var(--warning)}
@@ -257,3 +257,6 @@ tr.flash td{animation:flash 1.6s ease-out}
 .badge.world{background:var(--info-soft);color:var(--info);font-weight:600}
 .worlds .table-wrap{box-shadow:none;margin-top:var(--space-2)}
 .worlds tr.best td{background:var(--primary-soft);font-weight:600}
+
+/* 기타 칸: 뱃지가 넘치믄 다음 줄로 */
+td:has(> .badges){white-space:normal;min-width:200px}

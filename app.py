@@ -27,13 +27,13 @@ PERIOD = f"{H // 24}일" if H % 24 == 0 else f"{H}시간"
 KST = timezone(timedelta(hours=9), "KST")  # 클라우드 서버는 시간대가 달라서 한국 시간으로 고정
 
 
-@st.cache_resource(show_spinner="게임 데이터(레시피·아이템) 불러오는 중이데이…")
+@st.cache_resource(show_spinner="게임 데이터(레시피·아이템) 불러오는 중이다 개굴…")
 def load_gamedata(base_url):
     download_csvs(base_url)
     return GameData()
 
 
-@st.cache_resource(show_spinner="저장해 둔 시세 불러오는 중이데이…")
+@st.cache_resource(show_spinner="저장해 둔 시세 불러오는 중이다 개굴…")
 def load_market_cache(world_id, dc):
     return MarketCache({"world_id": world_id, "dc": dc})
 
@@ -55,7 +55,7 @@ def start_refresh(full, ids):
     r = refresher()
     if r["thread"] is not None and r["thread"].is_alive():
         return
-    r.update(progress=0.0, msg="시세 받을 채비 하는 중이데이…", error=None, last_try=time.time())
+    r.update(progress=0.0, msg="시세 받을 준비하는 중이다 개굴…", error=None, last_try=time.time())
 
     def run():
         try:
@@ -87,14 +87,14 @@ if not st.session_state.get("frogs_welcomed"):  # 들어오자마자 한 번 개
 try:
     gd = load_gamedata(cfg["datamining_base_url"])
 except requests.RequestException as e:
-    ui.notice(st, f"게임 데이터 CSV 를 몬 받아왔다. 쪼매 있다가 새로고침 해 봐라. ({e})", "error")
+    ui.notice(st, f"게임 데이터 CSV 를 못 받아왔다 개굴. 조금 있다가 새로고침 해 봐라 개굴. ({e})", "error")
     st.stop()
 
 api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"])
 try:
     server = resolve_server(api, cfg)
 except (requests.RequestException, ValueError) as e:
-    ui.notice(st, f"월드 정보를 몬 찾았다. 쪼매 있다가 새로고침 해 봐라. ({e})", "error")
+    ui.notice(st, f"월드 정보를 못 찾았다 개굴. 조금 있다가 새로고침 해 봐라 개굴. ({e})", "error")
     st.stop()
 cache = load_market_cache(server["world_id"], server["dc"])
 home, dc = server["world_id"], server["dc"]
@@ -113,9 +113,9 @@ def refresh_status():
         st.progress(r["progress"], r["msg"])
     else:
         ui.sidebar_note(st, f"마지막 갱신: {fmt_time(cache.updated_at)}"
-                        + (f" · {auto_min}분 지나믄 알아서 갱신한데이" if auto_min else ""))
+                        + (f" · {auto_min}분 지나면 알아서 갱신한다 개굴" if auto_min else ""))
         if r["error"]:
-            ui.sidebar_note(st, "⚠ 이번 갱신은 안 됐다 — 전에 받아둔 시세로 보는 중이데이")
+            ui.sidebar_note(st, "⚠ 이번 갱신은 안 됐다 개굴 — 전에 받아둔 시세로 보는 중이다 개굴")
     if r["finished_at"] > st.session_state["seen_refresh"]:
         st.session_state["seen_refresh"] = r["finished_at"]
         st.session_state["just_refreshed"] = not r["error"]
@@ -130,13 +130,13 @@ scope_names = {"dc": f"{dc} 전체" if dc else "데이터센터 전체", "world"
 buy_scope = sb.segmented_control(
     "재료 구매", list(scope_names), format_func=scope_names.get, required=True, width="stretch",
     default="dc" if cfg["buy_scope"] == "dc" else "world",
-    help="데이터센터 전체믄 다른 서버 가가 제일 싼 매물 사 온다 치는 기다. "
-         "재료 상세 '구매 서버'에 어데 가믄 되는지 나온데이.")
+    help="데이터센터 전체면 다른 서버에 가서 제일 싼 매물을 사 온다고 친다 개굴. "
+         "재료 상세 '구매 서버'에 어디 가면 되는지 나온다 개굴.")
 
 ui.sidebar_title(sb, "분석 대상")
 level_range = sb.slider("레시피 레벨 범위", 1, 100, (cfg["recipe_level_min"], cfg["recipe_level_max"]))
 with sb.expander(f"직업별 레벨 · {len(JOB_NAMES)}개 직업", expanded=False):
-    st.caption("이 레벨보다 높은 레시피는 빼고, 중간재료 직접 만드는 것도 이 레벨까지만 친데이.")
+    st.caption("이 레벨보다 높은 레시피는 빼고, 중간재료 직접 만드는 것도 이 레벨까지만 친다 개굴.")
     cols = st.columns(2)
     job_levels = {job: cols[i % 2].number_input(job, 1, 100, cfg["job_levels"][job], key=f"lv_{job}")
                   for i, job in enumerate(JOB_NAMES)}
@@ -144,22 +144,22 @@ QUALITIES = {"NQ": False, "HQ": True, "통합": None}
 sell_quality = sb.segmented_control(
     "판매 품질", list(QUALITIES), default=cfg.get("sell_quality", "NQ") if cfg.get("sell_quality") in QUALITIES else "NQ",
     required=True, width="stretch",
-    help="HQ 있는 템을 어느 시세로 팔 건지. NQ = NQ 로 팔린 기록만, HQ = HQ 로 팔린 기록만, "
-         "통합 = 안 가리고 다 섞어서. HQ 못 만드는 템은 어느 걸 골라도 NQ 시세로 본데이.")
+    help="HQ 있는 템을 어느 시세로 팔 건지 고른다 개굴. NQ = NQ 로 팔린 기록만, HQ = HQ 로 팔린 기록만, "
+         "통합 = 안 가리고 다 섞어서. HQ 못 만드는 템은 어느 걸 골라도 NQ 시세로 본다 개굴.")
 sell_hq = QUALITIES[sell_quality]
 batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_size"],
-                             help="재료를 싼 매물부터 이 횟수만큼 산다 치고 원가 계산한데이.")
+                             help="재료를 싼 매물부터 이 횟수만큼 산다고 치고 원가를 계산한다 개굴.")
 
 ui.sidebar_title(sb, "필터")
 min_sales = sb.number_input(f"{PERIOD} 판매 건수 ≥", 0, 999, F["min_sales"])
 mat_ratio = sb.number_input("재료 판매 수량 배수 ≥", 0.0, 100.0, float(F["material_ratio"]), 0.5,
-                            help="재료마다 팔린 수량이 필요한 수량의 몇 배는 돼야 되는지. NPC·직접 채집 재료는 안 따진데이.")
+                            help="재료마다 팔린 수량이 필요한 수량의 몇 배는 돼야 하는지 정한다 개굴. NPC·직접 채집 재료는 안 따진다 개굴.")
 min_margin = sb.number_input("최소 수익률(%)", -100.0, 10000.0, float(F["min_margin_pct"]), 5.0)
 min_profit = sb.number_input("개당 최소 순수익(길)", -1_000_000, 10_000_000, F["min_profit"], 500)
 max_listings = sb.number_input("현재 등록 건수 ≤", 0, 999, F["max_listings"])
 max_days = sb.number_input("예상 판매 소요일 ≤ (0 = 안 따짐)", 0.0, 365.0, float(F.get("max_sell_days", 0)), 1.0,
                            help="내 가격 이하 매물이 다 팔리고 내 거까지 팔리는 데 걸리는 날 수. "
-                                "하루 판매량으로 어림잡은 기라 대충 감만 잡아라.")
+                                "하루 판매량으로 어림잡은 거라 대충 감만 잡아라 개굴.")
 stale_hours = sb.number_input("데이터 오래됨 기준(시간)", 1, 720, F["stale_hours"])
 
 ui.sidebar_title(sb, "정렬 · 세금")
@@ -175,7 +175,7 @@ seller_tax, tax_city = seller_tax_rate(cfg, cache.tax_rates, city)
 sb.html(f'<div class="sb-note tax"><span>적용 판매세</span>'
         f'<b>{seller_tax:.0%} ({TAX_CITIES.get(tax_city, tax_city)})</b></div>')
 
-if sb.button("게임 데이터 다시 받기", help="패치로 레시피 바뀌었을 때만 누르래이", width="stretch"):
+if sb.button("게임 데이터 다시 받기", help="패치로 레시피 바뀌었을 때만 눌러라 개굴", width="stretch"):
     download_csvs(cfg["datamining_base_url"], force=True)
     load_gamedata.clear()
     all_market_ids.clear()
@@ -199,11 +199,11 @@ if refresh_clicked or auto_due:
 elif cache.missing(ids) and now - r["last_try"] > 120:
     start_refresh(False, ids)
 if st.session_state.pop("just_refreshed", False):
-    st.toast("시세 새로 받아왔데이!", icon="🐸")
+    st.toast("시세 새로 받아왔다 개굴!", icon="🐸")
 notice = None
 if not cache.updated_at:
-    notice = {"kind": "info", "text": "처음이라 시세 받아오는 중이데이. 아이템이 억수로 많아가 5~10분쯤 걸리니까 "
-                                      "쪼매만 기다리래이. 다 받으믄 화면 알아서 채워진다. 우째 돼 가는지는 왼쪽에 나온데이."}
+    notice = {"kind": "info", "text": "처음이라 시세 받아오는 중이다 개굴. 아이템이 엄청 많아서 5~10분쯤 걸리니까 "
+                                      "조금만 기다려라 개굴. 다 받으면 화면이 알아서 채워진다 개굴. 어떻게 돼 가는지는 왼쪽에 나온다 개굴."}
 
 # ── 계산 ──
 rows, trees, calc = analyze(
@@ -224,7 +224,7 @@ def fail_reasons(r, v):
         out.append(f"재료 판매량 {r['재료 여유 배수']:.1f}배 (기준 {mat_ratio:g}배↑)")
     margin = v["margin"]
     if (margin if margin is not None else -math.inf) < min_margin:
-        out.append(f"수익률 {margin:.0f}% (기준 {min_margin:g}%↑)" if margin is not None else "수익률 계산 몬 함")
+        out.append(f"수익률 {margin:.0f}% (기준 {min_margin:g}%↑)" if margin is not None else "수익률 계산 못 했다 개굴")
     if v["net"] < min_profit:
         out.append(f"순수익 {v['net']:,.0f}길 (기준 {min_profit:,}길↑)")
     if v["listings"] > max_listings:
@@ -249,7 +249,7 @@ def view_data(r, key, stale_badge):
         "cap": v["cap"], "dropped": v["dropped"], "trend": v["trend"], "quality": v["quality"],
         "passes": passes(r, key),
         "badges": [ui.badge(t, tips.get(t) or (
-            f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다. 지금 게임 시세랑 다를 수 있데이."
+            f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다 개굴. 지금 게임 시세랑 다를 수 있다 개굴."
             if t.startswith("⚠ 데이터") else None)) for t in texts],
     }
 
@@ -302,15 +302,15 @@ def recipe_status(recipe, item):
         if not reasons:
             return "ok", ""
         ok_worlds = [VIEWS[k] for k in world_keys if passes(r, k)]
-        extra = f" — 서버별로는 {', '.join(ok_worlds)} 순위에 있데이" if ok_worlds else ""
+        extra = f" — 서버별로는 {', '.join(ok_worlds)} 순위에 있다 개굴" if ok_worlds else ""
         return ("ok" if ok_worlds else "filtered"), "통합: " + " · ".join(reasons) + extra
     if recipe.expert or recipe.specialist:
-        return "out", "전문·고난도 레시피라 뺐다"
+        return "out", "전문·고난도 레시피라 뺐다 개굴"
     if not item.marketable:
-        return "out", "거래소에 몬 파는 템이다"
+        return "out", "거래소에 못 파는 템이다 개굴"
     if not level_range[0] <= recipe.job_level <= level_range[1]:
-        return "out", f"레시피 Lv{recipe.job_level} — 레벨 범위 {level_range[0]}~{level_range[1]} 밖이다"
-    return "out", f"{recipe.job_name} 레벨 {job_levels[recipe.job_name]} < 레시피 Lv{recipe.job_level}"
+        return "out", f"레시피 Lv{recipe.job_level} — 레벨 범위 {level_range[0]}~{level_range[1]} 밖이다 개굴"
+    return "out", f"{recipe.job_name} 레벨 {job_levels[recipe.job_name]} < 레시피 Lv{recipe.job_level} 이다 개굴"
 
 
 def search_results(q):
@@ -325,7 +325,7 @@ def search_results(q):
             continue
         if not recipes:
             found.append({"name": item.name, "stars": 0, "job": "", "level": None, "kind": "norecipe",
-                          "why": "제작 레시피가 없다 (드롭·교환템)", "id": None})
+                          "why": "제작 레시피가 없다 개굴 (드롭·교환템)", "id": None})
         for recipe in recipes:
             kind, why = recipe_status(recipe, item)
             r = row_by_recipe.get(recipe.id)

@@ -144,7 +144,7 @@ def password_gate():
     apply_theme(theme if theme in THEMES else DEFAULT_THEME, palette if palette in PALETTES else DEFAULT_PALETTE)
     st.html("<style>" + _read("login.css") + "</style>")
     st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
-            '<h1>파판14 제작 수익 분석</h1><p>비밀번호 쳐야 화면 열어준데이.</p></div>')
+            '<h1>파판14 제작 수익 분석</h1><p>비밀번호를 쳐야 화면을 열어준다 개굴.</p></div>')
     frog_rain()
     with st.form("login", border=False):
         typed = st.text_input("비밀번호", type="password", placeholder="비밀번호")
@@ -153,6 +153,6 @@ def password_gate():
         if hmac.compare_digest(typed.encode(), str(password).encode()):
             st.session_state["authed"] = True
             st.rerun()
-        st.html('<div class="login-error">🐸 비밀번호가 틀렸다 아이가. 다시 쳐 봐라.</div>')
-    st.html('<div class="login-contact">🐸 문의는 <b>로살리아@초코보</b> 한테 하이소</div>')
+        st.html('<div class="login-error">🐸 비밀번호가 틀렸다 개굴. 다시 쳐 봐라 개굴.</div>')
+    st.html('<div class="login-contact">🐸 문의는 <b>로살리아@초코보</b> 한테 해라 개굴</div>')
     st.stop()

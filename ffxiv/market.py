@@ -56,7 +56,7 @@ class Universalis:
             world_id = next((wid for wid, n in worlds.items() if n == name), None)
         if world_id is None:
             names = ", ".join(sorted(n for n in worlds.values() if not n.isascii()))
-            raise ValueError(f"'{name}' 월드를 몬 찾았다. config.yaml 의 world 한번 봐 봐라. (한글 월드: {names})")
+            raise ValueError(f"'{name}' 월드를 못 찾았다 개굴. config.yaml 의 world 한번 봐 봐라 개굴. (한글 월드: {names})")
         dc = next((d for d in self._get("/api/v2/data-centers") if world_id in d["worlds"]), None)
         members = dc["worlds"] if dc else [world_id]
         return {
@@ -91,7 +91,7 @@ class Universalis:
         batches = [ids[i:i + BATCH] for i in range(0, len(ids), BATCH)]
         for n, chunk in enumerate(batches):
             if progress:
-                progress(n / len(batches), f"시세 받는 중이데이 ({n + 1}/{len(batches)})")
+                progress(n / len(batches), f"시세 받는 중이다 개굴 ({n + 1}/{len(batches)})")
             id_str = ",".join(map(str, chunk))
             now = time.time()
             current = self._items(self._get(f"/api/v2/{target}/{id_str}", {"entries": 0}))
@@ -116,7 +116,7 @@ class Universalis:
                     "fetched_at": now,
                 }
         if progress:
-            progress(1.0, "다 됐데이")
+            progress(1.0, "다 됐다 개굴")
         return out
 
 

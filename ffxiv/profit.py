@@ -247,14 +247,14 @@ class Calculator:
             extra.append(f"비전서: {recipe.secret_book}")
         if recipe.quest_unlock:
             extra.append("퀘스트 해금")
-            tips["퀘스트 해금"] = "퀘스트 깨야 배울 수 있는 레시피다."
+            tips["퀘스트 해금"] = "퀘스트를 깨야 배울 수 있는 레시피다 개굴."
         if item.can_hq:
             q = {None: "NQ·HQ 통합", True: "HQ 기준", False: "NQ 기준"}[hq]
             extra.append(q)
             tips[q] = {
-                False: "NQ 시세로 계산했다. 사이드바 '판매 품질' 에서 바꿀 수 있데이.",
-                True: "HQ 시세로 계산했다. HQ 로 만들 실력이 돼야 이 값 받는데이.",
-                None: "NQ·HQ 안 가리고 팔린 거 다 섞어서 계산했다. HQ 가 많이 팔리는 템이믄 NQ 로 만들 땐 이만큼 몬 받는데이.",
+                False: "NQ 시세로 계산했다 개굴. 사이드바 '판매 품질' 에서 바꿀 수 있다 개굴.",
+                True: "HQ 시세로 계산했다 개굴. HQ 로 만들 실력이 돼야 이 값을 받는다 개굴.",
+                None: "NQ·HQ 안 가리고 팔린 거 다 섞어서 계산했다 개굴. HQ 가 많이 팔리는 템이면 NQ 로 만들 땐 이만큼 못 받는다 개굴.",
             }[hq]
 
         dc = self.stats(recipe.result_id, hq, self.outlier_ratio, None)
@@ -277,14 +277,14 @@ class Calculator:
         }
         if tree.unit_cost is None:
             missing = sorted({self.gd.name(n.item_id) for n in walk(tree) if n.unit_cost is None and not n.children})
-            row["제외 사유"] = "재료 시세 없음: " + ", ".join(missing)
+            row["제외 사유"] = "재료 시세가 없다 개굴: " + ", ".join(missing)
         elif dc.median is None:
-            row["제외 사유"] = f"{self.hours // 24:.0f}일 동안 판매 기록 없음"
+            row["제외 사유"] = f"{self.hours // 24:.0f}일 동안 판매 기록이 없다 개굴"
             if hq is not None:
                 other = self.stats(recipe.result_id, not hq, self.outlier_ratio).sale_count
                 q, o = ("HQ", "NQ") if hq else ("NQ", "HQ")
-                row["제외 사유"] = (f"{q} 로 팔린 기록 없음 — {o} 로는 {other}건 팔렸다, 사이드바 판매 품질을 {o} 나 통합으로 바꿔 봐라"
-                                 if other else f"{self.hours // 24:.0f}일 동안 판매 기록 없음 (NQ·HQ 둘 다)")
+                row["제외 사유"] = (f"{q} 로 팔린 기록이 없다 개굴 — {o} 로는 {other}건 팔렸으니 사이드바 판매 품질을 {o} 나 통합으로 바꿔 봐라 개굴"
+                                 if other else f"{self.hours // 24:.0f}일 동안 판매 기록이 없다 개굴 (NQ·HQ 둘 다)")
         self.world_badge(row)
         return row, tree
 
@@ -305,34 +305,34 @@ class Calculator:
         if cap is not None:
             text = "🔻 HQ 시세로 깎음"
             badges.append(text)
-            tips[text] = (f"HQ 가 보통 {cap:,.0f}길에 팔리는데 NQ 를 그보다 비싸게는 몬 판다. 그래서 {cap:,.0f}길로 잡았데이."
+            tips[text] = (f"HQ 가 보통 {cap:,.0f}길에 팔리는데 NQ 를 그보다 비싸게는 못 판다 개굴. 그래서 {cap:,.0f}길로 잡았다 개굴."
                           if world is None else
-                          f"이 서버에 HQ 가 {cap:,.0f}길에 올라와 있어가 NQ 를 그보다 비싸게는 몬 판다. 그래서 {cap:,.0f}길로 잡았데이.")
+                          f"이 서버에 HQ 가 {cap:,.0f}길에 올라와 있어서 NQ 를 그보다 비싸게는 못 판다 개굴. 그래서 {cap:,.0f}길로 잡았다 개굴.")
         if st.dropped:
             text = "❗ 이상 거래 포착"
             badges.append(text)
             shown = ", ".join(f"{self.world_name(x[4])} {x[0]:,}길×{x[1]}" for x in sorted(st.dropped, key=lambda x: -x[0])[:3])
             tips[text] = (f"{self.hours // 24:.0f}일 판매 {st.sale_count + len(st.dropped)}건 중 {len(st.dropped)}건이 "
-                          f"그 서버 보통 가격(중앙값)이랑 {self.odd_ratio:g}배 넘게 차이 나가 뺐다 ({shown}). "
-                          "실수로 잘못 판 거나 짜고 치는 거래일 수 있어가 판매가·판매량 계산에 안 넣었데이.")
+                          f"그 서버 보통 가격(중앙값)이랑 {self.odd_ratio:g}배 넘게 차이 나서 뺐다 개굴 ({shown}). "
+                          "실수로 잘못 판 거나 짜고 치는 거래일 수 있어서 판매가·판매량 계산에 안 넣었다 개굴.")
         if st.sale_count < 5 and st.listing_count == 0:
             text = "⚠ 근거 약함"
             badges.append(text)
-            tips[text] = (f"{self.hours // 24:.0f}일 동안 {st.sale_count}건 팔린 게 다고 지금 매물도 없어가, "
-                          "몇 건 안 되는 기록으로 판매가를 잡았다. 게임에서 한번 확인해 봐라.")
+            tips[text] = (f"{self.hours // 24:.0f}일 동안 {st.sale_count}건 팔린 게 전부고 지금 매물도 없어서, "
+                          "몇 건 안 되는 기록으로 판매가를 잡았다 개굴. 게임에서 한번 확인해 봐라 개굴.")
         v["sellDays"], cheapest = self.sell_outlook(sell, st)
         if len(cheapest) >= 2 and cheapest[0] > 0 and st.listing_count >= 5:
             gap = (cheapest[1] - cheapest[0]) / cheapest[0]
             if gap < 0.02:
                 text = "🔥 덤핑 경쟁"
                 badges.append(text)
-                tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다. "
-                              "서로 1길씩 깎아 파는 중이라, 올리믄 금방 밑으로 밀린데이.")
+                tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다 개굴. "
+                              "서로 1길씩 깎아 파는 중이라 올리면 금방 밑으로 밀린다 개굴.")
         change = v["trend"]["change"]
         if change is not None and change <= -10:
             text = f"📉 하락 중 {change:.0f}%"
             badges.append(text)
-            tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
+            tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다 개굴. 만들어 놓고 보면 값이 더 빠질 수 있다 개굴."
         if item.can_hq:
             v["quality"] = self.quality_compare(item_id, unit_cost, world)
         if item.can_hq and hq is not None:
@@ -341,8 +341,8 @@ class Calculator:
             if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
                 text = f"✨ {other_name}면 +{other['net'] - net:,.0f}"
                 badges.append(text)
-                tips[text] = (f"{other_name} 로 팔믄 개당 {other['net']:,.0f}길 남는다 (지금 기준 {net:,.0f}길). "
-                              f"대신 {other_name} 로 만들 수 있어야 된데이.")
+                tips[text] = (f"{other_name} 로 팔면 개당 {other['net']:,.0f}길 남는다 개굴 (지금 기준 {net:,.0f}길). "
+                              f"대신 {other_name} 로 만들 수 있어야 한다 개굴.")
         return v
 
     def world_badge(self, row):
@@ -361,8 +361,8 @@ class Calculator:
             text = f"🌐 {name} +{diff:,.0f}"
             dc = row["보기"]["dc"]
             dc["badges"].append(text)
-            dc["tips"][text] = (f"{name} 서버에서 팔믄 개당 {best['net']:,.0f}길, {eun(home_name)} {home['net']:,.0f}길 남는다. "
-                                "거기 리테이너 있는 캐릭터가 있어야 올릴 수 있데이. 위에서 서버를 고르믄 서버별 순위도 볼 수 있다.")
+            dc["tips"][text] = (f"{name} 서버에서 팔면 개당 {best['net']:,.0f}길, {eun(home_name)} {home['net']:,.0f}길 남는다 개굴. "
+                                "거기 리테이너 있는 캐릭터가 있어야 올릴 수 있다 개굴. 위에서 서버를 고르면 서버별 순위도 볼 수 있다 개굴.")
 
     def world_name(self, wid):
         return self.world_names.get(str(wid), str(wid))

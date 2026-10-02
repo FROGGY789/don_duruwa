@@ -74,7 +74,7 @@ function renderHeader(d) {
   return `
     <header class="page-head">
       <div class="eyebrow">CRAFTING PROFIT REPORT</div>
-      <h1>파판14 제작 수익 분석<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라">🐸</button></h1>
+      <h1>파판14 제작 수익 분석<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
       <div class="subtitle">${sub}</div>
     </header>
     ${renderServers(d)}
@@ -138,7 +138,7 @@ function renderTable(d, rows) {
   }).join("");
 
   if (!rows.length) {
-    return `<div class="table-wrap"><div class="empty">🐸 개굴… 필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
+    return `<div class="table-wrap"><div class="empty">🐸 필터 통과한 게 하나도 없다 개굴. 왼쪽에서 조건을 조금 풀어 봐라 개굴.</div></div>`;
   }
   const body = rows.map((r, i) => {
     const v = V(r);
@@ -169,7 +169,7 @@ function renderTable(d, rows) {
 }
 
 function renderDetail(d, row) {
-  if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라. 재료 상세 여기 뜬데이.</div>`;
+  if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. 재료 상세가 여기 뜬다 개굴.</div>`;
   const body = row.materials.map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
@@ -217,7 +217,7 @@ function renderDetail(d, row) {
 function lineChart(days) {
   const W = 320, H = 120, L = 44, R = 8, T = 10, B = 22;
   const pts = days.map((x, i) => ({ ...x, i })).filter((x) => x.median != null);
-  if (!pts.length) return `<div class="chart-empty">팔린 기록이 없어가 그래프 몬 그린다.</div>`;
+  if (!pts.length) return `<div class="chart-empty">팔린 기록이 없어서 그래프를 못 그린다 개굴.</div>`;
   let lo = Math.min(...pts.map((p) => p.median)), hi = Math.max(...pts.map((p) => p.median));
   if (lo === hi) { lo *= 0.9; hi *= 1.1; }
   const x = (i) => L + (days.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (days.length - 1));
@@ -258,7 +258,7 @@ function renderInsights(d, row) {
   let change = "";
   if (t.change != null) {
     const down = t.change <= -10, up = t.change >= 10;
-    change = `<span class="trend-note ${down ? "down" : up ? "up" : ""}">${down ? "📉" : up ? "📈" : "➖"} 최근 2일 판매가가 그 전보다 ${t.change > 0 ? "+" : ""}${t.change.toFixed(0)}%${down ? " — 떨어지는 중이데이, 조심해라" : ""}</span>`;
+    change = `<span class="trend-note ${down ? "down" : up ? "up" : ""}">${down ? "📉" : up ? "📈" : "➖"} 최근 2일 판매가가 그 전보다 ${t.change > 0 ? "+" : ""}${t.change.toFixed(0)}%${down ? " — 떨어지는 중이다 개굴, 조심해라 개굴" : ""}</span>`;
   }
   const charts = t.days.length ? `
     <div class="insight">
@@ -279,7 +279,7 @@ function renderInsights(d, row) {
     };
     quality = `
       <div class="insight">
-        <div class="insight-head"><h3>✨ NQ · HQ 비교 · ${esc(serverName(d))}</h3><span class="faint">재료비는 똑같이 쳤다. HQ 로 팔라믄 HQ 재료나 제작 실력이 받쳐줘야 된데이.</span></div>
+        <div class="insight-head"><h3>✨ NQ · HQ 비교 · ${esc(serverName(d))}</h3><span class="faint">재료비는 똑같이 쳤다 개굴. HQ 로 팔려면 HQ 재료나 제작 실력이 받쳐줘야 한다 개굴.</span></div>
         <div class="q-grid">${box("NQ")}${box("HQ")}</div>
       </div>`;
   }
@@ -304,7 +304,7 @@ function renderWorlds(d, row) {
   return `
     <div class="evidence worlds">
       <div class="insight-head"><h3>🌐 서버별 판매 비교</h3>
-        <span class="faint">서버마다 그 서버 기록·매물만 보고 계산했다. 줄 누르믄 그 서버 순위로 넘어간데이. 👑 = 판매 2건 이상 중 제일 많이 남는 곳</span></div>
+        <span class="faint">서버마다 그 서버 기록·매물만 보고 계산했다 개굴. 줄 누르면 그 서버 순위로 넘어간다 개굴. 👑 = 판매 2건 이상 중 제일 많이 남는 곳</span></div>
       <div class="table-wrap"><table>
         <thead><tr><th>서버</th><th class="num">판매 건수</th><th class="num">판매 중앙값</th><th class="num">최저 매물</th>
           <th class="num">매물 수</th><th class="num">예상 판매가</th><th class="num">순수익</th><th>순위</th></tr></thead>
@@ -326,16 +326,16 @@ function renderEvidence(d, row) {
   } else {
     formula = `${esc(name)} 판매 예상가 = min(판매 중앙값 <b>${gil(v.median)}</b>, 최저 매물 <b>${v.minListing == null ? "없음" : gil(v.minListing)}</b>)`;
   }
-  if (v.cap != null) formula += ` → HQ <b>${gil(v.cap)}</b> 보다 비싸게는 몬 파니까 깎음`;
+  if (v.cap != null) formula += ` → HQ <b>${gil(v.cap)}</b> 보다 비싸게는 못 파니까 깎았다 개굴`;
   formula += ` = <b class="ev-sell">${gil(v.sell)}</b>길 <span class="faint">(${esc(ev.quality)} 기준${v.dropped ? ` · 이상 거래 ${v.dropped}건 빼고` : ""})</span>`;
   const worlds = ev.worlds.slice().sort((a, b) => (b.world === name) - (a.world === name));
   const blocks = worlds.map((w) => {
-    const sales = w.recent.length ? w.recent.map((x) => `<tr class="${x.odd ? "odd" : ""}"${x.odd ? ` data-tip="${esc(w.world)} 보통 가격(${gil(w.median)}길)이랑 너무 달라가 이상 거래로 보고 뺐다"` : ""}>
+    const sales = w.recent.length ? w.recent.map((x) => `<tr class="${x.odd ? "odd" : ""}"${x.odd ? ` data-tip="${esc(w.world)} 보통 가격(${gil(w.median)}길)이랑 너무 달라서 이상 거래로 보고 뺐다 개굴"` : ""}>
         <td>${x.odd ? "❗ " : ""}${esc(x.when)}</td><td>${q(x.hq)}</td><td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="faint">팔린 기록이 없다</td></tr>`;
-    const cheap = w.cheap.length ? w.cheap.map((x) => `<tr class="${x.bait ? "bait" : ""}"${x.bait ? ` data-tip="${esc(w.world)} 보통 가격의 절반도 안 돼가 미끼 매물로 보고 뺐다"` : ""}>
+      : `<tr><td colspan="4" class="faint">팔린 기록이 없다 개굴</td></tr>`;
+    const cheap = w.cheap.length ? w.cheap.map((x) => `<tr class="${x.bait ? "bait" : ""}"${x.bait ? ` data-tip="${esc(w.world)} 보통 가격의 절반도 안 돼서 미끼 매물로 보고 뺐다 개굴"` : ""}>
         <td>${q(x.hq)}</td><td class="num">${gil(x.price)}</td><td class="num">${x.qty}</td><td>${x.bait ? '<span class="faint">미끼</span>' : ""}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="faint">지금 매물이 없다</td></tr>`;
+      : `<tr><td colspan="4" class="faint">지금 매물이 없다 개굴</td></tr>`;
     return `
       <div class="ev-world${w.world === name ? " current" : ""}">
         <div class="ev-world-head"><b>${esc(w.world)}</b>${w.home ? ' <span class="badge nq">내 서버</span>' : ""}
@@ -349,24 +349,24 @@ function renderEvidence(d, row) {
   return `
     <div class="evidence">
       <div class="insight-head"><h3>💰 판매가 근거</h3><span class="ev-formula">${formula}</span></div>
-      <div class="faint ev-note">이상 거래(❗)랑 미끼 매물은 서버마다 <b>그 서버</b> 보통 가격 기준으로 가른다. 원래 싼 서버를 싸다고 빼진 않는데이.</div>
+      <div class="faint ev-note">이상 거래(❗)랑 미끼 매물은 서버마다 <b>그 서버</b> 보통 가격 기준으로 가른다 개굴. 원래 싼 서버를 싸다고 빼진 않는다 개굴.</div>
       <div class="ev-worlds">${blocks}</div>
     </div>`;
 }
 
 // ── 아이템 검색 결과 ──
 const SEARCH_KIND = {
-  ok: ["✅", "목록에 있데이 — 누르믄 표에서 보여준다"],
-  filtered: ["🚫", "필터에 걸렸다"],
-  nocalc: ["❓", "계산 몬 했다"],
-  out: ["⛔", "분석 범위 밖이다"],
-  norecipe: ["🙅", "제작 몬 하는 템이다"],
+  ok: ["✅", "목록에 있다 개굴 — 누르면 표에서 보여준다"],
+  filtered: ["🚫", "필터에 걸렸다 개굴"],
+  nocalc: ["❓", "계산 못 했다 개굴"],
+  out: ["⛔", "분석 범위 밖이다 개굴"],
+  norecipe: ["🙅", "제작 못 하는 템이다 개굴"],
 };
 function renderSearch(d) {
   const sr = d.search;
   if (!sr) return "";
   if (!sr.items.length) {
-    return `<section class="search-box"><div class="search-head"><b>🔍 "${esc(sr.query)}"</b><span class="faint">🐸 그런 이름은 하나도 없다. 글자 다시 봐 봐라.</span></div></section>`;
+    return `<section class="search-box"><div class="search-head"><b>🔍 "${esc(sr.query)}"</b><span class="faint">🐸 그런 이름은 하나도 없다 개굴. 글자 다시 봐 봐라 개굴.</span></div></section>`;
   }
   const items = sr.items.map((x) => {
     const [icon, label] = SEARCH_KIND[x.kind];
@@ -378,11 +378,11 @@ function renderSearch(d) {
         <div class="sr-why"><span class="sr-kind">${icon} ${esc(label)}</span>${x.why ? ` — ${esc(x.why)}` : ""}</div>
       </div>`;
   }).join("");
-  const more = sr.total > sr.items.length ? `<div class="sr-more faint">… ${sr.total - sr.items.length}개 더 있다. 좀 더 자세히 쳐 봐라.</div>` : "";
+  const more = sr.total > sr.items.length ? `<div class="sr-more faint">… ${sr.total - sr.items.length}개 더 있다 개굴. 좀 더 자세히 쳐 봐라 개굴.</div>` : "";
   return `
     <section class="search-box">
       <div class="search-head"><b>🔍 "${esc(sr.query)}" 검색 결과 ${sr.total.toLocaleString("ko-KR")}개</b>
-        <span class="faint">필터랑 상관없이 다 찾아준데이</span></div>
+        <span class="faint">필터랑 상관없이 다 찾아준다 개굴</span></div>
       <div class="sr-list">${items}</div>${more}
     </section>`;
 }
@@ -435,7 +435,7 @@ function renderCart(d) {
       <div class="drawer-body">
         <div class="detail-top">
           <div>
-            <div class="desc">담은 거 ${rows.length}개 · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌믄 된데이 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어가 빠진 거 ${missing}개` : ""}</div>
+            <div class="desc">담은 거 ${rows.length}개 · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌면 된다 개굴 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어서 빠진 거 ${missing}개` : ""}</div>
           </div>
           <div class="kv">
             <div><span>재료비</span><b>${gil(cost)}</b></div>
@@ -466,7 +466,7 @@ function renderFailed(d) {
     <td class="num">${f.level}</td><td class="reason">${esc(f.reason)}</td></tr>`).join("");
   return `
     <details class="failed"${state.failedOpen ? " open" : ""}>
-      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">팔린 기록이나 재료 시세가 없어가 계산 몬 한 기다</span></summary>
+      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">팔린 기록이나 재료 시세가 없어서 계산 못 한 거다 개굴</span></summary>
       <div class="failed-body"><div class="table-wrap"><table>
         <thead><tr><th>아이템명</th><th>직업</th><th class="num">레시피 레벨</th><th>제외 사유</th></tr></thead>
         <tbody>${body}${more}</tbody>
@@ -514,14 +514,14 @@ export default function (component) {
       renderSearch(data) +
       renderHeader(data) +
       renderTabs(data) +
-      `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이 · <b>+</b> 누르믄 장보기에 담긴다</span>
+      `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">줄 누르면 밑에 재료 상세가 나온다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴</span>
          <span class="right">${cartCount ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderDetail(data, selected) +
       renderFailed(data) +
       renderCart(data) +
       renderCartFab() +
-      `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었데이 · 문의도 여기로 하이소</footer>`;
+      `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었다 개굴 · 문의도 여기로 해라 개굴</footer>`;
     state.cartAnim = false;
     state.fabBump = false;
     root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount));
@@ -556,7 +556,7 @@ export default function (component) {
     const pop = document.createElement("div");
     pop.className = "pop";
     pop.innerHTML = `<div class="pop-title">📖 필요한 비전서</div><div class="pop-body">${esc(btn.dataset.pop)}</div>
-      <div class="pop-hint">이 비전서 읽어야 만들 수 있데이.</div>`;
+      <div class="pop-hint">이 비전서를 읽어야 만들 수 있다 개굴.</div>`;
     root.appendChild(pop);
     const b = btn.getBoundingClientRect();
     const w = pop.offsetWidth;

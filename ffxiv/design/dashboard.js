@@ -74,7 +74,7 @@ function renderHeader(d) {
   return `
     <header class="page-head">
       <div class="eyebrow">CRAFTING PROFIT REPORT</div>
-      <h1>파판14 제작 수익 분석</h1>
+      <h1>파판14 제작 수익 분석<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라">🐸</button></h1>
       <div class="subtitle">${sub}</div>
     </header>
     ${renderServers(d)}
@@ -138,7 +138,7 @@ function renderTable(d, rows) {
   }).join("");
 
   if (!rows.length) {
-    return `<div class="table-wrap"><div class="empty">필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
+    return `<div class="table-wrap"><div class="empty">🐸 개굴… 필터 통과한 기 하나도 없다. 왼쪽에서 조건 쪼매 풀어 봐라.</div></div>`;
   }
   const body = rows.map((r, i) => {
     const v = V(r);
@@ -169,7 +169,7 @@ function renderTable(d, rows) {
 }
 
 function renderDetail(d, row) {
-  if (!row) return `<div class="detail-hint">표에서 아이템 하나 눌러 봐라. 재료 상세 여기 뜬데이.</div>`;
+  if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라. 재료 상세 여기 뜬데이.</div>`;
   const body = row.materials.map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
@@ -366,7 +366,7 @@ function renderSearch(d) {
   const sr = d.search;
   if (!sr) return "";
   if (!sr.items.length) {
-    return `<section class="search-box"><div class="search-head"><b>🔍 "${esc(sr.query)}"</b><span class="faint">그런 이름은 하나도 없다. 글자 다시 봐 봐라.</span></div></section>`;
+    return `<section class="search-box"><div class="search-head"><b>🔍 "${esc(sr.query)}"</b><span class="faint">🐸 그런 이름은 하나도 없다. 글자 다시 봐 봐라.</span></div></section>`;
   }
   const items = sr.items.map((x) => {
     const [icon, label] = SEARCH_KIND[x.kind];
@@ -520,10 +520,31 @@ export default function (component) {
       renderDetail(data, selected) +
       renderFailed(data) +
       renderCart(data) +
-      renderCartFab();
+      renderCartFab() +
+      `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었데이 · 문의도 여기로 하이소</footer>`;
     state.cartAnim = false;
     state.fabBump = false;
     root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount));
+  }
+
+  // 🐸 제목 옆 개구리를 누르믄 개구리 비가 한 번 더 온다
+  function frogRain() {
+    root.querySelector(".frog-rain")?.remove();
+    const rain = document.createElement("div");
+    rain.className = "frog-rain";
+    for (let i = 0; i < 24; i++) {
+      const f = document.createElement("span");
+      f.textContent = "🐸";
+      f.style.left = Math.random() * 97 + "vw";
+      f.style.fontSize = 1.2 + Math.random() * 1.6 + "rem";
+      f.style.animationDelay = Math.random() * 1.5 + "s";
+      f.style.animationDuration = 2.2 + Math.random() * 1.6 + "s";
+      f.style.setProperty("--spin", (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 450) + "deg");
+      f.style.setProperty("--drift", (Math.random() * 16 - 8) + "vw");
+      rain.appendChild(f);
+    }
+    root.appendChild(rain);
+    setTimeout(() => rain.remove(), 5500);
   }
 
   // 비전서 팝오버: 뱃지를 누르면 뜨고, 다른 데를 누르거나 스크롤하면 닫힌다
@@ -560,6 +581,7 @@ export default function (component) {
       return;
     }
     if (!e.target.closest(".pop")) closePop();
+    if (e.target.closest("[data-frogs]")) return frogRain();
     const pick = e.target.closest("[data-pick]");
     if (pick) {
       const id = Number(pick.dataset.pick);

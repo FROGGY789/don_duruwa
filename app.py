@@ -17,7 +17,7 @@ from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
 from ffxiv.changelog import CHANGELOG
 from ffxiv.profit import analyze, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 
-st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🪑", layout="wide")
+st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🐸", layout="wide")
 ui.password_gate()  # Streamlit Secrets 에 app_password 가 있으면 비밀번호 화면부터
 
 cfg = load_config()
@@ -80,6 +80,9 @@ theme = sb.segmented_control("화면 모드", list(ui.THEMES), default=ui.DEFAUL
 palette = sb.segmented_control("색감", list(ui.PALETTES), default=ui.DEFAULT_PALETTE, required=True,
                                key="palette", bind="query-params", width="stretch")
 ui.apply_theme(theme, palette)
+if not st.session_state.get("frogs_welcomed"):  # 들어오자마자 한 번 개구리 비
+    st.session_state["frogs_welcomed"] = True
+    ui.frog_rain()
 
 try:
     gd = load_gamedata(cfg["datamining_base_url"])
@@ -196,7 +199,7 @@ if refresh_clicked or auto_due:
 elif cache.missing(ids) and now - r["last_try"] > 120:
     start_refresh(False, ids)
 if st.session_state.pop("just_refreshed", False):
-    st.toast("시세 새로 받아왔데이!")
+    st.toast("시세 새로 받아왔데이!", icon="🐸")
 notice = None
 if not cache.updated_at:
     notice = {"kind": "info", "text": "처음이라 시세 받아오는 중이데이. 아이템이 억수로 많아가 5~10분쯤 걸리니까 "

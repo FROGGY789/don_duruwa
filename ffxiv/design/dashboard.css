@@ -294,3 +294,19 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer .cart-groups{grid-template-columns:1fr}
 /* 넓은 화면에선 서랍 열면 표를 왼쪽으로 좁혀서 안 가리게 */
 @media (min-width:1300px){.ffx.with-drawer{padding-right:400px}}
+
+/* 🐸 개구리들 */
+.frog-peek{border:0;background:none;padding:0 0 0 .35em;font-size:.8em;cursor:pointer;vertical-align:.08em;display:inline-block}
+.frog-peek:hover{animation:frog-hop .5s ease}
+@keyframes frog-hop{30%{transform:translateY(-8px) rotate(-10deg)}60%{transform:translateY(0) rotate(5deg)}}
+.cart-fab{overflow:visible}
+.cart-fab::before{content:"🐸";position:absolute;top:-17px;left:14px;font-size:20px;line-height:1;pointer-events:none}
+.cart-fab:hover::before{animation:frog-hop .5s ease}
+.frog-foot{margin-top:var(--space-8);padding:var(--space-4) 0;border-top:1px dashed var(--border);text-align:center;color:var(--text-faint);font-size:var(--fs-xs)}
+.frog-foot b{color:var(--primary-strong);font-weight:600}
+.frog-sit{display:inline-block}
+.frog-foot:hover .frog-sit{animation:frog-hop .5s ease}
+.frog-rain{position:fixed;inset:0;pointer-events:none;z-index:1000020;overflow:hidden}
+.frog-rain span{position:absolute;top:-3rem;opacity:0;animation-name:frog-fall;animation-timing-function:cubic-bezier(.45,.05,.55,.95);animation-fill-mode:forwards}
+@keyframes frog-fall{0%{transform:translate(0,0) rotate(0);opacity:0}8%{opacity:1}85%{opacity:1}100%{transform:translate(var(--drift),110vh) rotate(var(--spin));opacity:0}}
+@media (prefers-reduced-motion:reduce){.frog-rain{display:none}.frog-peek:hover,.cart-fab:hover::before,.frog-foot:hover .frog-sit{animation:none}}

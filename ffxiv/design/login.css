@@ -11,3 +11,5 @@
 [data-testid="stForm"] [data-baseweb="base-input"] { background: var(--surface-2) !important; }
 .login-error { margin-top: var(--space-3); padding: 10px var(--space-4); border-radius: var(--radius); text-align: center;
   font-size: var(--fs-sm); color: var(--negative); background: var(--negative-soft); border: 1px solid color-mix(in oklab, var(--negative) 30%, transparent); }
+.login-contact { margin-top: var(--space-4); text-align: center; font-size: var(--fs-sm); color: var(--text-muted); }
+.login-contact b { color: var(--primary-strong); font-weight: 600; }

@@ -7,6 +7,7 @@
 import hmac
 from html import escape as html_escape
 import math
+import random
 import re
 from pathlib import Path
 
@@ -44,7 +45,19 @@ def apply_theme(theme, palette):
 
 
 def sidebar_brand(sb):
-    sb.html('<div class="brand"><span class="brand-mark"></span><span class="brand-name">제작 수익 분석</span></div>')
+    sb.html('<div class="brand"><span class="brand-frog" title="개굴">🐸</span><span class="brand-name">제작 수익 분석</span></div>')
+
+
+def frog_rain(where=st, count=28):
+    """하늘에서 개구리가 우수수 떨어진다 (만든 사람이 개구리를 좋아해서). 몇 초 뒤 알아서 사라진다."""
+    frogs = []
+    for _ in range(count):
+        size = random.uniform(1.2, 2.8)
+        frogs.append(
+            f'<span style="left:{random.uniform(0, 97):.1f}vw;font-size:{size:.2f}rem;'
+            f'animation-delay:{random.uniform(0, 1.8):.2f}s;animation-duration:{random.uniform(2.2, 3.8):.2f}s;'
+            f'--spin:{random.choice([-1, 1]) * random.randint(90, 540)}deg;--drift:{random.uniform(-8, 8):.1f}vw">🐸</span>')
+    where.html('<div class="frog-rain" aria-hidden="true">' + "".join(frogs) + "</div>")
 
 
 def sidebar_title(sb, text):
@@ -132,6 +145,7 @@ def password_gate():
     st.html("<style>" + _read("login.css") + "</style>")
     st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
             '<h1>파판14 제작 수익 분석</h1><p>비밀번호 쳐야 화면 열어준데이.</p></div>')
+    frog_rain()
     with st.form("login", border=False):
         typed = st.text_input("비밀번호", type="password", placeholder="비밀번호")
         ok = st.form_submit_button("들어가기", type="primary", width="stretch")
@@ -139,5 +153,6 @@ def password_gate():
         if hmac.compare_digest(typed.encode(), str(password).encode()):
             st.session_state["authed"] = True
             st.rerun()
-        st.html('<div class="login-error">비밀번호가 틀렸다 아이가. 다시 쳐 봐라.</div>')
+        st.html('<div class="login-error">🐸 비밀번호가 틀렸다 아이가. 다시 쳐 봐라.</div>')
+    st.html('<div class="login-contact">🐸 문의는 <b>로살리아@초코보</b> 한테 하이소</div>')
     st.stop()

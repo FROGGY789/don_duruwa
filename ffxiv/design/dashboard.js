@@ -390,7 +390,7 @@ function renderSearch(d) {
 // ── 장보기 목록 ──
 function renderCart(d) {
   const ids = Object.keys(state.cart).map(Number);
-  if (!ids.length) return "";
+  if (!ids.length || !state.cartOpen) return "";
   const rows = ids.map((id) => d.rows.find((r) => r.id === id)).filter(Boolean);
   const missing = ids.length - rows.length;
   const groups = {};
@@ -427,11 +427,14 @@ function renderCart(d) {
         <td class="num faint">@${gil(it.unit)}</td><td class="num">${gil(it.total)}</td></tr>`).join("")}</tbody></table>
     </div>`).join("");
   return `
-    <section class="detail cart" id="cart">
-      <div class="detail-card">
+    <aside class="cart drawer${state.cartAnim ? " anim" : ""}" id="cart" aria-label="장보기 목록">
+      <div class="drawer-head">
+        <h2>🛒 장보기 목록</h2>
+        <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button>
+      </div>
+      <div class="drawer-body">
         <div class="detail-top">
           <div>
-            <h2>🛒 장보기 목록</h2>
             <div class="desc">담은 거 ${rows.length}개 · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌믄 된데이 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어가 빠진 거 ${missing}개` : ""}</div>
           </div>
           <div class="kv">
@@ -443,7 +446,14 @@ function renderCart(d) {
         <div class="cart-chips">${chips}<button type="button" class="cart-clear" data-clear="1">전부 비우기</button></div>
         <div class="cart-groups">${tables}</div>
       </div>
-    </section>`;
+    </aside>`;
+}
+
+// 화면 오른쪽 아래에 떠 있는 장보기 버튼
+function renderCartFab() {
+  const n = Object.keys(state.cart).length;
+  if (!n || state.cartOpen) return "";
+  return `<button type="button" class="cart-fab${state.fabBump ? " bump" : ""}" data-open-cart="1">🛒 장보기 <b>${n}</b></button>`;
 }
 
 function renderFailed(d) {
@@ -486,6 +496,12 @@ export default function (component) {
   if (!data.servers.some((s) => s.key === state.server)) state.server = "dc";
 
   function render() {
+    const keepScroll = root.querySelector(".drawer-body")?.scrollTop;
+    renderInner();
+    const body = root.querySelector(".drawer-body");
+    if (body && keepScroll != null) body.scrollTop = keepScroll;
+  }
+  function renderInner() {
     const rows = sortedRows(data);
     if (!data.rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
     const selected = data.rows.find((r) => r.id === state.selected);
@@ -499,11 +515,15 @@ export default function (component) {
       renderHeader(data) +
       renderTabs(data) +
       `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">줄 누르믄 밑에 재료 상세 나온데이 · <b>+</b> 누르믄 장보기에 담긴다</span>
-         <span class="right">${cartCount ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 보기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
+         <span class="right">${cartCount ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderDetail(data, selected) +
+      renderFailed(data) +
       renderCart(data) +
-      renderFailed(data);
+      renderCartFab();
+    state.cartAnim = false;
+    state.fabBump = false;
+    root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount));
   }
 
   // 비전서 팝오버: 뱃지를 누르면 뜨고, 다른 데를 누르거나 스크롤하면 닫힌다
@@ -543,14 +563,21 @@ export default function (component) {
     const pick = e.target.closest("[data-pick]");
     if (pick) {
       const id = Number(pick.dataset.pick);
-      if (state.cart[id]) delete state.cart[id]; else state.cart[id] = 1;
+      if (state.cart[id]) delete state.cart[id]; else { state.cart[id] = 1; state.fabBump = true; }
+      if (!Object.keys(state.cart).length) state.cartOpen = false;
       saveCart();
       return render();
     }
     const unpick = e.target.closest("[data-unpick]");
-    if (unpick) { delete state.cart[Number(unpick.dataset.unpick)]; saveCart(); return render(); }
-    if (e.target.closest("[data-clear]")) { state.cart = {}; saveCart(); return render(); }
-    if (e.target.closest("[data-jump]")) return root.querySelector("#cart")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (unpick) {
+      delete state.cart[Number(unpick.dataset.unpick)];
+      if (!Object.keys(state.cart).length) state.cartOpen = false;
+      saveCart();
+      return render();
+    }
+    if (e.target.closest("[data-clear]")) { state.cart = {}; state.cartOpen = false; saveCart(); return render(); }
+    if (e.target.closest("[data-jump], [data-open-cart]")) { state.cartOpen = true; state.cartAnim = true; return render(); }
+    if (e.target.closest("[data-close-cart]")) { state.cartOpen = false; return render(); }
     if (e.target.closest(".cart")) return;
     const go = e.target.closest("[data-goto]");
     if (go) {
@@ -625,6 +652,14 @@ export default function (component) {
     tip.style.top = e.clientY - 34 + "px";
   };
   root.onmouseleave = () => root.querySelector(".tip")?.remove();
+
+  if (!root.__escBound) {
+    root.__escBound = true;
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.cartOpen) { state.cartOpen = false; root.__render?.(); }
+    });
+  }
+  root.__render = render;
 
   if (!root.__toggleBound) {
     root.__toggleBound = true;

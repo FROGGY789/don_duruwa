@@ -137,7 +137,13 @@ with sb.expander(f"직업별 레벨 · {len(JOB_NAMES)}개 직업", expanded=Fal
     cols = st.columns(2)
     job_levels = {job: cols[i % 2].number_input(job, 1, 100, cfg["job_levels"][job], key=f"lv_{job}")
                   for i, job in enumerate(JOB_NAMES)}
-sell_hq = sb.toggle("HQ 판매", value=cfg["sell_hq"], help="HQ 있는 아이템은 HQ 시세로 판다 치는 기다.")
+QUALITIES = {"NQ": False, "HQ": True, "통합": None}
+sell_quality = sb.segmented_control(
+    "판매 품질", list(QUALITIES), default=cfg.get("sell_quality", "NQ") if cfg.get("sell_quality") in QUALITIES else "NQ",
+    required=True, width="stretch",
+    help="HQ 있는 템을 어느 시세로 팔 건지. NQ = NQ 로 팔린 기록만, HQ = HQ 로 팔린 기록만, "
+         "통합 = 안 가리고 다 섞어서. HQ 못 만드는 템은 어느 걸 골라도 NQ 시세로 본데이.")
+sell_hq = QUALITIES[sell_quality]
 batch_size = sb.number_input("한 번에 제작할 횟수", 1, 99, cfg["batch_size"],
                              help="재료를 싼 매물부터 이 횟수만큼 산다 치고 원가 계산한데이.")
 
@@ -269,7 +275,7 @@ def row_data(r):
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,
-        "sellingHq": bool(r["판매 품질"]),
+        "sellingHq": r["판매 품질"],
         "resultAmount": r["결과물 개수"],
         "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
     }

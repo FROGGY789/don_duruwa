@@ -239,6 +239,11 @@ class Calculator:
     def evaluate(self, recipe):
         item = self.gd.items[recipe.result_id]
         hq = self.sell_hq if item.can_hq else None
+        # 고른 품질로 팔린 기록이 아예 없고 다른 품질로는 있으믄 그쪽으로 (고레벨 장비는 거의 HQ 로만 팔린다)
+        switched = (hq is not None and self.stats(recipe.result_id, hq, self.outlier_ratio).median is None
+                    and self.stats(recipe.result_id, not hq, self.outlier_ratio).median is not None)
+        if switched:
+            hq = not hq
         tree = self.craft(recipe, self.batch, ())
 
         extra = []  # 보기와 상관없는 뱃지
@@ -248,10 +253,16 @@ class Calculator:
         if recipe.quest_unlock:
             extra.append("퀘스트 해금")
             tips["퀘스트 해금"] = "퀘스트 깨야 배울 수 있는 레시피다."
-        if item.can_hq:
-            q = "HQ 기준" if self.sell_hq else "NQ 기준"
+        if switched:
+            q, other = ("HQ", "NQ") if hq else ("NQ", "HQ")
+            text = f"{q} 기준 ({other} 기록 없음)"
+            extra.append(text)
+            tips[text] = (f"{self.hours // 24:.0f}일 동안 {other} 로 팔린 기록이 하나도 없어가 {q} 시세로 계산했다. "
+                          + ("HQ 로 만들 실력이 돼야 이 값 받는데이." if hq else "HQ 로 올리믄 더 받을 수도 있데이."))
+        elif item.can_hq:
+            q = "HQ 기준" if hq else "NQ 기준"
             extra.append(q)
-            tips[q] = ("NQ 시세로 계산했다. 사이드바 'HQ 판매' 로 바꿀 수 있데이." if not self.sell_hq
+            tips[q] = ("NQ 시세로 계산했다. 사이드바 'HQ 판매' 로 바꿀 수 있데이." if not hq
                        else "HQ 시세로 계산했다. HQ 로 만들 실력이 돼야 이 값 받는데이.")
 
         dc = self.stats(recipe.result_id, hq, self.outlier_ratio, None)
@@ -267,6 +278,7 @@ class Calculator:
             "분류": "가구" if item.ui_category in self.furniture else "일반",
             "재료 여유 배수": self.material_ratio(tree),
             "결과물 개수": recipe.result_amount,
+            "판매 품질": hq,
             "제외 사유": "",
             "보기": {key: self.view(recipe.result_id, item, hq, world, tree.unit_cost) for key, world in self.views},
             "근거": self.evidence(recipe.result_id, hq),
@@ -275,7 +287,7 @@ class Calculator:
             missing = sorted({self.gd.name(n.item_id) for n in walk(tree) if n.unit_cost is None and not n.children})
             row["제외 사유"] = "재료 시세 없음: " + ", ".join(missing)
         elif dc.median is None:
-            row["제외 사유"] = "판매 기록 없음"
+            row["제외 사유"] = f"{self.hours // 24:.0f}일 동안 판매 기록 없음" + (" (NQ·HQ 둘 다)" if item.can_hq else "")
         self.world_badge(row)
         return row, tree
 
@@ -326,7 +338,7 @@ class Calculator:
             tips[text] = f"최근 2일 판매가 중앙값이 그 전 며칠보다 {-change:.0f}% 떨어졌다. 만들어 놓고 보믄 값 더 빠질 수 있데이."
         if item.can_hq:
             v["quality"] = self.quality_compare(item_id, unit_cost, world)
-            other_name = "HQ" if not self.sell_hq else "NQ"
+            other_name = "NQ" if hq else "HQ"
             other = v["quality"][other_name]
             if other["net"] is not None and other["net"] > net * 1.1 and other["net"] - net >= 1000:
                 text = f"✨ {other_name}면 +{other['net'] - net:,.0f}"

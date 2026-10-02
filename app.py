@@ -269,7 +269,7 @@ def row_data(r):
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",
         "materials": materials,
-        "sellingHq": sell_hq,
+        "sellingHq": bool(r["판매 품질"]),
         "resultAmount": r["결과물 개수"],
         "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
     }

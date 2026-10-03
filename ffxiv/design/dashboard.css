@@ -293,7 +293,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer .kv div{align-items:flex-start}
 .drawer .cart-groups{grid-template-columns:1fr}
 /* 넓은 화면에선 서랍 열면 표를 왼쪽으로 좁혀서 안 가리게 */
-@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(460px - var(--space-10))}}
+@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(460px - var(--space-10) - var(--space-4))}}
 
 /* 🐸 개구리들 */
 .frog-peek{border:0;background:none;padding:0 0 0 .35em;font-size:.8em;cursor:pointer;vertical-align:.08em;display:inline-block}

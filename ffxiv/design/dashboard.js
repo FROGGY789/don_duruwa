@@ -141,7 +141,7 @@ function sortedRows(d) {
 function renderTable(d, rows) {
   const cols = columns(d);
   const head = cols.map((c) => {
-    const cls = [c.num ? "num" : "", c.sortable ? "sortable" : "", state.sort === c.key ? "sorted" : "", state.sort === c.key && state.dir > 0 ? "asc" : ""]
+    const cls = [`col-${c.key}`, c.num ? "num" : "", c.sortable ? "sortable" : "", state.sort === c.key ? "sorted" : "", state.sort === c.key && state.dir > 0 ? "asc" : ""]
       .filter(Boolean)
       .join(" ");
     return `<th class="${cls}" ${c.sortable ? `data-sort="${c.key}" data-asc="${c.asc ? 1 : 0}"` : ""}>${esc(c.label.replace("{period}", d.period))}</th>`;
@@ -174,9 +174,9 @@ function renderTable(d, rows) {
       etc: `<td><div class="badges">${badges}</div></td>`,
     };
     return `
-      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key]).join("")}</tr>`;
+      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>`;
   }).join("");
-  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="table-wrap rank-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function renderDetail(d, row) {

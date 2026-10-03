@@ -293,7 +293,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer .kv div{align-items:flex-start}
 .drawer .cart-groups{grid-template-columns:1fr}
 /* 넓은 화면에선 서랍 열면 표를 왼쪽으로 좁혀서 안 가리게 */
-@media (min-width:1300px){.ffx.with-drawer{padding-right:400px}}
+@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(460px - var(--space-10))}}
 
 /* 🐸 개구리들 */
 .frog-peek{border:0;background:none;padding:0 0 0 .35em;font-size:.8em;cursor:pointer;vertical-align:.08em;display:inline-block}
@@ -313,3 +313,11 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .bundles .ev-note b{color:var(--primary-strong)}
 .bundles .bundle-cap{margin-top:var(--space-4)}
 .bundles td.bundle-best{background:var(--primary-soft);color:var(--primary-strong);font-weight:600}
+
+/* 순위 표 촘촘하게: 칸 제목은 두 줄까지 접는다 */
+.rank-table thead th{white-space:normal;word-break:keep-all;line-height:1.3;vertical-align:bottom;padding:10px 8px}
+.rank-table thead th.num{min-width:3.5em}
+.rank-table tbody td{padding:10px 8px}
+.rank-table td[data-col="etc"]{min-width:150px}
+.rank-table td[data-col="etc"] .badges{max-width:200px}
+.rank-table td[data-col="name"]{white-space:normal;word-break:keep-all;min-width:140px;max-width:220px;line-height:1.35}

@@ -7,7 +7,7 @@ html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .stApp, .stApp input, .stApp button, .stApp textarea, .stApp select,
 [data-testid="stSidebar"], [data-baseweb="popover"] { font-family: var(--font-sans) !important; }
 [data-testid="stHeader"] { background: transparent !important; }
-[data-testid="stMainBlockContainer"] { padding: var(--space-8) var(--space-10) var(--space-10); max-width: 1600px; }
+[data-testid="stMainBlockContainer"] { padding: var(--space-8) var(--space-10) var(--space-10); max-width: 2400px; }
 @media (max-width: 900px) { [data-testid="stMainBlockContainer"] { padding: var(--space-10) var(--space-4) var(--space-8); } }
 .stApp p, .stApp span, .stApp label { color: inherit; }
 [data-testid="stToast"], [data-testid="stAlert"] { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border); }

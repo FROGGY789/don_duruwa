@@ -38,6 +38,13 @@ function fmtDays(v) {
   return `<span class="days${d > 14 ? " slow" : ""}">~${d}일</span>`;
 }
 const CAT_ICON = { all: "✦", "가구": "🪑", "일반": "⚒" };
+// 채집 페이지는 재료비가 없어서 원가·수익률·장보기 칸을 뺀다
+const isGather = (d) => d.mode === "gather";
+function columns(d) {
+  if (!isGather(d)) return COLUMNS;
+  return COLUMNS.filter((c) => !["pick", "cost", "margin"].includes(c.key))
+    .map((c) => (c.key === "level" ? { ...c, label: "채집 레벨" } : c.key === "net" ? { ...c, label: "개당 순수익" } : c));
+}
 
 // 지금 고른 서버 보기(통합 또는 서버 하나)의 값
 function V(r) {
@@ -65,6 +72,8 @@ function itemName(name, stars) {
 function renderHeader(d) {
   const sub = d.subtitle.map((s) => `<span>${esc(s)}</span>`).join("");
   const stats = d.stats[state.server][state.cat];
+  const L = d.statLabels || [["분석한 레시피", "조건에 맞는 전체 레시피"], ["계산 가능", "시세 데이터가 모두 있는 레시피"],
+    ["필터 통과", "현재 필터 기준 추천 대상"]];
   const stat = (label, value, sub, accent) => `
     <div class="stat${accent ? " accent" : ""}">
       <div class="stat-label">${esc(label)}</div>
@@ -73,16 +82,16 @@ function renderHeader(d) {
     </div>`;
   return `
     <header class="page-head">
-      <div class="eyebrow">CRAFTING PROFIT REPORT</div>
-      <h1>파판14 제작 수익 분석<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
+      <div class="eyebrow">${isGather(d) ? "GATHERING" : "CRAFTING"} PROFIT REPORT</div>
+      <h1>${esc(d.title || "파판14 제작 수익 분석")}<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
       <div class="subtitle">${sub}</div>
     </header>
     ${renderServers(d)}
     ${renderCats(d)}
     <div class="stats">
-      ${stat("분석한 레시피", stats.total, "조건에 맞는 전체 레시피")}
-      ${stat("계산 가능", stats.calculable, "시세 데이터가 모두 있는 레시피")}
-      ${stat("필터 통과", stats.passed, "현재 필터 기준 추천 대상", true)}
+      ${stat(L[0][0], stats.total, L[0][1])}
+      ${stat(L[1][0], stats.calculable, L[1][1])}
+      ${stat(L[2][0], stats.passed, L[2][1], true)}
     </div>`;
 }
 
@@ -99,7 +108,7 @@ function serverName(d) {
 
 function renderCats(d) {
   const btn = (key) =>
-    `<button class="cat${state.cat === key ? " active" : ""}" data-cat="${esc(key)}">${CAT_ICON[key] || ""} ${esc(d.cats[key])}` +
+    `<button class="cat${state.cat === key ? " active" : ""}" data-cat="${esc(key)}">${(d.catIcons || CAT_ICON)[key] || ""} ${esc(d.cats[key])}` +
     `<span class="cnt">${d.stats[state.server][key].passed}</span></button>`;
   return `<div class="cats">${Object.keys(d.cats).map(btn).join("")}</div>`;
 }
@@ -130,7 +139,8 @@ function sortedRows(d) {
 }
 
 function renderTable(d, rows) {
-  const head = COLUMNS.map((c) => {
+  const cols = columns(d);
+  const head = cols.map((c) => {
     const cls = [c.num ? "num" : "", c.sortable ? "sortable" : "", state.sort === c.key ? "sorted" : "", state.sort === c.key && state.dir > 0 ? "asc" : ""]
       .filter(Boolean)
       .join(" ");
@@ -145,32 +155,33 @@ function renderTable(d, rows) {
     const badges = [...r.badges, ...v.badges].map((b) => b.detail
       ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
       : `<span class="badge ${esc(b.kind)}${b.tip ? " has-tip" : ""}"${b.tip ? ` data-tip="${esc(b.tip)}"` : ""}>${esc(b.text)}</span>`).join("");
+    const cell = {
+      pick: `<td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
+          title="${state.cart[r.id] ? "장보기에서 빼기" : "장보기에 담기"}">${state.cart[r.id] ? "✓" : "+"}</button></td>`,
+      rank: `<td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>`,
+      name: `<td>${itemName(r.name, r.stars)}</td>`,
+      job: `<td><span class="job">${esc(r.job)}</span></td>`,
+      level: `<td class="num">${r.level}</td>`,
+      sell: `<td class="num">${gil(v.sell)}</td>`,
+      cost: `<td class="num">${gil(r.cost)}</td>`,
+      net: `<td class="num">${signed(v.net)}</td>`,
+      margin: `<td class="num">${v.margin == null ? "-" : `<span class="pct ${v.margin >= 0 ? "pos" : "neg"}">${v.margin.toFixed(1)}%</span>`}</td>`,
+      sales: `<td class="num">${v.sales}</td>`,
+      listings: `<td class="num">${v.listings}</td>`,
+      sellDays: `<td class="num">${fmtDays(v.sellDays)}</td>`,
+      daily: `<td class="num">${gil(v.daily)}</td>`,
+      updated: `<td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>`,
+      etc: `<td><div class="badges">${badges}</div></td>`,
+    };
     return `
-      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">
-        <td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
-          title="${state.cart[r.id] ? "장보기에서 빼기" : "장보기에 담기"}">${state.cart[r.id] ? "✓" : "+"}</button></td>
-        <td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>
-        <td>${itemName(r.name, r.stars)}</td>
-        <td><span class="job">${esc(r.job)}</span></td>
-        <td class="num">${r.level}</td>
-        <td class="num">${gil(v.sell)}</td>
-        <td class="num">${gil(r.cost)}</td>
-        <td class="num">${signed(v.net)}</td>
-        <td class="num">${v.margin == null ? "-" : `<span class="pct ${v.margin >= 0 ? "pos" : "neg"}">${v.margin.toFixed(1)}%</span>`}</td>
-        <td class="num">${v.sales}</td>
-        <td class="num">${v.listings}</td>
-        <td class="num">${fmtDays(v.sellDays)}</td>
-        <td class="num">${gil(v.daily)}</td>
-        <td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>
-        <td><div class="badges">${badges}</div></td>
-      </tr>`;
+      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key]).join("")}</tr>`;
   }).join("");
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function renderDetail(d, row) {
-  if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. 재료 상세가 여기 뜬다 개굴.</div>`;
-  const body = row.materials.map((m) => {
+  if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. ${isGather(d) ? "판매" : "재료"} 상세가 여기 뜬다 개굴.</div>`;
+  const body = (row.materials || []).map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
     const market = m.source === "거래소";
@@ -192,23 +203,23 @@ function renderDetail(d, row) {
       <div class="detail-card">
         <div class="detail-top">
           <div>
-            <h2>📦 ${itemName(row.name, row.stars)} — 재료 상세</h2>
+            <h2>${row.materials ? "📦" : "⛏"} ${itemName(row.name, row.stars)} — ${row.materials ? "재료 상세" : "판매 상세"}</h2>
             <div class="desc">${esc(row.detailDesc)}</div>
           </div>
           <div class="kv">
-            <div><span>원가</span><b>${gil(row.cost)}</b></div>
+            ${row.materials ? `<div><span>원가</span><b>${gil(row.cost)}</b></div>` : ""}
             <div><span>판매 예상가 · ${esc(serverName(d))}</span><b>${gil(V(row).sell)}</b></div>
             <div><span>순수익</span><b>${V(row).net == null ? '<span class="dash">-</span>' : signed(V(row).net)}</b></div>
           </div>
         </div>
         ${renderInsights(d, row)}
-        <div class="table-wrap"><table>
+        ${row.materials ? `<div class="table-wrap"><table>
           <thead><tr>
             <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">단가</th>
             <th class="num">소계</th><th>구매처</th><th class="num">${esc(d.period)} 판매 수량</th><th class="num">현재 매물 수</th><th>구매 서버</th>
           </tr></thead>
           <tbody>${body}</tbody>
-        </table></div>
+        </table></div>` : ""}
       </div>
     </section>`;
 }
@@ -497,7 +508,7 @@ function renderFailed(d) {
     <td class="num">${f.level}</td><td class="reason">${esc(f.reason)}</td></tr>`).join("");
   return `
     <details class="failed"${state.failedOpen ? " open" : ""}>
-      <summary>계산할 수 없었던 레시피 (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">팔린 기록이나 재료 시세가 없어서 계산 못 한 거다 개굴</span></summary>
+      <summary>${esc(d.failedTitle || "계산할 수 없었던 레시피")} (${failed.total.toLocaleString("ko-KR")}개)<span class="muted">팔린 기록이나 재료 시세가 없어서 계산 못 한 거다 개굴</span></summary>
       <div class="failed-body"><div class="table-wrap"><table>
         <thead><tr><th>아이템명</th><th>직업</th><th class="num">레시피 레벨</th><th>제외 사유</th></tr></thead>
         <tbody>${body}${more}</tbody>
@@ -545,17 +556,18 @@ export default function (component) {
       renderSearch(data) +
       renderHeader(data) +
       renderTabs(data) +
-      `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">줄 누르면 밑에 재료 상세가 나온다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴</span>
-         <span class="right">${cartCount ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
+      `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">${isGather(data)
+        ? "줄 누르면 밑에 판매 상세가 나온다 개굴"
+        : "줄 누르면 밑에 재료 상세가 나온다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴"}</span>
+         <span class="right">${cartCount && !isGather(data) ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderDetail(data, selected) +
       renderFailed(data) +
-      renderCart(data) +
-      renderCartFab() +
+      (isGather(data) ? "" : renderCart(data) + renderCartFab()) +
       `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었다 개굴 · 문의도 여기로 해라 개굴</footer>`;
     state.cartAnim = false;
     state.fabBump = false;
-    root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount));
+    root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount && !isGather(data)));
   }
 
   // 🐸 제목 옆 개구리를 누르믄 개구리 비가 한 번 더 온다

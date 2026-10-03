@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from .gamedata import can_craft_intermediate
+from .gamedata import CRYSTAL_UI_CATEGORY, can_craft_intermediate
 
 KST = timezone(timedelta(hours=9), "KST")
 BUNDLE_EDGES = [1, 5, 10, 20, 50, 99, 999]  # 묶음 크기 칸 나누는 기준 (최대 겹침 수까지만 쓴다)
@@ -305,6 +305,36 @@ class Calculator:
                                  if other else f"{self.hours // 24:.0f}일 동안 판매 기록이 없다 개굴 (NQ·HQ 둘 다)")
         self.world_badge(row)
         return row, tree
+
+    def evaluate_gather(self, g):
+        """채집템 한 줄. 재료비가 없으니 판매가 × (1 − 판매세) 가 그대로 순수익이다."""
+        item = self.gd.items[g.item_id]
+        hq = self.sell_hq if item.can_hq else None
+        extra, tips = [], {}
+        if g.timed:
+            extra.append("⏰ 시간 한정")
+            tips["⏰ 시간 한정"] = "정해진 에오르제아 시간에만 열리는 채집지(미지·전설 등)에서 나온다 개굴. 아무 때나 못 캔다 개굴."
+        if item.can_hq:
+            q = {None: "NQ·HQ 통합", True: "HQ 기준", False: "NQ 기준"}[hq]
+            extra.append(q)
+        dc = self.stats(g.item_id, hq, self.outlier_ratio, None)
+        crystal = item.ui_category == CRYSTAL_UI_CATEGORY
+        row = {
+            "item_id": g.item_id,
+            "아이템명": "★" * g.stars + item.name,
+            "직업": g.job,
+            "레벨": g.level,
+            "업데이트": dc.last_upload or None,
+            "기타": extra,
+            "뱃지 설명": tips,
+            "분류": "크리스탈" if crystal else ("시간 한정" if g.timed else "일반"),
+            "판매 품질": hq,
+            "제외 사유": "" if dc.median is not None else f"{self.hours // 24:.0f}일 동안 판매 기록이 없다 개굴",
+            "보기": {key: self.view(g.item_id, item, hq, world, 0) for key, world in self.views},
+            "근거": self.evidence(g.item_id, hq),
+        }
+        self.world_badge(row)
+        return row
 
     def view(self, item_id, item, hq, world, unit_cost):
         """한 '보기'(통합 또는 서버 하나)에서의 판매가·순수익·판매 지표·뱃지."""
@@ -606,6 +636,12 @@ def analyze(gd, market, cfg, targets, seller_tax, **options):
         rows.append(row)
         trees[r.id] = (r, tree)
     return rows, trees, calc
+
+
+def analyze_gather(gd, market, cfg, gathers, seller_tax, **options):
+    """채집템 전체를 평가해서 (rows, calc) 를 돌려준다."""
+    calc = Calculator(gd, market, cfg, seller_tax, **options)
+    return [calc.evaluate_gather(g) for g in gathers], calc
 
 
 if __name__ == "__main__":

@@ -66,6 +66,20 @@ filters:
   max_sell_days: 0      # 예상 판매 소요일 이하만 (0 이면 안 따짐)
   stale_hours: 72       # 마지막 업로드가 이보다 오래되면 "데이터 오래됨" 표시 (제외하지는 않음)
 
+# ── 채집 (⛏ 채집 페이지 기본값, 사이드바에서 조절 가능) ──
+gather:
+  job_levels:
+    광부: 60
+    원예가: 60
+  level_min: 1
+  level_max: 60
+  filters:
+    min_sales: 3        # 기간 내 판매 건수 이상
+    min_profit: 100     # 개당 최소 순수익(길) — 판매세 빼고
+    max_listings: 100   # 현재 등록 건수 이하
+    max_sell_days: 0    # 예상 판매 소요일 이하만 (0 이면 안 따짐)
+  sort_by: "하루 잠재 이익"   # 순수익 / 하루 잠재 이익
+
 # 기본 정렬: 순수익 / 수익률 / 하루 잠재 이익
 sort_by: "순수익"
 

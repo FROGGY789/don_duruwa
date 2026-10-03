@@ -12,7 +12,13 @@ import requests
 
 from .config import DATA_DIR, JOB_NAMES, load_config
 
-SHEETS = ["Recipe", "Item", "RecipeLevelTable", "GilShopItem", "SecretRecipeBook", "ItemUICategory"]
+SHEETS = ["Recipe", "Item", "RecipeLevelTable", "GilShopItem", "SecretRecipeBook", "ItemUICategory",
+          # 채집 (광부·원예가)
+          "GatheringItem", "GatheringItemLevelConvertTable", "GatheringPointBase", "GatheringPoint",
+          "GatheringPointTransient"]
+GATHER_JOBS = ["광부", "원예가"]
+GATHER_TYPE_JOB = {0: "광부", 1: "광부", 2: "원예가", 3: "원예가"}  # GatheringType: 광물/암석 캐기, 나무/풀 베기
+CRYSTAL_UI_CATEGORY = 59
 CSV_DIR = DATA_DIR / "csv"
 
 
@@ -51,6 +57,17 @@ def iter_sheet(sheet, fields):
         for row in reader:
             if row:
                 yield row[0], {name: row[i] for name, i in idx.items()}
+
+
+def iter_rows(sheet):
+    """열 이름 없이 (key, [값...]) 으로. 채집 시트는 이름 줄이 실제 값이랑 한 칸씩 어긋나 있어서 위치로 읽는다."""
+    with open(CSV_DIR / f"{sheet}.csv", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        for _ in range(3):
+            next(reader)
+        for row in reader:
+            if row:
+                yield row[0], row[1:]
 
 
 def _int(s):
@@ -99,8 +116,18 @@ class Recipe:
         return JOB_NAMES[self.job]
 
 
+@dataclass
+class GatherItem:
+    item_id: int
+    job: str  # 광부 / 원예가
+    level: int
+    stars: int = 0
+    timed: bool = False  # 시간 한정 채집지(미지·전설 등)에서만 나오는지
+
+
 class GameData:
     def __init__(self):
+        self.gather = {}  # {아이템ID: GatherItem}
         self.items = {}
         self.recipes = []
         self.recipes_by_result = {}
@@ -180,6 +207,41 @@ class GameData:
             price = self.items[iid].price_mid
             if price > 0:
                 self.npc_prices[iid] = price
+
+        self._load_gathering()
+
+    def _load_gathering(self):
+        """광부·원예가로 캘 수 있는 아이템, 채집 레벨, 시간 한정 여부."""
+        if not (CSV_DIR / "GatheringItem.csv").exists():
+            return
+        convert = {_int(k): (_int(v[0]), _int(v[1])) for k, v in iter_rows("GatheringItemLevelConvertTable")}
+        gitems = {_int(k): (_int(v[0]), convert.get(_int(v[1]), (0, 0))) for k, v in iter_rows("GatheringItem")}
+        # 채집지(GatheringPoint) → 채집 묶음(GatheringPointBase), 시간 한정 채집지
+        timed_points = {_int(k) for k, v in iter_rows("GatheringPointTransient")
+                        if _int(v[0]) != 65535 or _int(v[2]) != 0}
+        base_timed = {}  # base → [시간 한정 여부, ...] (그 묶음을 쓰는 채집지마다)
+        for k, v in iter_rows("GatheringPoint"):
+            base = _int(v[3])
+            if base:
+                base_timed.setdefault(base, []).append(_int(k) in timed_points)
+        found = {}  # 아이템 → (직업, 레벨, 별, [시간 한정 여부...])
+        for k, v in iter_rows("GatheringPointBase"):
+            job = GATHER_TYPE_JOB.get(_int(v[0]))
+            if not job:
+                continue  # 작살 등
+            timed = base_timed.get(_int(k), [False])
+            for g in v[2:10]:
+                iid, (level, stars) = gitems.get(_int(g), (0, (0, 0)))
+                if iid <= 0 or iid not in self.items or not level:
+                    continue
+                prev = found.get(iid)
+                if prev is None:
+                    found[iid] = (job, level, stars, list(timed))
+                else:  # 레벨은 제일 낮은 채집지 기준, 시간 한정 여부는 모든 채집지를 다 본다
+                    found[iid] = (prev[0], level, stars, prev[3] + timed) if level < prev[1] else (*prev[:3], prev[3] + timed)
+        for iid, (job, level, stars, timed) in found.items():
+            # 보통 채집지에서도 나오면 시간 한정이 아니다
+            self.gather[iid] = GatherItem(iid, job, level, stars, all(timed))
 
     def name(self, item_id):
         item = self.items.get(item_id)

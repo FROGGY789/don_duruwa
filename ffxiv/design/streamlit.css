@@ -168,3 +168,12 @@ button[data-variant="segmented_control"] p { color: inherit !important; font-siz
 .brand-frog { font-size: 1.15rem; line-height: 1; display: inline-block; cursor: default; }
 .brand-frog:hover { animation: frog-hop .5s ease; }
 @keyframes frog-hop { 30% { transform: translateY(-6px) rotate(-8deg); } 60% { transform: translateY(0) rotate(4deg); } }
+
+/* ⚒ 제작 / ⛏ 채집 페이지 메뉴 (사이드바 맨 위) */
+[data-testid="stSidebarNav"] { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); margin-bottom: var(--space-2); }
+[data-testid="stSidebarNav"] a { border-radius: var(--radius); padding: 6px var(--space-3); }
+[data-testid="stSidebarNav"] a span { color: var(--text-muted) !important; font-family: var(--font-sans); font-size: var(--fs-md); }
+[data-testid="stSidebarNav"] a:hover { background: var(--surface-hover) !important; }
+[data-testid="stSidebarNav"] a:hover span { color: var(--text) !important; }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--primary-soft) !important; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 40%, transparent); }
+[data-testid="stSidebarNav"] a[aria-current="page"] span { color: var(--primary-strong) !important; font-weight: 600; }

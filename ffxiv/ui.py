@@ -45,7 +45,7 @@ def apply_theme(theme, palette):
 
 
 def sidebar_brand(sb):
-    sb.html('<div class="brand"><span class="brand-frog" title="개굴">🐸</span><span class="brand-name">제작 수익 분석</span></div>')
+    sb.html('<div class="brand"><span class="brand-frog" title="개굴">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>')
 
 
 def frog_rain(where=st, count=28):

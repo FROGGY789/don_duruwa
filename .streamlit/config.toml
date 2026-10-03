@@ -11,3 +11,7 @@ toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false
+
+[global]
+# 페이지를 오가도 사이드바 값이 유지되게 session_state 로 다시 넣어 주는데, 그때 뜨는 경고는 끈다
+disableWidgetStateDuplicationWarning = true

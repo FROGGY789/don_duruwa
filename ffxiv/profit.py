@@ -384,7 +384,13 @@ class Calculator:
                 text = f"📦 {band['label']}씩"
                 badges.append(text)
                 tips[text] = (f"{band['label']} 묶음이 제일 자주 팔렸다 개굴 ({v['bundles']['sales']}건 중 {band['sales']}건). "
-                              "많이 묶어 올리믄 잘 안 사 가니까 이 정도로 나눠 올려라 개굴.")
+                              "많이 묶어 올리면 잘 안 사 가니까 이 정도로 나눠 올려라 개굴.")
+                if world is None and self.home_world:  # 통합 보기: 서버마다 경향이 달라서 내 서버 것도 같이 알려준다
+                    hb = self.bundles(item_id, hq, int(self.home_world), item.stack_size)
+                    if hb["best"] is not None and hb["best"] != best:
+                        h = hb["bands"][hb["best"]]
+                        tips[text] += (f" 단, {self.world_name(self.home_world)}에서는 {h['label']} 묶음이 제일 많이 팔렸다 개굴"
+                                       f" ({hb['sales']}건 중 {h['sales']}건). 서버마다 다르니까 재료 상세의 서버별 묶음도 봐라 개굴.")
         change = v["trend"]["change"]
         if change is not None and change <= -10:
             text = f"📉 하락 중 {change:.0f}%"

@@ -311,12 +311,36 @@ function renderBundles(d, row) {
     const most = b.listedMost != null ? b.bands[b.listedMost] : null;
     if (most && b.listedMost > b.best) note += ` 지금 매물은 대부분 <b>${esc(most.label)}</b> 짜리라, 작게 나눠 올리면 먼저 팔릴 수 있다 개굴.`;
   }
+  const home = d.servers.find((x) => x.home);
+  const hb = home && state.server === "dc" ? row.views[home.key].bundles : null;
+  if (hb && hb.best != null && hb.sales && hb.best !== b.best) {
+    note += ` 단, <b>${esc(home.name)}</b>에서는 <b>${esc(hb.bands[hb.best].label)}</b> 묶음이 제일 많이 팔렸다 개굴 (${hb.sales}건 중 ${hb.bands[hb.best].sales}건).`;
+  }
   const body = shown.map((x) => {
     const i = b.bands.indexOf(x);
     return `<tr class="${i === b.best ? "best" : ""}">
       <td>${i === b.best ? "👍 " : ""}${esc(x.label)}</td><td class="num">${x.sales}</td>
       <td class="num">${x.units.toLocaleString("ko-KR")}</td><td class="num">${gil(x.unit)}</td><td class="num">${x.listed}</td></tr>`;
   }).join("");
+  // 서버별로 어떤 묶음이 팔렸나 (서버마다 사는 사람들 습관이 달라서)
+  const worlds = d.servers.filter((x) => x.key !== "dc").map((x) => ({ ...x, b: row.views[x.key].bundles })).filter((x) => x.b);
+  const used = b.bands.map((_, i) => i).filter((i) => worlds.some((w) => w.b.bands[i].sales));
+  const worldRows = worlds.map((w) => {
+    const best = w.b.best;
+    return `<tr class="clickable${w.key === state.server ? " selected" : ""}" data-server="${esc(w.key)}">
+      <td>${esc(w.name)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
+      ${used.map((i) => {
+        const n = w.b.bands[i].sales;
+        return `<td class="num${i === best && n ? " bundle-best" : ""}">${n ? (i === best ? "👍 " : "") + n : '<span class="dash">-</span>'}</td>`;
+      }).join("")}
+      <td>${best != null && w.b.sales ? esc(w.b.bands[best].label) : '<span class="dash">-</span>'}</td></tr>`;
+  }).join("");
+  const byWorld = used.length && worlds.length > 1 ? `
+      <div class="ev-cap bundle-cap">서버별 판매 건수 (묶음 크기별) — 줄 누르면 그 서버 기준으로 바뀐다 개굴</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>서버</th>${used.map((i) => `<th class="num">${esc(b.bands[i].label)}</th>`).join("")}<th>제일 잘 팔린 묶음</th></tr></thead>
+        <tbody>${worldRows}</tbody>
+      </table></div>` : "";
   return `
     <div class="evidence worlds bundles">
       <div class="insight-head"><h3>📦 잘 팔리는 묶음 · ${esc(serverName(d))}</h3><span class="faint">한 번에 최대 ${b.stack.toLocaleString("ko-KR")}개까지 묶을 수 있다 개굴</span></div>
@@ -325,6 +349,7 @@ function renderBundles(d, row) {
         <thead><tr><th>묶음 크기</th><th class="num">판매 건수</th><th class="num">팔린 수량</th><th class="num">개당 중앙값</th><th class="num">지금 매물 수</th></tr></thead>
         <tbody>${body}</tbody>
       </table></div>` : ""}
+      ${byWorld}
     </div>`;
 }
 

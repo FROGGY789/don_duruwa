@@ -311,3 +311,5 @@ td:has(> .badges){white-space:normal;min-width:200px}
 @keyframes frog-fall{0%{transform:translate(0,0) rotate(0);opacity:0}8%{opacity:1}85%{opacity:1}100%{transform:translate(var(--drift),110vh) rotate(var(--spin));opacity:0}}
 @media (prefers-reduced-motion:reduce){.frog-rain{display:none}.frog-peek:hover,.cart-fab:hover::before,.frog-foot:hover .frog-sit{animation:none}}
 .bundles .ev-note b{color:var(--primary-strong)}
+.bundles .bundle-cap{margin-top:var(--space-4)}
+.bundles td.bundle-best{background:var(--primary-soft);color:var(--primary-strong);font-weight:600}

@@ -141,6 +141,7 @@ class MarketCache:
         suffix = "_dc" if server["dc"] else ""
         self.path = CACHE_DIR / f"market_{server['world_id']}{suffix}.json"
         self.data = {"world_id": server["world_id"], "updated_at": 0, "tax_rates": {}, "items": {}}
+        self.version = 0
         if self.path.exists():
             with open(self.path, encoding="utf-8") as f:
                 self.data = json.load(f)
@@ -167,6 +168,7 @@ class MarketCache:
         for iid, entry in items.items():
             new[str(iid)] = entry
         self.data["items"] = new
+        self.version += 1  # 화면 쪽 계산 결과 기억(캐시)을 새로 하라는 신호
         if full:
             self.data["updated_at"] = time.time()
         if tax_rates:

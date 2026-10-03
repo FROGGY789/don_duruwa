@@ -88,18 +88,25 @@ def clean_by_world(sales, listings, odd_ratio, outlier_ratio):
     return kept, dropped, good, bait
 
 
-def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0):
+def cleaned(entry, hq, hours, outlier_ratio=0.0, odd_ratio=0.0):
+    """기간·품질로 거른 뒤 서버별로 이상 거래·미끼를 가른 결과 (남긴 판매, 뺀 판매, 남긴 매물, 미끼 매물)."""
+    since = entry.get("fetched_at", time.time()) - hours * 3600
+    sales = [s for s in entry["sales"] if s[3] >= since and (hq is None or s[2] == hq)]
+    listings = [l for l in entry["listings"] if hq is None or l[2] == hq]
+    return clean_by_world(sales, listings, odd_ratio, outlier_ratio)
+
+
+def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0, clean=None):
     """hq=None 이면 품질 구분 없이, True/False 면 그 품질만. world=None 이면 데이터센터 전체, 월드ID 면 그 서버만.
 
     이상 거래(odd_ratio)와 미끼 매물(outlier_ratio)은 서버마다 그 서버 중앙값 기준으로 거른다.
+    clean 에 cleaned() 결과를 주면 다시 안 가른다 (서버 보기마다 같은 걸 반복하지 않게).
     """
     st = Stats()
     if not entry:
         return st
-    since = entry.get("fetched_at", time.time()) - hours * 3600
-    sales = [s for s in entry["sales"] if s[3] >= since and (hq is None or s[2] == hq)]
     listings = [l for l in entry["listings"] if hq is None or l[2] == hq]
-    kept, dropped, good, bait = clean_by_world(sales, listings, odd_ratio, outlier_ratio)
+    kept, dropped, good, bait = clean or cleaned(entry, hq, hours, outlier_ratio, odd_ratio)
     mine = lambda w: world is None or w == world
     sales = [s for s in kept if mine(s[4])]
     st.dropped = [s for s in dropped if mine(s[4])]
@@ -156,6 +163,7 @@ class Calculator:
         self.npc_ignore = gd.ids_by_name(cfg.get("npc_ignore_items"))
         self._memo = {}
         self._stats = {}
+        self._clean = {}
         self.odd_ratio = cfg.get("odd_sale_ratio", 3)
         self.furniture = set(cfg["furniture_ui_categories"])
 
@@ -163,8 +171,17 @@ class Calculator:
         """market_stats 결과를 기억해 둔다 (같은 재료를 여러 레시피가 쓰니까)."""
         key = (item_id, hq, outlier_ratio, world)
         if key not in self._stats:
-            self._stats[key] = market_stats(self.market.get(item_id), hq, self.hours, outlier_ratio, world, self.odd_ratio)
+            entry = self.market.get(item_id)
+            self._stats[key] = market_stats(entry, hq, self.hours, outlier_ratio, world, self.odd_ratio,
+                                            self.cleaned(item_id, hq, outlier_ratio) if entry else None)
         return self._stats[key]
+
+    def cleaned(self, item_id, hq=None, outlier_ratio=0.0):
+        """서버별 이상 거래·미끼 가르기는 아이템·품질마다 한 번만 한다."""
+        key = (item_id, hq, outlier_ratio)
+        if key not in self._clean:
+            self._clean[key] = cleaned(self.market.get(item_id), hq, self.hours, outlier_ratio, self.odd_ratio)
+        return self._clean[key]
 
     # ── 재료 구매 ──
     def market_buy_price(self, item_id, need):
@@ -441,8 +458,8 @@ class Calculator:
             return {"days": [], "change": None}
         end = entry.get("fetched_at", time.time())
         start = end - n_days * 86400
-        sales = [s for s in entry["sales"] if s[3] >= start and (hq is None or s[2] == hq)]
-        kept = [s for s in clean_by_world(sales, [], self.odd_ratio, 0)[0] if world is None or s[4] == world]
+        kept = [s for s in self.cleaned(item_id, hq, self.outlier_ratio)[0]
+                if s[3] >= start and (world is None or s[4] == world)]
         buckets = [[] for _ in range(n_days)]
         for s in kept:
             buckets[min(n_days - 1, int((s[3] - start) // 86400))].append(s)

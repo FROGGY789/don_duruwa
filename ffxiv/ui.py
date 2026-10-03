@@ -96,9 +96,9 @@ def dashboard(data):
 
 
 def _clean(v):
-    """JSON 으로 못 보내는 값(무한대, NaN)을 None 으로."""
-    if isinstance(v, float) and (math.isinf(v) or math.isnan(v)):
-        return None
+    """JSON 으로 못 보내는 값(무한대, NaN)을 None 으로. 소수는 둘째 자리까지만 (보내는 양 줄이기)."""
+    if isinstance(v, float):
+        return None if math.isinf(v) or math.isnan(v) else round(v, 2)
     if isinstance(v, dict):
         return {k: _clean(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):

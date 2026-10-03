@@ -142,7 +142,7 @@ function renderTable(d, rows) {
   }
   const body = rows.map((r, i) => {
     const v = V(r);
-    const badges = v.badges.map((b) => b.detail
+    const badges = [...r.badges, ...v.badges].map((b) => b.detail
       ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
       : `<span class="badge ${esc(b.kind)}${b.tip ? " has-tip" : ""}"${b.tip ? ` data-tip="${esc(b.tip)}"` : ""}>${esc(b.text)}</span>`).join("");
     return `
@@ -254,7 +254,8 @@ function barChart(days) {
 
 function renderInsights(d, row) {
   const v = V(row);
-  const t = v.trend || { days: [] };
+  const ct = v.trend || { d: [] };
+  const t = { change: ct.change, days: ct.d.map((date, i) => ({ date, median: ct.m[i], units: ct.u[i], count: ct.c[i] })) };
   let change = "";
   if (t.change != null) {
     const down = t.change <= -10, up = t.change >= 10;

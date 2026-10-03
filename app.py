@@ -189,7 +189,6 @@ with sb.expander(f"v{CHANGELOG[0]['version']} · {CHANGELOG[0]['date'][5:]}", ex
 # ── 시세 데이터 준비 ──
 # 시세는 모든 제작품·모든 레벨을 받아둔다 → 분류·레벨을 바꿔도 다시 받지 않음. 받는 건 뒤에서 돈다.
 ids = all_market_ids()
-targets = list(target_recipes(gd, cfg, True, *level_range, job_levels))
 r = refresher()
 now = time.time()
 auto_due = (bool(auto_min) and cache.updated_at and now - cache.updated_at > auto_min * 60
@@ -206,10 +205,21 @@ if not cache.updated_at:
                                       "조금만 기다려라 개굴. 다 받으면 화면이 알아서 채워진다 개굴. 어떻게 돼 가는지는 왼쪽에 나온다 개굴."}
 
 # ── 계산 ──
-rows, trees, calc = analyze(
-    gd, cache.items, cfg, targets, seller_tax, sell_hq=sell_hq, batch_size=batch_size, job_levels=job_levels,
-    buy_world=None if buy_scope == "dc" else home, world_names=server["world_names"], home_world=home,
-)
+@st.cache_resource(max_entries=2, show_spinner="계산하는 중이다 개굴…")
+def run_analysis(_gd, _items, market_version, level_range, job_levels_key, sell_hq, batch_size, buy_world, seller_tax):
+    """계산 결과를 기억해 둔다. 검색·필터·정렬만 바꿀 땐 다시 계산 안 하고, 시세나 계산 조건이 바뀔 때만 다시 한다.
+
+    밑줄 붙은 인자는 내용 대신 market_version(시세 갱신 시각 + 시세 바뀐 횟수)으로 구분한다.
+    """
+    levels = dict(job_levels_key)
+    targets = list(target_recipes(_gd, cfg, True, *level_range, levels))
+    return analyze(_gd, _items, cfg, targets, seller_tax, sell_hq=sell_hq, batch_size=batch_size, job_levels=levels,
+                   buy_world=buy_world, world_names=server["world_names"], home_world=home)
+
+
+rows, trees, calc = run_analysis(
+    gd, cache.items, (cache.updated_at, cache.version, id(gd)), tuple(level_range),
+    tuple(sorted(job_levels.items())), sell_hq, batch_size, None if buy_scope == "dc" else home, seller_tax)
 # 순위 보기: 통합 + 서버별 (내 서버 먼저)
 world_keys = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))
 VIEWS = {"dc": "통합"} | {w: server["world_names"][w] for w in world_keys}
@@ -239,18 +249,28 @@ def passes(r, key):
     return v["net"] is not None and r["원가"] is not None and not fail_reasons(r, v)
 
 
-def view_data(r, key, stale_badge):
+def badges(texts, tips):
+    return [ui.badge(t, tips.get(t) or (
+        f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다 개굴. 지금 게임 시세랑 다를 수 있다 개굴."
+        if t.startswith("⚠ 데이터") else None)) for t in texts]
+
+
+def compact_trend(t):
+    """하루 단위 추이를 [날짜], [중앙값], [수량], [건수] 배열로 (보내는 양 줄이기)."""
+    days = t["days"]
+    return {"d": [x["date"] for x in days], "m": [None if x["median"] is None else round(x["median"]) for x in days],
+            "u": [x["units"] for x in days], "c": [x["count"] for x in days], "change": t["change"]}
+
+
+def view_data(r, key):
+    """서버 보기 하나의 값. 보기마다 같은 뱃지(비전서·데이터 오래됨 등)는 줄(row)에 한 번만 담는다."""
     v = r["보기"][key]
-    tips = {**r["뱃지 설명"], **v["tips"]}
-    texts = stale_badge + r["기타"] + v["badges"]
     return {
         "sell": v["sell"], "net": v["net"], "margin": v["margin"], "sales": v["sales"], "listings": v["listings"],
         "daily": v["daily"], "sellDays": v["sellDays"], "median": v["median"], "minListing": v["minListing"],
-        "cap": v["cap"], "dropped": v["dropped"], "trend": v["trend"], "quality": v["quality"],
+        "cap": v["cap"], "dropped": v["dropped"], "trend": compact_trend(v["trend"]), "quality": v["quality"],
         "passes": passes(r, key),
-        "badges": [ui.badge(t, tips.get(t) or (
-            f"Universalis 에 마지막으로 올라온 지 {stale_hours}시간 넘었다 개굴. 지금 게임 시세랑 다를 수 있다 개굴."
-            if t.startswith("⚠ 데이터") else None)) for t in texts],
+        "badges": badges(v["badges"], v["tips"]),
     }
 
 
@@ -273,7 +293,8 @@ def row_data(r):
         "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
         "level": r["레시피 레벨"], "cost": r["원가"], "cat": r["분류"],
         "updated": r["업데이트"] or 0, "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
-        "views": {key: view_data(r, key, stale_badge) for key in VIEWS},
+        "badges": badges(stale_badge + r["기타"], r["뱃지 설명"]),
+        "views": {key: view_data(r, key) for key in VIEWS},
         "evidence": r["근거"],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{batch_size}회 제작 기준 · {ratio_text}",

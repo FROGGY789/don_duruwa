@@ -268,7 +268,7 @@ def view_data(r, key):
     return {
         "sell": v["sell"], "net": v["net"], "margin": v["margin"], "sales": v["sales"], "listings": v["listings"],
         "daily": v["daily"], "sellDays": v["sellDays"], "median": v["median"], "minListing": v["minListing"],
-        "cap": v["cap"], "dropped": v["dropped"], "trend": compact_trend(v["trend"]), "quality": v["quality"],
+        "cap": v["cap"], "dropped": v["dropped"], "trend": compact_trend(v["trend"]), "bundles": v.get("bundles"), "quality": v["quality"],
         "passes": passes(r, key),
         "badges": badges(v["badges"], v["tips"]),
     }

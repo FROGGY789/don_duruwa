@@ -284,7 +284,37 @@ function renderInsights(d, row) {
         <div class="q-grid">${box("NQ")}${box("HQ")}</div>
       </div>`;
   }
-  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderWorlds(d, row) + renderEvidence(d, row);
+  return (charts || quality ? `<div class="insights">${charts}${quality}</div>` : "") + renderBundles(d, row) + renderWorlds(d, row) + renderEvidence(d, row);
+}
+
+// ── 잘 팔리는 묶음 크기 (여러 개 겹치는 아이템만) ──
+function renderBundles(d, row) {
+  const b = V(row).bundles;
+  if (!b) return "";
+  const shown = b.bands.filter((x) => x.sales || x.listed);
+  let note;
+  if (!b.sales) note = `${esc(d.period)} 동안 팔린 기록이 없어서 묶음 추천은 못 한다 개굴.`;
+  else {
+    const best = b.bands[b.best];
+    note = `<b>${esc(best.label)}</b>씩 올리는 게 제일 자주 팔렸다 개굴 (${b.sales}건 중 ${best.sales}건).`;
+    const most = b.listedMost != null ? b.bands[b.listedMost] : null;
+    if (most && b.listedMost > b.best) note += ` 지금 매물은 대부분 <b>${esc(most.label)}</b> 짜리라, 작게 나눠 올리면 먼저 팔릴 수 있다 개굴.`;
+  }
+  const body = shown.map((x) => {
+    const i = b.bands.indexOf(x);
+    return `<tr class="${i === b.best ? "best" : ""}">
+      <td>${i === b.best ? "👍 " : ""}${esc(x.label)}</td><td class="num">${x.sales}</td>
+      <td class="num">${x.units.toLocaleString("ko-KR")}</td><td class="num">${gil(x.unit)}</td><td class="num">${x.listed}</td></tr>`;
+  }).join("");
+  return `
+    <div class="evidence worlds bundles">
+      <div class="insight-head"><h3>📦 잘 팔리는 묶음 · ${esc(serverName(d))}</h3><span class="faint">한 번에 최대 ${b.stack.toLocaleString("ko-KR")}개까지 묶을 수 있다 개굴</span></div>
+      <div class="ev-note">${note}</div>
+      ${shown.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>묶음 크기</th><th class="num">판매 건수</th><th class="num">팔린 수량</th><th class="num">개당 중앙값</th><th class="num">지금 매물 수</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>` : ""}
+    </div>`;
 }
 
 // ── 서버별 판매 비교 (서버별 순위 값 그대로) ──

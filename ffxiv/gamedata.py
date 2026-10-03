@@ -73,6 +73,7 @@ class Item:
     untradable: bool
     can_hq: bool
     price_mid: int  # NPC 상점 구매가
+    stack_size: int = 1  # 한 칸에 몇 개까지 겹치는지 (1 이면 장비처럼 하나씩)
 
     @property
     def marketable(self):
@@ -112,7 +113,7 @@ class GameData:
             self.ui_category_names[_int(key)] = r["Name"]
 
         for key, r in iter_sheet("Item", ["Name", "ItemUICategory", "ItemSearchCategory",
-                                          "IsUntradable", "CanBeHq", "Price{Mid}"]):
+                                          "IsUntradable", "CanBeHq", "Price{Mid}", "StackSize"]):
             iid = _int(key)
             if iid <= 0:
                 continue
@@ -124,6 +125,7 @@ class GameData:
                 untradable=_bool(r["IsUntradable"]),
                 can_hq=_bool(r["CanBeHq"]),
                 price_mid=_int(r["Price{Mid}"]),
+                stack_size=max(1, _int(r["StackSize"])),
             )
 
         levels = {}

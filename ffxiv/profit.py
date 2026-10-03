@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from .gamedata import can_craft_intermediate
 
 KST = timezone(timedelta(hours=9), "KST")
+BUNDLE_EDGES = [1, 5, 10, 20, 50, 99, 999]  # 묶음 크기 칸 나누는 기준 (최대 겹침 수까지만 쓴다)
 
 
 def market_item_ids(gd, recipes):
@@ -345,6 +346,15 @@ class Calculator:
                 badges.append(text)
                 tips[text] = (f"제일 싼 매물 {cheapest[0]:,}길, 2번째 {cheapest[1]:,}길 — 차이가 {gap * 100:.1f}%밖에 안 난다 개굴. "
                               "서로 1길씩 깎아 파는 중이라 올리면 금방 밑으로 밀린다 개굴.")
+        if item.stack_size > 1:
+            v["bundles"] = self.bundles(item_id, hq, world, item.stack_size)
+            best = v["bundles"]["best"]
+            if best is not None and v["bundles"]["sales"] >= 3:
+                band = v["bundles"]["bands"][best]
+                text = f"📦 {band['label']}씩"
+                badges.append(text)
+                tips[text] = (f"{band['label']} 묶음이 제일 자주 팔렸다 개굴 ({v['bundles']['sales']}건 중 {band['sales']}건). "
+                              "많이 묶어 올리믄 잘 안 사 가니까 이 정도로 나눠 올려라 개굴.")
         change = v["trend"]["change"]
         if change is not None and change <= -10:
             text = f"📉 하락 중 {change:.0f}%"
@@ -361,6 +371,31 @@ class Calculator:
                 tips[text] = (f"{other_name} 로 팔면 개당 {other['net']:,.0f}길 남는다 개굴 (지금 기준 {net:,.0f}길). "
                               f"대신 {other_name} 로 만들 수 있어야 한다 개굴.")
         return v
+
+    def bundles(self, item_id, hq, world, stack):
+        """묶음 크기별로 판매 건수·팔린 수량·개당 중앙값·지금 매물 수. best = 제일 자주 팔린 묶음 칸."""
+        edges = [e for e in BUNDLE_EDGES if e < stack] + [stack]
+        bands, lo = [], 1
+        for hi in edges:
+            bands.append({"label": f"{lo}개" if lo == hi else f"{lo}~{hi}개", "lo": lo, "hi": hi,
+                          "sales": 0, "units": 0, "prices": [], "listed": 0})
+            lo = hi + 1
+        band_of = lambda q: next((b for b in bands if q <= b["hi"]), bands[-1])
+        kept = [s for s in self.cleaned(item_id, hq, self.outlier_ratio)[0] if world is None or s[4] == world]
+        for s in kept:
+            b = band_of(s[1])
+            b["sales"] += 1
+            b["units"] += s[1]
+            b["prices"].append(s[0])
+        st = self.stats(item_id, hq, self.outlier_ratio, world)
+        for l in st.good_listings:
+            band_of(l[1])["listed"] += 1
+        for b in bands:
+            prices = b.pop("prices")
+            b["unit"] = statistics.median(prices) if prices else None
+        best = max(range(len(bands)), key=lambda i: (bands[i]["sales"], bands[i]["units"])) if kept else None
+        listed = max(range(len(bands)), key=lambda i: bands[i]["listed"]) if st.good_listings else None
+        return {"bands": bands, "best": best, "listedMost": listed, "sales": len(kept), "stack": stack}
 
     def world_badge(self, row):
         """통합 보기에서: 내 서버보다 확실히 더 남는 서버가 있으믄 🌐 뱃지."""

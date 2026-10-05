@@ -22,14 +22,26 @@ const COLUMNS = [
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather" };
 
 // 탭·정렬·선택 상태는 다시 그려져도 유지되게 페이지에 보관
-const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null, cart: loadCart() });
+const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null,
+  cart: loadJSON("ffxivCart", {}), done: loadJSON("ffxivCartDone", {}), saved: loadJSON("ffxivSavedCarts", []) });
 
-// 장보기에 담은 것 {레시피ID: 제작 횟수} — 브라우저에 기억해 둔다
-function loadCart() {
-  try { return JSON.parse(localStorage.getItem("ffxivCart") || "{}"); } catch { return {}; }
+state.done = state.done || loadJSON("ffxivCartDone", {});
+state.saved = state.saved || loadJSON("ffxivSavedCarts", []);
+
+// 장보기에 담은 것 {레시피ID: 제작 횟수}, 산 재료 체크 {"서버|재료": true}, 저장해 둔 목록 — 브라우저에 기억해 둔다
+function loadJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
+}
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 저장 못 해도 화면은 그대로 */ }
 }
 function saveCart() {
-  try { localStorage.setItem("ffxivCart", JSON.stringify(state.cart)); } catch { /* 저장 못 해도 화면은 그대로 */ }
+  saveJSON("ffxivCart", state.cart);
+  saveJSON("ffxivCartDone", state.done);
+}
+function nowText() {
+  const t = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 function fmtDays(v) {
   if (v == null) return '<span class="dash">-</span>';
@@ -455,9 +467,9 @@ function renderSearch(d) {
 }
 
 // ── 장보기 목록 ──
-function renderCart(d) {
+// 장보기 계산: 담은 아이템 → 구매 서버별 재료 묶음
+function cartPlan(d) {
   const ids = Object.keys(state.cart).map(Number);
-  if (!ids.length || !state.cartOpen) return "";
   const rows = ids.map((id) => d.rows.find((r) => r.id === id)).filter(Boolean);
   const missing = ids.length - rows.length;
   const groups = {};
@@ -481,18 +493,65 @@ function renderCart(d) {
     cost += total;
     return { ...g, items, total };
   }).sort((a, b) => (b.market - a.market) || (b.total - a.total));
+  list.forEach((g) => g.items.forEach((it) => (it.key = `${g.name}|${it.name}`)));
+  return { ids, rows, missing, list, cost, revenue };
+}
+
+// 텍스트 파일·복사용 장보기 목록
+function cartText(d) {
+  const { rows, list, cost, revenue } = cartPlan(d);
+  const out = [`🛒 장보기 목록 (${nowText()})`, ""];
+  rows.forEach((r) => out.push(`- ${"★".repeat(r.stars || 0)}${r.name} ×${state.cart[r.id]}회 (${state.cart[r.id] * r.resultAmount}개)`));
+  out.push("", `재료비 ${Math.round(cost).toLocaleString("ko-KR")}길 · 판매액(세후) ${Math.round(revenue).toLocaleString("ko-KR")}길 · 예상 순이익 ${Math.round(revenue - cost).toLocaleString("ko-KR")}길`);
+  list.forEach((g, i) => {
+    out.push("", `== ${g.market ? `${i + 1}. ` : ""}${g.name} (${Math.round(g.total).toLocaleString("ko-KR")}길) ==`);
+    g.items.forEach((it) => out.push(`[${state.done[it.key] ? "x" : " "}] ${it.name} ×${it.qty.toLocaleString("ko-KR")} @${Math.round(it.unit).toLocaleString("ko-KR")} = ${Math.round(it.total).toLocaleString("ko-KR")}`));
+  });
+  return out.join("\n");
+}
+
+function renderCart(d) {
+  if (!Object.keys(state.cart).length || !state.cartOpen) return "";
+  const { rows, missing, list, cost, revenue } = cartPlan(d);
   const worlds = list.filter((g) => g.market).length;
+  const all = list.flatMap((g) => g.items);
+  const bought = all.filter((it) => state.done[it.key]).length;
   const chips = rows.map((r) => `
     <span class="cart-chip">${itemName(r.name, r.stars)}
       <input type="number" min="1" max="999" value="${state.cart[r.id]}" data-count="${r.id}" aria-label="제작 횟수"/>회
       <small>(${(state.cart[r.id] * r.resultAmount).toLocaleString("ko-KR")}개)</small>
       <button type="button" class="chip-x" data-unpick="${r.id}" title="빼기">✕</button></span>`).join("");
-  const tables = list.map((g, i) => `
-    <div class="cart-group">
-      <div class="cart-group-head"><b>${g.market ? `${i + 1}. ` : ""}${esc(g.name)}</b><span>${gil(g.total)}길</span></div>
-      <table><tbody>${g.items.map((it) => `<tr><td>${esc(it.name)}</td><td class="num">×${it.qty.toLocaleString("ko-KR")}</td>
+  const tables = list.map((g, i) => {
+    const n = g.items.filter((it) => state.done[it.key]).length;
+    const complete = n === g.items.length;
+    return `
+    <div class="cart-group${complete ? " done" : ""}">
+      <div class="cart-group-head"><b>${g.market ? `${i + 1}. ` : ""}${esc(g.name)}</b>
+        <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
+      <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
+        <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""}/> ${esc(it.name)}</label></td>
+        <td class="num">×${it.qty.toLocaleString("ko-KR")}</td>
         <td class="num faint">@${gil(it.unit)}</td><td class="num">${gil(it.total)}</td></tr>`).join("")}</tbody></table>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+  const saved = state.saved.map((x, i) => `
+    <li><div><b>${esc(x.name)}</b><small>${esc(x.savedAt)} · ${Object.keys(x.cart).length}개 · ${esc((x.names || []).slice(0, 3).join(", "))}${(x.names || []).length > 3 ? " …" : ""}</small></div>
+      <span><button type="button" class="cart-btn" data-load="${i}">불러오기</button>
+      <button type="button" class="chip-x" data-del-saved="${i}" title="지우기">✕</button></span></li>`).join("");
+  const save = `
+    <div class="cart-save">
+      <div class="cart-save-row">
+        <input type="text" class="cart-name" data-save-name="1" maxlength="40" placeholder="목록 이름 (예: 금요일 장보기)" value="${esc(state.saveName || "")}"/>
+        <button type="button" class="cart-btn primary" data-save="1">💾 저장</button>
+      </div>
+      <div class="cart-save-row">
+        <button type="button" class="cart-btn" data-download="1">⬇ 텍스트 파일로 받기</button>
+        <button type="button" class="cart-btn" data-copy="1">📋 복사</button>
+        ${bought ? `<button type="button" class="cart-btn" data-undone="1">체크 다 풀기</button>` : ""}
+      </div>
+      ${state.cartMsg ? `<div class="cart-msg">${esc(state.cartMsg)}</div>` : ""}
+      ${saved ? `<div class="ev-cap">저장한 목록 (이 브라우저에만 저장된다 개굴)</div><ul class="cart-saved">${saved}</ul>` : ""}
+    </div>`;
   return `
     <aside class="cart drawer${state.cartAnim ? " anim" : ""}" id="cart" aria-label="장보기 목록">
       <div class="drawer-head">
@@ -502,7 +561,7 @@ function renderCart(d) {
       <div class="drawer-body">
         <div class="detail-top">
           <div>
-            <div class="desc">담은 거 ${rows.length}개 · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌면 된다 개굴 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어서 빠진 거 ${missing}개` : ""}</div>
+            <div class="desc">담은 거 ${rows.length}개${all.length ? ` · 산 거 ${bought}/${all.length}` : ""} · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌면 된다 개굴 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어서 빠진 거 ${missing}개` : ""}</div>
           </div>
           <div class="kv">
             <div><span>재료비</span><b>${gil(cost)}</b></div>
@@ -512,6 +571,7 @@ function renderCart(d) {
         </div>
         <div class="cart-chips">${chips}<button type="button" class="cart-clear" data-clear="1">전부 비우기</button></div>
         <div class="cart-groups">${tables}</div>
+        ${save}
       </div>
     </aside>`;
 }
@@ -665,7 +725,40 @@ export default function (component) {
       saveCart();
       return render();
     }
-    if (e.target.closest("[data-clear]")) { state.cart = {}; state.cartOpen = false; saveCart(); return render(); }
+    if (e.target.closest("[data-clear]")) { state.cart = {}; state.done = {}; state.cartOpen = false; saveCart(); return render(); }
+    if (e.target.closest("[data-save]")) return saveList();
+    if (e.target.closest("[data-download]")) {
+      const blob = new Blob([cartText(data)], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `장보기_${nowText().replace(/[: ]/g, "-")}.txt`;
+      root.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      return flash("텍스트 파일로 받았다 개굴.");
+    }
+    if (e.target.closest("[data-copy]")) {
+      navigator.clipboard?.writeText(cartText(data)).then(() => flash("복사했다 개굴. 메모장이나 디스코드에 붙여 넣어라 개굴."),
+        () => flash("복사가 막혔다 개굴. 텍스트 파일로 받아라 개굴."));
+      return;
+    }
+    if (e.target.closest("[data-undone]")) { state.done = {}; saveCart(); return render(); }
+    const load = e.target.closest("[data-load]");
+    if (load) {
+      const x = state.saved[Number(load.dataset.load)];
+      if (x && (!Object.keys(state.cart).length || window.confirm(`지금 장보기를 "${x.name}" 로 바꿔도 되나 개굴?`))) {
+        state.cart = { ...x.cart }; state.done = { ...(x.done || {}) }; saveCart();
+        flash(`"${x.name}" 불러왔다 개굴.`);
+      }
+      return;
+    }
+    const del = e.target.closest("[data-del-saved]");
+    if (del) {
+      const i = Number(del.dataset.delSaved);
+      if (window.confirm(`"${state.saved[i]?.name}" 지워도 되나 개굴?`)) {
+        state.saved.splice(i, 1); saveJSON("ffxivSavedCarts", state.saved); render();
+      }
+      return;
+    }
     if (e.target.closest("[data-jump], [data-open-cart]")) { state.cartOpen = true; state.cartAnim = true; return render(); }
     if (e.target.closest("[data-close-cart]")) { state.cartOpen = false; return render(); }
     if (e.target.closest(".cart")) return;
@@ -723,6 +816,12 @@ export default function (component) {
     }
   };
   root.onchange = (e) => {
+    const box = e.target.closest("[data-done]");
+    if (box) {
+      if (box.checked) state.done[box.dataset.done] = true; else delete state.done[box.dataset.done];
+      saveCart();
+      return render();
+    }
     const input = e.target.closest("[data-count]");
     if (!input) return;
     const n = Math.max(1, Math.min(999, Math.round(Number(input.value) || 1)));
@@ -730,6 +829,27 @@ export default function (component) {
     saveCart();
     render();
   };
+
+  // 목록 이름 칸: 치는 동안 기억해 두고, 엔터 치면 저장
+  root.oninput = (e) => { if (e.target.closest("[data-save-name]")) state.saveName = e.target.value; };
+  root.onkeydown = (e) => { if (e.key === "Enter" && e.target.closest("[data-save-name]")) saveList(); };
+  function saveList() {
+    const name = (state.saveName || "").trim() || `장보기 ${nowText()}`;
+    const names = Object.keys(state.cart).map((id) => data.rows.find((r) => r.id === Number(id))?.name).filter(Boolean);
+    const same = state.saved.findIndex((x) => x.name === name);
+    const entry = { name, savedAt: nowText(), cart: { ...state.cart }, done: { ...state.done }, names };
+    if (same >= 0) state.saved[same] = entry; else state.saved.unshift(entry);
+    state.saved = state.saved.slice(0, 20);
+    saveJSON("ffxivSavedCarts", state.saved);
+    state.saveName = "";
+    flash(same >= 0 ? `"${name}" 덮어썼다 개굴.` : `"${name}" 저장했다 개굴.`);
+  }
+  function flash(msg) {
+    state.cartMsg = msg;
+    render();
+    clearTimeout(root.__msgTimer);
+    root.__msgTimer = setTimeout(() => { state.cartMsg = ""; render(); }, 3000);
+  }
 
   // 그래프 툴팁: data-tip 이 있는 곳에 마우스를 올리면 뜬다
   root.onmousemove = (e) => {

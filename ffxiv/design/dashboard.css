@@ -321,3 +321,31 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .rank-table td[data-col="etc"]{min-width:150px}
 .rank-table td[data-col="etc"] .badges{max-width:200px}
 .rank-table td[data-col="name"]{white-space:normal;word-break:keep-all;min-width:140px;max-width:220px;line-height:1.35}
+
+/* 장보기: 산 재료 체크 → 취소선, 목록 저장 */
+.buy{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.buy input{appearance:none;-webkit-appearance:none;width:16px;height:16px;margin:0;flex:none;cursor:pointer;
+  border:1.5px solid var(--border-strong);border-radius:4px;background:var(--surface);display:inline-grid;place-items:center}
+.buy input:hover{border-color:var(--primary)}
+.buy input:checked{background:var(--primary);border-color:var(--primary)}
+.buy input:checked::after{content:"";width:4px;height:8px;border:solid var(--on-primary);border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+.buy input:focus-visible{outline:0;box-shadow:var(--ring)}
+.cart-group tr.done td{color:var(--text-faint);text-decoration:line-through}
+.cart-group tr.done td .buy input{opacity:.7}
+.cart-group.done .cart-group-head b{text-decoration:line-through;color:var(--text-faint)}
+.cart-count{font-style:normal;color:var(--primary-strong);font-weight:600}
+.cart-save{padding:0 var(--space-5) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.cart-save-row{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.cart-name{flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs-sm)}
+.cart-name:focus{outline:0;border-color:var(--primary);box-shadow:var(--ring)}
+.cart-btn{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:var(--radius);padding:6px 12px;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap}
+.cart-btn:hover{border-color:var(--primary);color:var(--primary-strong)}
+.cart-btn.primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}
+.cart-btn.primary:hover{filter:brightness(1.06);color:var(--on-primary)}
+.cart-msg{font-size:var(--fs-sm);color:var(--primary-strong);background:var(--primary-soft);border-radius:var(--radius);padding:6px 10px}
+.cart-saved{list-style:none;margin:0;padding:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.cart-saved li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:8px var(--space-3);border-bottom:1px solid var(--border);font-size:var(--fs-sm)}
+.cart-saved li:last-child{border-bottom:0}
+.cart-saved li div{display:flex;flex-direction:column;min-width:0}
+.cart-saved li small{color:var(--text-faint);font-size:var(--fs-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cart-saved li span{display:flex;align-items:center;gap:6px;flex:none}

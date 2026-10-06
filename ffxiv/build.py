@@ -279,6 +279,16 @@ def main():
             made[key] = (summary, details, badges.items)
             write_page(data, f"{page}-{key}", *made[key])
         write_page(data, f"{page}-all", *combine(made["nq"], made["hq"]))
+        # 로그: 계산 못 한 이유 (재료 시세 없음 / 판매 기록 없음) — 레벨 70 이하, 통합 기준
+        rows70 = [r for r in made["nq"][0] + made["hq"][0] if r["level"] <= 70]
+        nocost = [r for r in rows70 if r["cost"] is None]
+        nosell = [r for r in rows70 if r["cost"] is not None and r["v"]["dc"][0] is None]
+        print(f"  {page}: Lv70 이하 {len(rows70)}줄 · 계산 가능 {len(rows70) - len(nocost) - len(nosell)} · "
+              f"재료 시세 없음 {len(nocost)} · 판매 기록 없음 {len(nosell)}")
+        from collections import Counter
+        why = Counter(m for r in nocost for m in r["reason"].split(": ", 1)[-1].split(", "))
+        if why:
+            print("  시세 없는 재료 상위: " + ", ".join(f"{k} {v}" for k, v in why.most_common(12)))
         print(f"계산 끝: {page} ({time.time() - t:.0f}초)")
 
     t = time.time()

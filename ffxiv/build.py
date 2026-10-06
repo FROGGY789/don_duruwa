@@ -105,7 +105,7 @@ def build_craft(gd, cache, cfg, server, tax, hq, badges):
         recipe, tree = trees[r["recipe_id"]]
         ratio = r["재료 여유 배수"]
         summary.append({
-            "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
+            "id": r["recipe_id"], "item": recipe.result_id, "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
             "level": r["레시피 레벨"], "cat": r["분류"], "sub": r["세부"], "cost": r["원가"],
             "matRatio": None if math.isinf(ratio) else ratio, "resultAmount": r["결과물 개수"],
             "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
@@ -139,7 +139,7 @@ def build_gather(gd, cache, cfg, server, tax, hq, badges):
             continue
         g = gd.gather[r["item_id"]]
         summary.append({
-            "id": r["item_id"], "name": gd.name(r["item_id"]), "stars": g.stars, "job": r["직업"],
+            "id": r["item_id"], "item": r["item_id"], "name": gd.name(r["item_id"]), "stars": g.stars, "job": r["직업"],
             "level": r["레벨"], "cat": r["분류"], "sub": "", "cost": 0, "matRatio": None, "resultAmount": 1,
             "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
             "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
@@ -185,7 +185,7 @@ def build_exchange(gd, cache, cfg, server, tax, offers, badges):
             tags.append(badges.ref("📍 " + places[0] + (f" 외 {len(places) - 1}곳" if len(places) > 1 else ""),
                                    " / ".join(source_text(s) for s in o.sources[:4])))
         summary.append({
-            "id": rid, "name": item.name, "stars": 0, "job": o.currency, "level": o.price, "cat": o.group, "sub": "",
+            "id": rid, "item": o.item_id, "name": item.name, "stars": 0, "job": o.currency, "level": o.price, "cat": o.group, "sub": "",
             "cost": 0, "matRatio": None, "resultAmount": o.amount, "updated": dc.last_upload or 0, "hq": hq,
             "reason": "" if dc.median is not None else f"{cfg['history_hours'] // 24}일 동안 판매 기록이 없다 개굴",
             "badges": tags, "v": {k: view_summary(v, badges) for k, v in row["보기"].items()},

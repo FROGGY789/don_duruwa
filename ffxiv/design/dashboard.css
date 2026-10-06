@@ -373,3 +373,16 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .mat-link:hover{color:var(--primary-strong);text-decoration:underline}
 .mat-link .mat-go{font-size:var(--fs-xs);opacity:0;transition:opacity .15s}
 .mat-link:hover .mat-go,.mat-link:focus-visible .mat-go{opacity:1}
+
+/* ⚡ 지금 시세 (품목 누르면 다시 받은 값) */
+.live{margin:var(--space-4) 0;padding:var(--space-4);border:1px solid color-mix(in oklab,var(--primary) 35%,var(--border));border-radius:var(--radius);background:var(--surface-2)}
+.live-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px var(--space-3);margin-bottom:var(--space-3)}
+.live-head h3{margin:0;font-size:var(--fs-md);color:var(--text)}
+.live-head .faint{font-size:var(--fs-xs)}
+.live-retry{margin-left:auto;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);border-radius:var(--radius-sm);padding:3px 10px;font-size:var(--fs-xs);cursor:pointer}
+.live-retry:hover{color:var(--primary-strong);border-color:var(--primary)}
+.live-kv{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-6);margin-bottom:var(--space-3)}
+.live-kv div{display:flex;flex-direction:column;gap:2px}
+.live-kv span{font-size:var(--fs-xs);color:var(--text-muted)}
+.live-kv b{font-size:var(--fs-lg);font-variant-numeric:tabular-nums}
+.live tr.dc td{font-weight:600}

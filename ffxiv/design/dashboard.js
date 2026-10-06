@@ -264,6 +264,7 @@ function renderDetail(d, row) {
           </div>
         </div>
         ${row.sources && row.sources.length ? `<div class="sources"><h3>📍 어디서 바꾸나</h3><ul>${row.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${renderLive(d, row)}
         ${renderInsights(d, row)}
         ${row.materials ? `<div class="table-wrap"><table>
           <thead><tr>
@@ -274,6 +275,34 @@ function renderDetail(d, row) {
         </table></div>` : ""}
       </div>
     </section>`;
+}
+
+// ⚡ 방금 받은 시세 (정적 사이트에서 품목을 누르면 그 템만 Universalis 에서 다시 받는다)
+function renderLive(d, row) {
+  if (!d.loadLive) return "";
+  const L = row.live;
+  if (!L || L.loading) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">Universalis 에서 방금 시세 받는 중이다 개굴…</span></div></div>`;
+  if (L.error) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">못 받아왔다 개굴 (${esc(L.error)}). 표 숫자는 매시간 받아 둔 값이다 개굴.</span>
+    <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div></div>`;
+  const diff = L.net != null && V(row).net != null ? L.net - V(row).net : null;
+  const rows = L.worlds.map((w) => `<tr class="${w.key === "dc" ? "dc" : ""}">
+    <td>${esc(w.name)}</td><td class="num">${gil(w.min)}</td><td class="num">${w.listings}</td>
+    <td class="num">${gil(w.median)}</td><td class="num">${w.sales}</td>
+    <td>${w.last ? `${gil(w.last.price)} ×${w.last.qty} <span class="faint">${esc(w.last.ago)}</span>` : '<span class="dash">-</span>'}</td>
+    <td class="faint">${esc(w.uploaded)}</td></tr>`).join("");
+  return `<div class="live">
+    <div class="live-head"><h3>⚡ 지금 시세 · ${esc(L.time)} 받음</h3>
+      <span class="faint">표 숫자는 매시간 받아 둔 값이고, 이건 방금 Universalis 에서 다시 받은 값이다 개굴. 이상 거래·미끼는 안 뺐다 개굴.</span>
+      <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div>
+    <div class="live-kv">
+      <div><span>지금 판매 예상가 (${esc(L.period)} 중앙값)</span><b>${gil(L.sell)}</b></div>
+      <div><span>지금 기준 순수익</span><b>${L.net == null ? '<span class="dash">-</span>' : signed(L.net)}</b></div>
+      ${diff != null ? `<div><span>표보다</span><b>${signed(diff)}</b></div>` : ""}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>서버</th><th class="num">지금 최저 매물</th><th class="num">매물 수</th><th class="num">${esc(L.period)} 판매 중앙값</th><th class="num">판매 건수</th><th>마지막 판매</th><th>마지막 업로드</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 
 // ── 시세 추이 (판매가 선 그래프 + 판매 수량 막대, 축은 각자 하나) ──
@@ -685,6 +714,13 @@ export default function (component) {
     const selected = data.rows.find((r) => r.id === state.selected);
     // 정적 사이트: 상세(근거·재료·추이)는 누를 때 받아온다
     if (selected && data.loadDetail && !selected.loaded) data.loadDetail(selected.id).then(() => render(), () => {});
+    // 누를 때마다 그 템 시세를 다시 받는다 (1분 안에 또 누르면 그대로)
+    if (selected && data.loadLive && selected.item && (!selected.live || (!selected.live.loading && Date.now() - (selected.live.at || 0) > 60000))) {
+      const target = selected;
+      target.live = { loading: true, at: Date.now() };
+      data.loadLive(target).then((live) => { target.live = live; render(); },
+        (e) => { target.live = { error: e.message || "오류", at: Date.now() }; render(); });
+    }
     const cartCount = Object.keys(state.cart).length;
     const notice = data.notice
       ? `<div class="notice ${esc(data.notice.kind)}"><span>${data.notice.kind === "error" ? "⚠" : "⏳"}</span><span>${esc(data.notice.text)}</span></div>`
@@ -763,6 +799,10 @@ export default function (component) {
     }
     if (!e.target.closest(".pop")) closePop();
     if (e.target.closest("[data-frogs]")) return frogRain();
+    if (e.target.closest("[data-live-retry]")) {
+      const sel = data.rows.find((r) => r.id === state.selected);
+      if (sel) { sel.live = null; return render(); }
+    }
     const mat = e.target.closest("[data-track-mat]");
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     const pick = e.target.closest("[data-pick]");

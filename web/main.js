@@ -156,6 +156,34 @@ function mergeDetail(ds, id) {
   row.loaded = true;
 }
 
+// ── ⚡ 품목을 누르면 그 템 시세만 Universalis 에서 바로 다시 받는다 (표는 매시간 받아 둔 값) ──
+const UNIVERSALIS = "https://universalis.app/api/v2";
+async function loadLive(row) {
+  const dc = encodeURIComponent(meta.dc), id = row.item;
+  const [cur, hist] = await Promise.all([
+    fetch(`${UNIVERSALIS}/${dc}/${id}?listings=100&entries=0`).then((r) => { if (!r.ok) throw new Error(`시세 ${r.status}`); return r.json(); }),
+    fetch(`${UNIVERSALIS}/history/${dc}/${id}?entriesWithin=${meta.hours * 3600}&entriesToReturn=999`).then((r) => (r.ok ? r.json() : { entries: [] })),
+  ]);
+  const want = (x) => row.sellingHq == null || !!x.hq === row.sellingHq; // 판매 품질에 맞는 것만
+  const names = Object.fromEntries(meta.servers.filter((s) => s.key !== "dc").map((s) => [s.key, s.name]));
+  const listings = (cur.listings || []).filter(want), sales = (hist.entries || []).filter(want);
+  const med = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const one = (key) => {
+    const ls = key === "dc" ? listings : listings.filter((l) => String(l.worldID) === key);
+    const ss = key === "dc" ? sales : sales.filter((x) => String(x.worldID) === key);
+    const last = ss.reduce((a, x) => (!a || x.timestamp > a.timestamp ? x : a), null);
+    const up = key === "dc" ? cur.lastUploadTime : (cur.worldUploadTimes || {})[key];
+    return { key, name: key === "dc" ? "통합" : names[key] || key, min: ls.length ? Math.min(...ls.map((l) => l.pricePerUnit)) : null,
+      listings: ls.length, sales: ss.length, median: med(ss.map((x) => x.pricePerUnit)),
+      last: last ? { price: last.pricePerUnit, qty: last.quantity, ago: ago(last.timestamp) } : null,
+      uploaded: up ? ago(up / 1000) : "기록 없음" };
+  };
+  const tax = taxRate(), dcv = one("dc");
+  return { at: Date.now(), time: fmtTime(Date.now() / 1000).slice(11), period: PERIOD(), tax,
+    sell: dcv.median, net: dcv.median != null && row.cost != null ? dcv.median * (1 - tax) - row.cost : null,
+    worlds: ["dc", ...Object.keys(names)].map(one) };
+}
+
 // ── 계산: 판매세 넣은 순수익, 필터, 통계, 검색 ──
 function compute(p, ds, name) {
   const F = S[p], tax = taxRate(), now = Date.now() / 1000;
@@ -179,7 +207,7 @@ function compute(p, ds, name) {
     const stale = (r.updated || 0) < now - S.staleHours * 3600;
     const scope = inScope(r);
     Object.assign(row, {
-      id: r.id, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
+      id: r.id, item: r.item, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
       updated: r.updated, updatedText: ago(r.updated), stale, sellingHq: r.hq, resultAmount: r.resultAmount,
       badges: (stale ? [{ kind: "stale", text: "⚠ 데이터 오래됨", tip: staleTip }] : []).concat(r.badges),
       scope, raw: r,
@@ -303,6 +331,7 @@ async function render() {
     failedHead: { gather: ["직업", "채집 레벨"], exchange: ["화폐", "교환가"] }[p],
     failedNote: p === "craft" ? undefined : "최근 팔린 기록이 없어서 계산 못 한 거다 개굴",
     loadDetail: (id) => loadDetail(name, id),
+    loadLive,
     // 재료 이름을 누르면 📈 재료 트래킹에 담고 그리로 간다
     trackMaterial: (id, need) => {
       const list = tracked();

@@ -548,13 +548,13 @@ function seg(path, options, value) {
 }
 function sideHead(p) {
   return `
+    <div class="sb-top"><span class="brand-frog">🐸</span><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button></div>
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
       <a href="#exchange" class="${p === "exchange" ? "on" : ""}">🪙 교환</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
     </nav>
-    <div class="brand"><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button><span class="brand-frog">🐸</span></div>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
     <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-pal="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>`;

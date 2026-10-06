@@ -78,8 +78,11 @@ function signed(v) {
   const cls = v >= 0 ? "pos" : "neg";
   return `<span class="${cls}">${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString("ko-KR")}</span>`;
 }
-function itemName(name, stars) {
-  return (stars ? `<span class="stars">${"★".repeat(stars)}</span>` : "") + `<span class="item">${esc(name)}</span>`;
+// 파판 HQ 마크 (와이파이 같은 곡선 세 줄)
+const HQ_MARK = `<svg class="hq-mark" viewBox="0 0 16 16" aria-label="HQ"><title>HQ (고품질)</title>
+  <path d="M3 13a1.6 1.6 0 1 0 .01 0Z"/><path d="M2 8.5a5.5 5.5 0 0 1 5.5 5.5" fill="none"/><path d="M2 4a10 10 0 0 1 10 10" fill="none"/></svg>`;
+function itemName(name, stars, hq) {
+  return (stars ? `<span class="stars">${"★".repeat(stars)}</span>` : "") + `<span class="item">${esc(name)}</span>` + (hq ? HQ_MARK : "");
 }
 
 function renderHeader(d) {
@@ -185,7 +188,7 @@ function renderTable(d, rows) {
       pick: `<td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
           title="${state.cart[r.id] ? "장보기에서 빼기" : "장보기에 담기"}">${state.cart[r.id] ? "✓" : "+"}</button></td>`,
       rank: `<td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>`,
-      name: `<td>${itemName(r.name, r.stars)}</td>`,
+      name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}</td>`,
       job: `<td><span class="job">${esc(r.job)}</span></td>`,
       level: `<td class="num">${r.level}</td>`,
       sell: `<td class="num">${gil(v.sell)}</td>`,
@@ -209,7 +212,7 @@ function renderDetail(d, row) {
   if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. ${isGather(d) ? "판매" : "재료"} 상세가 여기 뜬다 개굴.</div>`;
   if (d.loadDetail && !row.loaded) {
     return `<section class="detail"><div class="detail-card"><div class="detail-top"><div>
-      <h2>${itemName(row.name, row.stars)}</h2><div class="desc">🐸 상세 불러오는 중이다 개굴…</div></div></div></div></section>`;
+      <h2>${itemName(row.name, row.stars, row.sellingHq === true)}</h2><div class="desc">🐸 상세 불러오는 중이다 개굴…</div></div></div></div></section>`;
   }
   const body = (row.materials || []).map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
@@ -233,7 +236,7 @@ function renderDetail(d, row) {
       <div class="detail-card">
         <div class="detail-top">
           <div>
-            <h2>${row.materials ? "📦" : "⛏"} ${itemName(row.name, row.stars)} — ${row.materials ? "재료 상세" : "판매 상세"}</h2>
+            <h2>${row.materials ? "📦" : "⛏"} ${itemName(row.name, row.stars, row.sellingHq === true)} — ${row.materials ? "재료 상세" : "판매 상세"}</h2>
             <div class="desc">${esc(row.detailDesc)}</div>
           </div>
           <div class="kv">
@@ -471,7 +474,7 @@ function renderSearch(d) {
     const money = x.net != null ? `<span class="sr-money">순수익 ${signed(x.net)}</span>` : "";
     return `
       <div class="sr ${x.kind}${x.id ? " go" : ""}" ${x.id ? `data-goto="${x.id}"` : ""}>
-        <div class="sr-main">${itemName(x.name, x.stars)}${meta ? `<span class="sr-meta">${esc(meta)}</span>` : ""}${money}</div>
+        <div class="sr-main">${itemName(x.name, x.stars, x.hq)}${meta ? `<span class="sr-meta">${esc(meta)}</span>` : ""}${money}</div>
         <div class="sr-why"><span class="sr-kind">${icon} ${esc(label)}</span>${x.why ? ` — ${esc(x.why)}` : ""}</div>
       </div>`;
   }).join("");
@@ -519,7 +522,7 @@ function cartPlan(d) {
 function cartText(d) {
   const { rows, list, cost, revenue } = cartPlan(d);
   const out = [`🛒 장보기 목록 (${nowText()})`, ""];
-  rows.forEach((r) => out.push(`- ${"★".repeat(r.stars || 0)}${r.name} ×${state.cart[r.id]}회 (${state.cart[r.id] * r.resultAmount}개)`));
+  rows.forEach((r) => out.push(`- ${"★".repeat(r.stars || 0)}${r.name}${r.sellingHq === true ? " (HQ)" : ""} ×${state.cart[r.id]}회 (${state.cart[r.id] * r.resultAmount}개)`));
   out.push("", `재료비 ${Math.round(cost).toLocaleString("ko-KR")}길 · 판매액(세후) ${Math.round(revenue).toLocaleString("ko-KR")}길 · 예상 순이익 ${Math.round(revenue - cost).toLocaleString("ko-KR")}길`);
   list.forEach((g, i) => {
     out.push("", `== ${g.market ? `${i + 1}. ` : ""}${g.name} (${Math.round(g.total).toLocaleString("ko-KR")}길) ==`);
@@ -543,7 +546,7 @@ function renderCart(d) {
   const all = list.flatMap((g) => g.items);
   const bought = all.filter((it) => state.done[it.key]).length;
   const chips = rows.map((r) => `
-    <span class="cart-chip">${itemName(r.name, r.stars)}
+    <span class="cart-chip">${itemName(r.name, r.stars, r.sellingHq === true)}
       <input type="number" min="1" max="999" value="${state.cart[r.id]}" data-count="${r.id}" aria-label="제작 횟수"/>회
       <small>(${(state.cart[r.id] * r.resultAmount).toLocaleString("ko-KR")}개)</small>
       <button type="button" class="chip-x" data-unpick="${r.id}" title="빼기">✕</button></span>`).join("");
@@ -615,7 +618,7 @@ function renderFailed(d) {
   const more = failed.total > failed.items.length
     ? `<tr><td colspan="4" class="faint">… 외 ${(failed.total - failed.items.length).toLocaleString("ko-KR")}개</td></tr>` : "";
   const body = failed.items.map((f) => `
-    <tr><td>${itemName(f.name, f.stars)}</td><td><span class="job">${esc(f.job)}</span></td>
+    <tr><td>${itemName(f.name, f.stars, f.hq)}</td><td><span class="job">${esc(f.job)}</span></td>
     <td class="num">${f.level}</td><td class="reason">${esc(f.reason)}</td></tr>`).join("");
   return `
     <details class="failed"${state.failedOpen ? " open" : ""}>

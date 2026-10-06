@@ -272,14 +272,7 @@ class Calculator:
         if recipe.quest_unlock:
             extra.append("퀘스트 해금")
             tips["퀘스트 해금"] = "퀘스트를 깨야 배울 수 있는 레시피다 개굴."
-        if item.can_hq:
-            q = {None: "NQ·HQ 통합", True: "HQ 기준", False: "NQ 기준"}[hq]
-            extra.append(q)
-            tips[q] = {
-                False: "NQ 시세로 계산했다 개굴. 사이드바 '판매 품질' 에서 바꿀 수 있다 개굴.",
-                True: "HQ 시세로 계산했다 개굴. HQ 로 만들 실력이 돼야 이 값을 받는다 개굴.",
-                None: "NQ·HQ 안 가리고 팔린 거 다 섞어서 계산했다 개굴. HQ 가 많이 팔리는 템이면 NQ 로 만들 땐 이만큼 못 받는다 개굴.",
-            }[hq]
+        # 판매 품질은 기타 칸 대신 이름 끝 HQ 마크로 보여준다 (화면 쪽)
 
         dc = self.stats(recipe.result_id, hq, self.outlier_ratio, None)
         row = {
@@ -321,9 +314,6 @@ class Calculator:
         if g.timed:
             extra.append("⏰ 시간 한정")
             tips["⏰ 시간 한정"] = "정해진 에오르제아 시간에만 열리는 채집지(미지·전설 등)에서 나온다 개굴. 아무 때나 못 캔다 개굴."
-        if item.can_hq:
-            q = {None: "NQ·HQ 통합", True: "HQ 기준", False: "NQ 기준"}[hq]
-            extra.append(q)
         dc = self.stats(g.item_id, hq, self.outlier_ratio, None)
         crystal = item.ui_category == CRYSTAL_UI_CATEGORY
         row = {

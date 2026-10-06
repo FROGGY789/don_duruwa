@@ -29,7 +29,8 @@ from .market import MarketCache, Universalis, refresh, resolve_server
 from .profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 from .track import build_tracking, load_history, save_history, update_history
 
-QUALITIES = {"nq": False, "hq": True, "all": None}
+# 판매 품질: nq = 모든 템을 NQ 로 팔 때, hq = HQ 되는 템만 HQ 로 팔 때, all = 둘을 한 순위에 (HQ 줄은 ID 에 HQ_OFFSET)
+HQ_OFFSET = 10_000_000
 SHARDS = 32
 WEB = ROOT / "web"
 DESIGN = Path(__file__).resolve().parent / "design"
@@ -68,7 +69,9 @@ class Badges:
         self.items, self.index = [], {}
 
     def ref(self, text, tip=None):
-        b = badge(text, tip)
+        return self.ref_obj(badge(text, tip))
+
+    def ref_obj(self, b):
         key = json.dumps(b, ensure_ascii=False, sort_keys=True)
         if key not in self.index:
             self.index[key] = len(self.items)
@@ -86,7 +89,7 @@ def view_detail(v):
     return {"trend": compact_trend(v["trend"]), "quality": v["quality"], "bundles": v.get("bundles")}
 
 
-def build_craft(gd, cache, cfg, server, tax, hq):
+def build_craft(gd, cache, cfg, server, tax, hq, badges):
     """제작: 레시피 레벨·직업 레벨은 화면에서 거르니까 레벨 100 까지 다 계산한다.
     중간재료를 직접 만들 수 있는지는 config.yaml 의 job_levels 기준."""
     every = {job: 100 for job in JOB_NAMES}
@@ -94,8 +97,10 @@ def build_craft(gd, cache, cfg, server, tax, hq):
     rows, trees, calc = analyze(gd, cache.items, cfg, targets, tax, sell_hq=hq, batch_size=cfg["batch_size"],
                                 job_levels=cfg["job_levels"], world_names=server["world_names"],
                                 home_world=server["world_id"])
-    summary, details, badges = [], {}, Badges()
+    summary, details = [], {}
     for r in rows:
+        if hq and r["판매 품질"] is not True:
+            continue  # HQ 로 팔 때 순위: HQ 가 안 되는 템(가구 등)은 뺀다
         recipe, tree = trees[r["recipe_id"]]
         ratio = r["재료 여유 배수"]
         summary.append({
@@ -120,15 +125,17 @@ def build_craft(gd, cache, cfg, server, tax, hq):
                           f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",
             "views": {k: view_detail(v) for k, v in r["보기"].items()},
         }
-    return summary, details, badges.items
+    return summary, details
 
 
-def build_gather(gd, cache, cfg, server, tax, hq):
+def build_gather(gd, cache, cfg, server, tax, hq, badges):
     gathers = [g for g in gd.gather.values() if gd.items[g.item_id].marketable]
     rows, _ = analyze_gather(gd, cache.items, cfg, gathers, tax, sell_hq=hq,
                              world_names=server["world_names"], home_world=server["world_id"])
-    summary, details, badges = [], {}, Badges()
+    summary, details = [], {}
     for r in rows:
+        if hq and r["판매 품질"] is not True:
+            continue
         g = gd.gather[r["item_id"]]
         summary.append({
             "id": r["item_id"], "name": gd.name(r["item_id"]), "stars": g.stars, "job": r["직업"],
@@ -143,7 +150,20 @@ def build_gather(gd, cache, cfg, server, tax, hq):
                           f"{' · ⏰ 시간 한정 채집지' if g.timed else ''} · 재료비 없음, 판매세만 뺀다 개굴",
             "views": {k: view_detail(v) for k, v in r["보기"].items()},
         }
-    return summary, details, badges.items
+    return summary, details
+
+
+def combine(nq, hq):
+    """통합: NQ 줄과 HQ 줄을 한 순위로. 뱃지 번호를 새로 매기고 HQ 줄은 ID 를 띄운다."""
+    badges, rows, details = Badges(), [], {}
+    for (summary, dets, items), offset in ((nq, 0), (hq, HQ_OFFSET)):
+        remap = lambda i: badges.ref_obj(items[i])
+        for r in summary:
+            r = dict(r, id=r["id"] + offset, badges=[remap(i) for i in r["badges"]],
+                     v={k: v[:-1] + [[remap(i) for i in v[-1]]] for k, v in r["v"].items()})
+            rows.append(r)
+        details.update({iid + offset: d for iid, d in dets.items()})
+    return rows, details, badges.items
 
 
 def write_page(out, name, summary, details, badges):
@@ -200,11 +220,16 @@ def main():
 
     default_city = cfg["tax_city"]
     tax, _ = seller_tax_rate(cfg, cache.tax_rates, default_city)
-    for key, hq in QUALITIES.items():
+    for page, build in (("craft", build_craft), ("gather", build_gather)):
         t = time.time()
-        write_page(data, f"craft-{key}", *build_craft(gd, cache, cfg, server, tax, hq))
-        write_page(data, f"gather-{key}", *build_gather(gd, cache, cfg, server, tax, hq))
-        print(f"계산 끝: 판매 품질 {key} ({time.time() - t:.0f}초)")
+        made = {}
+        for key, hq in (("nq", False), ("hq", True)):
+            badges = Badges()
+            summary, details = build(gd, cache, cfg, server, tax, hq, badges)
+            made[key] = (summary, details, badges.items)
+            write_page(data, f"{page}-{key}", *made[key])
+        write_page(data, f"{page}-all", *combine(made["nq"], made["hq"]))
+        print(f"계산 끝: {page} ({time.time() - t:.0f}초)")
 
     # 📈 재료 트래킹: 하루 단위 기록을 쌓고 화면용 파일
     t = time.time()

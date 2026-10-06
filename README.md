@@ -8,7 +8,8 @@
 
 - **GitHub Actions** (`.github/workflows/site.yml`) 가 매시간 시세를 받아 계산하고 (`python -m ffxiv.build`), 결과를 **Cloudflare Pages** 에 올립니다.
 - 화면: `web/` (사이드바·필터·계산) + `ffxiv/design/dashboard.*` (표·상세, Streamlit 판과 같이 씀)
-- 필터·판매 도시(세율)·분류는 브라우저에서 바로 계산합니다. 판매 품질(NQ/HQ/통합)은 세 벌 미리 계산해 둡니다.
+- 필터·판매 도시(세율)·분류는 브라우저에서 바로 계산합니다. 판매 품질은 미리 계산해 둡니다:
+  **NQ** = 모든 템을 NQ 로 팔 때, **HQ** = HQ 되는 템만 HQ 로 팔 때, **통합** = 두 순위를 합친 것 (HQ 줄은 이름 끝 HQ 마크).
 - 중간재료 직접 제작 여부는 `config.yaml` 의 `job_levels` 기준으로 미리 계산됩니다 (사이트의 직업 레벨은 순위에서 거르는 데만 씀).
 - 지금 바로 갱신: GitHub 저장소 **Actions → 사이트 갱신 → Run workflow**
 - 내 PC 에서 확인: `python -m ffxiv.build` (시세 받기까지) 또는 `python -m ffxiv.build --no-fetch` (저장된 시세로 계산만) → `cd site && python -m http.server` → http://localhost:8000

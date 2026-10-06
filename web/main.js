@@ -184,7 +184,7 @@ function compute(p, ds, name) {
   const failed = {};
   for (const c of Object.keys(cats)) {
     const rs = scoped.filter((r) => r.views.dc.net == null && (c === "all" || r.cat === c));
-    failed[c] = { total: rs.length, items: rs.slice(0, MAX_FAILED).map((r) => ({ name: r.name, stars: r.stars, job: r.job, level: r.level, reason: r.raw.reason || "판매 기록이 없다 개굴" })) };
+    failed[c] = { total: rs.length, items: rs.slice(0, MAX_FAILED).map((r) => ({ name: r.name, stars: r.stars, hq: r.sellingHq === true, job: r.job, level: r.level, reason: r.raw.reason || "판매 기록이 없다 개굴" })) };
   }
   return { rows, stats, failed, cats, tax };
 }
@@ -206,7 +206,7 @@ function search(p, rows, q) {
       kind = okWorlds.length ? "ok" : "filtered";
       why = "통합: " + v.reasons.join(" · ") + (okWorlds.length ? ` — 서버별로는 ${okWorlds.join(", ")} 순위에 있다 개굴` : "");
     }
-    return { name: r.name, stars: r.stars, job: r.job, level: r.level, kind, why, id: kind === "ok" ? r.id : null, net: v.net, sell: v.sell };
+    return { name: r.name, stars: r.stars, hq: r.sellingHq === true, job: r.job, level: r.level, kind, why, id: kind === "ok" ? r.id : null, net: v.net, sell: v.sell };
   });
   const order = { ok: 0, filtered: 1, nocalc: 2, out: 3 };
   items.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name, "ko"));
@@ -551,6 +551,9 @@ function renderSide() {
     </details>
 
     <div class="sb-title">필터</div>
+    <label class="field"><span>판매 품질</span></label>
+    ${seg("quality", Object.keys(QUALITY_KEY), S.quality)}
+    <p class="hint">${{ NQ: "모든 템을 NQ 로 팔 때 순위다 개굴.", HQ: "HQ 로 만들 수 있는 템만, HQ 로 팔 때 순위다 개굴. 가구처럼 HQ 가 없는 템은 빠진다 개굴.", "통합": "NQ 로 팔 때랑 HQ 로 팔 때를 한 순위에 같이 놓는다 개굴. HQ 줄은 이름 끝에 HQ 마크가 붙는다 개굴." }[S.quality]}</p>
     ${num(`${PERIOD()} 판매 건수 ≥`, `${p}.minSales`, 0, 999)}
     ${p === "craft" ? num("재료 판매 수량 배수 ≥", "craft.matRatio", 0, 100, 0.5, "재료마다 팔린 수량이 필요한 수량의 몇 배는 돼야 하는지 정한다 개굴. NPC·직접 채집 재료는 안 따진다 개굴.") : ""}
     ${p === "craft" ? num("최소 수익률(%)", "craft.minMargin", -100, 10000, 5) : ""}
@@ -562,8 +565,6 @@ function renderSide() {
     <label class="field"><span>기본 정렬</span><select data-path="${p}.sort">${Object.entries(sortNames).map(([k, v]) => `<option value="${k}"${F.sort === k ? " selected" : ""}>${v}</option>`).join("")}</select></label>
 
     <div class="sb-title">판매 설정</div>
-    <label class="field" title="HQ 있는 템을 어느 시세로 팔 건지 고른다 개굴. 통합 = 안 가리고 다 섞어서."><span>판매 품질</span></label>
-    ${seg("quality", Object.keys(QUALITY_KEY), S.quality)}
     <label class="field"><span>판매 도시(세율)</span><select data-path="taxCity">${cities.map((c) => `<option value="${c}"${S.taxCity === c ? " selected" : ""}>${c === "min" ? "가장 낮은 세율" : esc(meta.taxCities[c])}</option>`).join("")}</select></label>
     <div class="sb-note tax"><span>적용 판매세</span><b>${Math.round(taxRate() * 100)}%</b></div>
     ${num("데이터 오래됨 기준(시간)", "staleHours", 1, 720)}

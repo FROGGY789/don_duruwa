@@ -123,7 +123,7 @@ if(T[s.theme])document.documentElement.dataset.theme=T[s.theme];if(P[s.palette])
 <div class="frog-rain" aria-hidden="true">${frogs}</div>
 <main class="login-box">
   <div class="eyebrow">FFXIV CRAFTING · GATHERING PROFIT</div>
-  <h1>에오르제아에서 장사꾼으로 살아남기</h1>
+  <h1>에오르제아에서<br>장사꾼으로 살아남기 🐸</h1>
   <p class="login-sub">${mode === "request" ? "신청하면 로살리아@초코보가 보고 허락해 준다 개굴." : "캐릭터명@서버랑 비밀번호를 쳐야 화면을 열어준다 개굴."}</p>
   ${form}
   ${error ? `<div class="login-error">🐸 ${esc(error)}</div>` : ""}

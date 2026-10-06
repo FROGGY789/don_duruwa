@@ -75,7 +75,7 @@ def split_odd_sales(sales, ratio):
     return kept, [s for s in sales if s not in kept]
 
 
-def clean_by_world(sales, listings, odd_ratio, outlier_ratio):
+def clean_by_world(sales, listings, odd_ratio, outlier_ratio, ref=None):
     """서버마다 따로 이상 거래·미끼 매물을 가른다. (남긴 판매, 뺀 판매, 남긴 매물, 미끼 매물)
 
     톤베리가 원래 1,000길대면 1,000길은 정상이다. 그 서버 중앙값이랑만 비교한다.
@@ -83,8 +83,9 @@ def clean_by_world(sales, listings, odd_ratio, outlier_ratio):
     kept, dropped, good, bait = [], [], [], []
     # 서버 하나에 판매가 몇 건 없거나 이상한 거래만 몰려 있으면 그 서버 중앙값으론 못 거른다.
     # 그래서 한국 전체 판매가(가운데 값)보다 DC_ODD_RATIO 배 넘게 비싼 건 먼저 뺀다 (예: 50길짜리 은반지가 수천만 길)
-    if odd_ratio and len(sales) >= 3:
+    if ref is None and len(sales) >= 3:
         ref = statistics.median_low(s[0] for s in sales)
+    if odd_ratio and ref:
         crazy = [s for s in sales if s[0] > ref * DC_ODD_RATIO]
         if crazy:
             dropped += crazy
@@ -105,7 +106,16 @@ def cleaned(entry, hq, hours, outlier_ratio=0.0, odd_ratio=0.0):
     since = entry.get("fetched_at", time.time()) - hours * 3600
     sales = [s for s in entry["sales"] if s[3] >= since and (hq is None or s[2] == hq)]
     listings = [l for l in entry["listings"] if hq is None or l[2] == hq]
-    return clean_by_world(sales, listings, odd_ratio, outlier_ratio)
+    return clean_by_world(sales, listings, odd_ratio, outlier_ratio, item_reference(entry))
+
+
+def item_reference(entry):
+    """그 템의 '보통 값': 품질·서버·기간 상관없이 받아 둔 판매가 전부의 가운데(낮은 쪽) 값.
+    판매가 3건이 안 되면 지금 매물값도 같이 본다. HQ 판매가 몇 건 없어서 이상한 거래가 기준이 되는 걸 막는다."""
+    prices = [s[0] for s in entry["sales"]]
+    if len(prices) < 3:
+        prices += [l[0] for l in entry["listings"]]
+    return statistics.median_low(prices) if len(prices) >= 3 else None
 
 
 def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0, clean=None):

@@ -18,7 +18,7 @@ import statistics
 import time
 from datetime import datetime, timedelta, timezone
 
-from .profit import clean_by_world
+from .profit import clean_by_world, item_reference
 
 KST = timezone(timedelta(hours=9), "KST")
 KEEP_DAYS = 60
@@ -54,7 +54,7 @@ def update_history(hist, items, cfg):
     outlier = cfg["outlier_ratio"]
     for iid, entry in items.items():
         key = str(iid)
-        kept, _, good, _ = clean_by_world(entry["sales"], entry["listings"], odd, outlier)
+        kept, _, good, _ = clean_by_world(entry["sales"], entry["listings"], odd, outlier, item_reference(entry))
         # 판매: 날짜별 · 서버별 중앙값
         by_day = {}
         for s in kept:
@@ -94,7 +94,7 @@ def build_tracking(gd, items, hist, cfg, write, out):
             continue
         names.append([iid, item.name])
         # 매물은 다 보여주고, 그 서버 보통 가격의 절반도 안 되는 미끼만 표시
-        _, _, _, baits = clean_by_world(entry["sales"], entry["listings"], odd, outlier)
+        _, _, _, baits = clean_by_world(entry["sales"], entry["listings"], odd, outlier, item_reference(entry))
         bait_set = {tuple(b) for b in baits}
         worlds = {}
         for l in sorted(entry["listings"], key=lambda l: l[0]):

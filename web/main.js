@@ -69,6 +69,7 @@ function loadSettings() {
 let pushTimer = 0;
 function saveSettings() {
   save("ffxivSettings", S);
+  if (who()) save("ffxivSettingsWho", who()); // 이 브라우저 설정이 어느 캐릭터 건지
   if (!who()) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
@@ -794,9 +795,9 @@ function onboard() {
     <input type="number" data-o="${path}" min="${min}" max="${max}" step="${step}" value="${get(path)}"></label>`;
   const all = (p) => { const v = Object.values(O[p].jobLevels); return v.every((x) => x === v[0]) ? v[0] : ""; };
   const jobsBlock = (p, jobs, title) => `
-    <div class="ob-sec"><div class="ob-title">${title}</div>
+    <div class="ob-sec ob-${p}"><div class="ob-title">${title}<small>${p === "craft" ? "레시피 레벨 범위랑 직업 레벨" : "채집 레벨 범위랑 직업 레벨"}</small></div>
       <div class="row2">${n(`${p === "craft" ? "레시피" : "채집"} 레벨 ≥`, `${p}.levelMin`, 1, 100)}${n("≤", `${p}.levelMax`, 1, 100)}</div>
-      <label class="field ob-all"><span>${p === "craft" ? "제작" : "채집"} 직업 레벨 한 번에</span>
+      <label class="field ob-all"><span>⭐ ${p === "craft" ? "제작" : "채집"} 직업 레벨 한 번에 맞추기</span>
         <input type="number" data-all="${p}" min="1" max="100" value="${all(p)}" placeholder="직업마다 다르다"></label>
       <div class="ob-jobs">${jobs.map((j) => n(j, `${p}.jobLevels.${j}`, 1, 100)).join("")}</div>
     </div>`;
@@ -805,12 +806,12 @@ function onboard() {
       <div class="ob-head"><span class="brand-frog">🐸</span><div><b>어서 와라 개굴!</b>
         <p class="hint">처음이니까 기본 설정부터 정하자 개굴. 직업 레벨보다 높은 레시피·채집템은 순위에서 뺀다 개굴.
         여기서 정한 건 이 캐릭터에 저장돼서 다른 기기에서도 따라온다 개굴. 나중에 사이드바에서 언제든 바꿀 수 있다 개굴.</p></div></div>
-      <div class="ob-sec"><div class="ob-title">판매 품질</div>
+      <div class="ob-sec ob-quality"><div class="ob-title">💰 판매 품질<small>어떤 품질로 팔 때 순위를 볼지</small></div>
         <div class="seg">${Object.keys(QUALITY_KEY).map((q) => `<button type="button" class="${O.quality === q ? "on" : ""}" data-oq="${esc(q)}">${esc(q)}</button>`).join("")}</div>
         <p class="hint">통합은 NQ·HQ 로 팔 때를 한 순위에 같이 보여준다 개굴.</p></div>
       ${jobsBlock("craft", meta.jobs, "⚒️ 제작")}
       ${jobsBlock("gather", meta.gatherJobs, "⛏️ 채집")}
-      <div class="ob-sec"><div class="ob-title">제작 필터</div>
+      <div class="ob-sec ob-filter"><div class="ob-title">🔍 제작 필터<small>이 기준에 안 맞는 레시피는 순위에서 뺀다 개굴</small></div>
         <div class="row2">${n("최소 수익률(%)", "craft.minMargin", -100, 10000, 5)}${n("개당 최소 순수익(길)", "craft.minProfit", -1000000, 10000000, 500)}
         ${n("현재 등록 건수 ≤", "craft.maxListings", 0, 9999)}${n("예상 판매 소요일 ≤", "craft.maxDays", 0, 365)}</div></div>
       <div class="ob-foot">
@@ -848,12 +849,13 @@ function onboard() {
     box.remove();
     renderSide();
     // 처음 들어온 사람은 설정 끝나면 바로 사용법 둘러보기
-    render().then(() => { if (!load("ffxivTourDone", false)) tour(); });
+    render().then(() => { if (!load(TOUR_KEY(), false)) tour(); });
   });
   document.body.appendChild(box);
 }
 
 // ❓ 사용법 둘러보기: 화면을 어둡게 깔고 설명할 곳만 하얗게 빛나는 네모로 비춘다
+const TOUR_KEY = () => `ffxivTourDone:${who()}`; // 사용법 봤는지도 캐릭터마다
 const TOUR = [
   { sel: ".nav", side: true, title: "메뉴", text: "⚒️ 제작 · ⛏️ 채집 순위, 🪙 교환템 팔기 · 🧪 교환 재료로 만들기, 📈 재료 트래킹으로 옮겨 다닌다 개굴." },
   { sel: "[data-seg=quality]", side: true, title: "판매 품질", text: "NQ 로 팔지, HQ 로 팔지, 둘 다 한 순위에 볼지(통합) 고른다 개굴. 통합에선 HQ 줄 이름 끝에 HQ 마크가 붙는다 개굴." },
@@ -880,7 +882,7 @@ function tour() {
   let i = 0;
   const target = (st) => { const el = document.querySelector(st.sel); return el && st.up ? el.closest(st.up) || el : el; };
   const end = () => {
-    save("ffxivTourDone", true);
+    save(TOUR_KEY(), true);
     box.remove();
     document.body.classList.remove("side-open");
     window.removeEventListener("resize", place);
@@ -952,10 +954,17 @@ async function start() {
   }
   let first = false;
   if (!S) {
-    if (load("ffxivSettings", null) === null) {
+    // 설정은 캐릭터마다 따로: 이 브라우저에 다른 캐릭터 설정이 남아 있으면 내 것으로 안 친다
+    const owner = load("ffxivSettingsWho", null), mine = !who() || owner === who();
+    if (load("ffxivSettings", null) === null || !mine) {
       const remote = await remoteSettings();
       if (remote) save("ffxivSettings", remote);
-      else first = true;
+      else {
+        first = true;
+        if (owner && !mine) try { localStorage.removeItem("ffxivSettings"); } catch { /* 괜찮다 */ }
+        // owner 가 없으면 예전 설정(캐릭터 구분 전) — 그 값으로 처음 설정 화면을 채워 둔다
+      }
+      if (who()) save("ffxivSettingsWho", who());
     }
     S = loadSettings();
   }

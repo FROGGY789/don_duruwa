@@ -362,6 +362,12 @@ def main():
         print(f"  {page}: Lv70 이하 {len(rows70)}줄 · 계산 가능 {len(rows70) - len(nocost) - len(nosell)} · "
               f"재료 시세 없음 {len(nocost)} · 판매 기록 없음 {len(nosell)}")
         from collections import Counter
+        if page == "craft":  # 로그: 내 서버 순위 위쪽이 말이 되는지 (판매가 · 원가 · 판매 건수)
+            home = str(server["world_id"])
+            top = sorted((r for r in made["nq"][0] + made["hq"][0] if r["cost"] is not None and r["v"][home][0]),
+                         key=lambda r: -(r["v"][home][0] * (1 - tax) - r["cost"]))[:5]
+            print("  " + server["world"] + " 상위: " + " / ".join(
+                f"{r['name']}{'(HQ)' if r['hq'] else ''} 판매 {r['v'][home][0]:,.0f} 원가 {r['cost']:,.0f} {r['v'][home][3]}건" for r in top))
         why = Counter(m for r in nocost for m in r["reason"].split(": ", 1)[-1].split(", "))
         if why:
             print("  시세 없는 재료 상위: " + ", ".join(f"{k} {v}" for k, v in why.most_common(12)))

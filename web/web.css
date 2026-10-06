@@ -171,14 +171,32 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
   background:color-mix(in oklab,var(--bg) 55%,transparent);backdrop-filter:blur(3px);overflow-y:auto}
 .ob-card{width:min(640px,100%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);
   padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4)}
-.ob-head{display:flex;gap:var(--space-3);align-items:flex-start}
-.ob-head .brand-frog{font-size:2rem;line-height:1}
-.ob-head b{font-size:var(--fs-lg);color:var(--text)}
-.ob-head .hint{margin-top:var(--space-1)}
-.ob-sec{display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border)}
-.ob-title{font-size:var(--fs-sm);font-weight:600;color:var(--primary-strong)}
-.ob-all input{border-color:var(--primary)}
+.ob-head{display:flex;gap:var(--space-3);align-items:center;margin:calc(var(--space-5) * -1) calc(var(--space-5) * -1) 0;
+  padding:var(--space-5);background:var(--primary-soft);border-bottom:1px solid color-mix(in oklab,var(--primary) 30%,var(--border));
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+.ob-head .brand-frog{font-size:2.4rem;line-height:1}
+.ob-head b{font-size:var(--fs-xl);color:var(--primary-strong)}
+.ob-head .hint{margin-top:var(--space-1);color:var(--text-muted);font-size:var(--fs-sm)}
+/* 섹션마다 색 띠 + 옅은 바탕 */
+.ob-sec{--acc:var(--primary);--acc-soft:var(--primary-soft);display:flex;flex-direction:column;gap:var(--space-2);
+  padding:var(--space-3) var(--space-4) var(--space-4);border:1px solid var(--border);border-left:4px solid var(--acc);
+  border-radius:var(--radius);background:color-mix(in oklab,var(--acc-soft) 55%,var(--surface))}
+.ob-quality{--acc:var(--warning);--acc-soft:var(--warning-soft)}
+.ob-craft{--acc:var(--primary);--acc-soft:var(--primary-soft)}
+.ob-gather{--acc:var(--info);--acc-soft:var(--info-soft)}
+.ob-filter{--acc:var(--violet);--acc-soft:var(--violet-soft)}
+.ob-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px var(--space-2);font-size:var(--fs-md);font-weight:700;color:var(--text)}
+.ob-title small{font-size:var(--fs-xs);font-weight:400;color:var(--text-muted)}
+.ob-sec .field span{color:var(--text);font-weight:500}
+.ob-sec .field input{background:var(--surface);border-color:var(--border-strong)}
+.ob-sec .hint{color:var(--text-muted)}
+.ob-sec .seg{background:var(--surface)}
+.ob-sec .seg button.on{background:var(--acc);color:var(--surface);box-shadow:none}
+.ob-all{padding:var(--space-2) var(--space-3);border-radius:var(--radius);background:var(--surface);border:1px dashed var(--acc)}
+.ob-all span{color:var(--acc) !important;font-weight:700 !important}
+.ob-all input{border-color:var(--acc) !important;font-weight:700}
 .ob-jobs{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2)}
+.ob-card{gap:var(--space-3)}
 .ob-foot{display:flex;justify-content:flex-end;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border)}
 .ob-foot .btn{padding:9px 18px}
 .btn-ghost{border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);border-radius:var(--radius);padding:9px 14px;cursor:pointer}

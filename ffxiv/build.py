@@ -24,9 +24,10 @@ from pathlib import Path
 from .badges import badge
 from .changelog import CHANGELOG
 from .config import JOB_NAMES, ROOT, TAX_CITIES, load_config
+from .exchange import SHEETS as EXCHANGE_SHEETS, load_offers, source_text
 from .gamedata import GATHER_JOBS, GameData, download_csvs, scope_recipes, target_recipes
 from .market import MarketCache, Universalis, refresh, resolve_server
-from .profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
+from .profit import Calculator, analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 from .track import build_tracking, load_history, save_history, update_history
 
 # 판매 품질: nq = 모든 템을 NQ 로 팔 때, hq = HQ 되는 템만 HQ 로 팔 때, all = 둘을 한 순위에 (HQ 줄은 ID 에 HQ_OFFSET)
@@ -102,29 +103,95 @@ def build_craft(gd, cache, cfg, server, tax, hq, badges):
         if hq and r["판매 품질"] is not True:
             continue  # HQ 로 팔 때 순위: HQ 가 안 되는 템(가구 등)은 뺀다
         recipe, tree = trees[r["recipe_id"]]
-        ratio = r["재료 여유 배수"]
-        summary.append({
-            "id": r["recipe_id"], "item": recipe.result_id, "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
-            "level": r["레시피 레벨"], "cat": r["분류"], "sub": r["세부"], "cost": r["원가"],
-            "matRatio": None if math.isinf(ratio) else ratio, "resultAmount": r["결과물 개수"],
-            "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
-            "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
-            "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
-        })
-        materials = [{
-            "depth": d["depth"], "id": d["id"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
-            "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
-            "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
-            "world": d["비고(구매 서버)"] if d["구매처"] == "거래소" else "",
-        } for d in detail_rows(calc, tree)]
-        ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
-        details[r["recipe_id"]] = {
-            "evidence": r["근거"], "materials": materials,
-            "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
-            "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
-                          f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",
-            "views": {k: view_detail(v) for k, v in r["보기"].items()},
-        }
+        row, detail = craft_entry(gd, cfg, calc, r, recipe, tree, badges)
+        summary.append(row)
+        details[row["id"]] = detail
+    return summary, details
+
+
+def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
+    """제작 순위 한 줄(요약)과 상세."""
+    ratio = r["재료 여유 배수"]
+    row = {
+        "id": r["recipe_id"], "item": recipe.result_id, "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
+        "level": r["레시피 레벨"], "cat": r["분류"], "sub": r["세부"], "cost": r["원가"],
+        "matRatio": None if math.isinf(ratio) else ratio, "resultAmount": r["결과물 개수"],
+        "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
+        "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
+        "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
+    }
+    materials = [{
+        "depth": d["depth"], "id": d["id"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
+        "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
+        "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
+        "world": d["비고(구매 서버)"] if d["구매처"] in ("거래소", "교환") else "",
+    } for d in detail_rows(calc, tree)]
+    ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
+    detail = {
+        "evidence": r["근거"], "materials": materials,
+        "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
+        "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
+                      f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",
+        "views": {k: view_detail(v) for k, v in r["보기"].items()},
+    }
+    return row, detail
+
+
+EXCHANGE_CRAFT_GROUPS = ("군표", "제작자·채집가 화폐", "알라그 석판")
+
+
+def build_exchange_craft(gd, cache, cfg, server, tax, hq, badges, offers):
+    """⚒️ 교환 재료로 만들기: 교환으로 얻는 재료(바로 들어가는 재료)는 길 대신 화폐로 치고,
+    나머지 재료는 제작 순위처럼 장터에서 사거나 만든다. 재료 하나 × 화폐 하나마다 한 줄.
+    줄 ID = 레시피ID × 100 + 순번."""
+    every = {job: 100 for job in JOB_NAMES}
+    targets = list(target_recipes(gd, cfg, True, 1, 100, every))
+    calc = Calculator(gd, cache.items, cfg, tax, sell_hq=hq, batch_size=cfg["batch_size"], job_levels=cfg["job_levels"],
+                      world_names=server["world_names"], home_world=server["world_id"])
+    by_item = {}
+    for o in offers:  # 화폐마다 제일 싼 교환 하나 (화폐 1개로 재료 몇 개). 이벤트 증서 같은 기타 화폐는 뺀다
+        if o.group not in EXCHANGE_CRAFT_GROUPS:
+            continue
+        best = by_item.setdefault(o.item_id, {})
+        if o.currency not in best or o.price / o.amount < best[o.currency].price / best[o.currency].amount:
+            best[o.currency] = o
+    uses = {}
+    for r in targets:
+        for iid, amt in r.ingredients:
+            if iid in by_item:
+                uses.setdefault(iid, []).append((r, amt))
+    summary, details, seq = [], {}, {}
+    for iid, recipes in uses.items():
+        for currency, o in sorted(by_item[iid].items()):
+            calc.free = {iid: f"{currency} {o.price:,}개 → {o.amount}개"}
+            calc._memo.clear()
+            mat = gd.items[iid]
+            mat_st = calc.stats(iid, None, calc.outlier_ratio, None)
+            for recipe, amt in recipes:
+                r, tree = calc.evaluate(recipe)
+                if (hq and r["판매 품질"] is not True) or r["원가"] is None or r["보기"]["dc"]["median"] is None:
+                    continue  # 계산 못 하는 줄(판매 기록·재료 시세 없음)은 이 순위에선 뺀다
+                row, detail = craft_entry(gd, cfg, calc, r, recipe, tree, badges)
+                n = seq[recipe.id] = seq.get(recipe.id, -1) + 1
+                spend = amt * cfg["batch_size"] * o.price / o.amount  # 1회 제작에 드는 화폐
+                places = list(dict.fromkeys(s.get("place") for s in o.sources if s.get("place")))
+                tags = list(row["badges"])
+                if o.unlock:
+                    tags.append(badges.ref(f"🔒 {o.unlock}", "이 조건을 채워야 교환할 수 있다 개굴."))
+                if places:
+                    tags.append(badges.ref("📍 " + places[0] + (f" 외 {len(places) - 1}곳" if len(places) > 1 else ""),
+                                           " / ".join(source_text(s) for s in o.sources[:4])))
+                if mat.marketable and mat_st.median:
+                    keep = mat_st.median * (1 - tax) * amt
+                    tags.append(badges.ref(f"재료로 팔면 {keep:,.0f}",
+                                           f"{mat.name} {amt}개를 그냥 장터에 팔면 판매세 빼고 {keep:,.0f}길 정도다 개굴. "
+                                           "만들어 파는 순수익이 이것보다 커야 만드는 게 이득이다 개굴."))
+                row.update(id=recipe.id * 100 + n, job=currency, cat=o.group, craftJob=r["직업"], badges=tags,
+                           mat=mat.name, matQty=amt, spend=spend)
+                detail["detailDesc"] += f" · {mat.name} {amt}개는 {currency} {spend:,.0f}개로 교환"
+                detail["sources"] = [source_text(s) for s in o.sources[:8]]
+                summary.append(row)
+                details[row["id"]] = detail
     return summary, details
 
 
@@ -149,6 +216,52 @@ def build_gather(gd, cache, cfg, server, tax, hq, badges):
             "detailDesc": f"{g.job} Lv{g.level}{' · ' + '★' * g.stars if g.stars else ''}"
                           f"{' · ⏰ 시간 한정 채집지' if g.timed else ''} · 재료비 없음, 판매세만 뺀다 개굴",
             "views": {k: view_detail(v) for k, v in r["보기"].items()},
+        }
+    return summary, details
+
+
+def exchange_offers(gd, offers):
+    """🪙 교환: 제작·채집 순위에 없는 템만 (그건 이미 다른 탭에 있다)."""
+    crafted = {r.result_id for r in gd.recipes}
+    return [o for o in offers if o.item_id not in crafted and o.item_id not in gd.gather]
+
+
+def build_exchange(gd, cache, cfg, server, tax, offers, badges):
+    """군표·화폐·석판으로 바꿔서 파는 템. 재료비가 없으니 판매가 × (1 − 판매세) 가 개당 순수익이고,
+    화폐 1개당 이익은 브라우저가 (개당 순수익 × 받는 개수 ÷ 교환가) 로 계산한다.
+    줄 ID 는 아이템ID × 100 + 순번 (같은 템을 여러 화폐로 바꿀 수 있어서)."""
+    calc = Calculator(gd, cache.items, cfg, tax, sell_hq=False, world_names=server["world_names"],
+                      home_world=server["world_id"])
+    seen = {}
+    summary, details = [], {}
+    for o in sorted(offers, key=lambda o: (o.item_id, o.currency, o.price)):
+        item = gd.items[o.item_id]
+        n = seen[o.item_id] = seen.get(o.item_id, -1) + 1
+        rid = o.item_id * 100 + n
+        hq = False if item.can_hq else None  # 교환해서 받는 건 NQ
+        dc = calc.stats(o.item_id, hq, calc.outlier_ratio, None)
+        views = {key: calc.view(o.item_id, item, hq, world, 0) for key, world in calc.views}
+        row = {"보기": views}
+        calc.world_badge(row)
+        tags = []
+        if o.unlock:
+            tags.append(badges.ref(f"🔒 {o.unlock}", "이 조건을 채워야 교환할 수 있다 개굴."))
+        places = list(dict.fromkeys(s.get("place") for s in o.sources if s.get("place")))
+        if places:
+            tags.append(badges.ref("📍 " + places[0] + (f" 외 {len(places) - 1}곳" if len(places) > 1 else ""),
+                                   " / ".join(source_text(s) for s in o.sources[:4])))
+        summary.append({
+            "id": rid, "item": o.item_id, "name": item.name, "stars": 0, "job": o.currency, "level": o.price, "cat": o.group, "sub": "",
+            "cost": 0, "matRatio": None, "resultAmount": o.amount, "updated": dc.last_upload or 0, "hq": hq,
+            "reason": "" if dc.median is not None else f"{cfg['history_hours'] // 24}일 동안 판매 기록이 없다 개굴",
+            "badges": tags, "v": {k: view_summary(v, badges) for k, v in row["보기"].items()},
+        })
+        details[rid] = {
+            "evidence": calc.evidence(o.item_id, hq),
+            "detailDesc": f"{o.currency} {o.price:,}개 → {item.name} {o.amount}개"
+                          f"{' · ' + o.unlock if o.unlock else ''} · 재료비 없음, 판매세만 뺀다 개굴",
+            "sources": [source_text(s) for s in o.sources[:8]],
+            "views": {k: view_detail(v) for k, v in row["보기"].items()},
         }
     return summary, details
 
@@ -193,13 +306,17 @@ def main():
     started = time.time()
     cfg = load_config()
     download_csvs(cfg["datamining_base_url"])
+    download_csvs(cfg["datamining_base_url"], sheets=EXCHANGE_SHEETS)
     gd = GameData()
+    all_offers = load_offers(gd)
+    offers = exchange_offers(gd, all_offers)
     api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"], cfg.get("request_workers", 4))
     server = resolve_server(api, cfg)
     cache = MarketCache(server)
     if not args.no_fetch:
         ids = set(market_item_ids(gd, list(scope_recipes(gd, cfg, True))))
         ids |= {iid for iid in gd.gather if gd.items[iid].marketable}
+        ids |= {o.item_id for o in offers}
         last = [0]
 
         def progress(p, msg):
@@ -250,6 +367,30 @@ def main():
             print("  시세 없는 재료 상위: " + ", ".join(f"{k} {v}" for k, v in why.most_common(12)))
         print(f"계산 끝: {page} ({time.time() - t:.0f}초)")
 
+    t = time.time()
+    badges = Badges()
+    summary, details = build_exchange(gd, cache, cfg, server, tax, offers, badges)
+    write_page(data, "exchange", summary, details, badges.items)
+    print(f"계산 끝: exchange {len(summary)}줄 ({time.time() - t:.0f}초)")
+    for group in ("군표", "제작자·채집가 화폐", "알라그 석판"):  # 로그로 대충 맞는지 보려고
+        top = []
+        for r in summary:
+            sell, sales = r["v"]["dc"][0], r["v"]["dc"][3]
+            if r["cat"] == group and sell and sales >= 3:
+                top.append((sell * (1 - tax) * r["resultAmount"] / r["level"], r))
+        for per, r in sorted(top, key=lambda x: -x[0])[:5]:
+            print(f"  {group} · {r['name']} ×{r['resultAmount']} = {r['job']} {r['level']} → 1개당 {per:,.1f}길")
+
+    t = time.time()
+    made = {}
+    for key, hq in (("nq", False), ("hq", True)):
+        badges = Badges()
+        summary, details = build_exchange_craft(gd, cache, cfg, server, tax, hq, badges, all_offers)
+        made[key] = (summary, details, badges.items)
+        write_page(data, f"exchangeCraft-{key}", *made[key])
+    write_page(data, "exchangeCraft-all", *combine(made["nq"], made["hq"]))
+    print(f"계산 끝: exchangeCraft {len(made['nq'][0])}줄 ({time.time() - t:.0f}초)")
+
     # 📈 재료 트래킹: 하루 단위 기록을 쌓고 화면용 파일
     t = time.time()
     hist_path = ROOT / "cache" / "history.json.gz"
@@ -262,6 +403,7 @@ def main():
     worlds = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))
     rates = {c: r for c, r in (cache.tax_rates or {}).items() if c in TAX_CITIES}
     G = cfg.get("gather") or {}
+    E = cfg.get("exchange") or {}
     write(data / "meta.json", {
         "updatedAt": cache.updated_at, "builtAt": time.time(),
         "world": server["world"], "dc": server["dc"], "home": str(home),
@@ -278,6 +420,10 @@ def main():
             "gather": {"levelMin": G.get("level_min", 1), "levelMax": G.get("level_max", 60),
                        "jobLevels": G.get("job_levels") or {}, "filters": G.get("filters") or {},
                        "sort": G.get("sort_by", "하루 잠재 이익")},
+            "exchange": {"levelMin": 0, "levelMax": 0, "jobLevels": {}, "filters": E.get("filters") or {},
+                         "sort": E.get("sort_by", "화폐 1개당")},
+            "exchangeCraft": {"levelMin": 0, "levelMax": 0, "jobLevels": {}, "filters": E.get("craft_filters") or {},
+                              "sort": E.get("craft_sort_by", "화폐 1개당")},
             "quality": cfg.get("sell_quality", "NQ"),
         },
         "jobLevelsForIntermediates": cfg["job_levels"],

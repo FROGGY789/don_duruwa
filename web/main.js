@@ -8,11 +8,15 @@ const QUALITY_KEY = { NQ: "nq", HQ: "hq", "통합": "all" };
 const SHARDS = 32;
 const CRAFT_CATS = { all: "전체", "가구": "가구", "장비": "장비", "재료": "재료", "소모품": "소모품", "기타": "기타" };
 const GATHER_CATS = { all: "전체", "일반": "일반", "시간 한정": "시간 한정", "크리스탈": "크리스탈" };
+const EXCHANGE_CRAFT_CATS = { all: "전체", "군표": "군표", "제작자·채집가 화폐": "제작자·채집가 화폐", "알라그 석판": "알라그 석판" };
+const EXCHANGE_CATS = { all: "전체", "군표": "군표", "제작자·채집가 화폐": "제작자·채집가 화폐", "알라그 석판": "알라그 석판", "기타 화폐": "기타 화폐" };
 const MAX_RESULTS = 30, MAX_FAILED = 400;
 const SITE_NAME = "에오르제아에서 장사꾼으로 살아남기";
 const TAGLINE = {
   craft: "한국 데이터센터 거래소 시세로 뭘 만들어 팔면 남는지 수익을 분석해 준다 개굴. 시세는 매시간 새로 받아온다 개굴.",
   gather: "캐서 바로 팔면 얼마나 남는지, 하루에 얼마나 벌 수 있는지 순위를 매겨 준다 개굴. 시세는 매시간 새로 받아온다 개굴.",
+  exchangeCraft: "군표·화폐·석판으로 바꾼 재료를 넣고, 나머지 재료는 장터에서 사서 만들면 얼마나 남는지 순위를 매겨 준다 개굴. 화폐 1개당 이익으로 비교해라 개굴.",
+  exchange: "군표·화폐·석판으로 바꿔서 팔면 화폐 1개당 얼마나 남는지 알려준다 개굴. 어디서 바꾸는지도 같이 적어 뒀다 개굴.",
 };
 
 let meta = null;
@@ -40,12 +44,13 @@ function defaults() {
     minSales: D[p].filters.min_sales ?? 3, minProfit: D[p].filters.min_profit ?? 0,
     maxListings: D[p].filters.max_listings ?? 100, maxDays: D[p].filters.max_sell_days ?? 0,
     matRatio: D[p].filters.material_ratio ?? 0, minMargin: D[p].filters.min_margin_pct ?? 0,
-    sort: { "순수익": "net", "개당 순수익": "net", "수익률": "margin", "수익률(%)": "margin", "하루 잠재 이익": "daily" }[D[p].sort] || (p === "gather" ? "daily" : "net"),
+    sort: { "순수익": "net", "개당 순수익": "net", "수익률": "margin", "수익률(%)": "margin", "하루 잠재 이익": "daily", "화폐 1개당": "perCur" }[D[p].sort]
+      || ({ gather: "daily", exchange: "perCur", exchangeCraft: "perCur" }[p] || "net"),
   });
   return {
     theme: "화이트", palette: "초록", quality: D.quality in QUALITY_KEY ? D.quality : "NQ",
     taxCity: meta.defaultTaxCity, staleHours: D.craft.filters.stale_hours ?? 72,
-    craft: page("craft"), gather: page("gather"),
+    craft: page("craft"), gather: page("gather"), exchange: page("exchange"), exchangeCraft: page("exchangeCraft"),
   };
 }
 // 기본값이 바뀌면 숫자를 올린다. 예전에 저장된 설정에서 그 값만 새 기본값으로 바꿔 준다
@@ -85,7 +90,7 @@ function who() {
 }
 // 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
 const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
-const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track"
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
   : location.hash === "#admin" && adminUI() ? "admin" : "craft");
 let adminPending = 0;
 const days = () => meta.hours / 24;
@@ -147,6 +152,7 @@ function mergeDetail(ds, id) {
   if (!row || !d) return;
   row.evidence = d.evidence;
   row.detailDesc = d.detailDesc;
+  if (d.sources) row.sources = d.sources;
   if (d.materials) { row.materials = d.materials; row.shopping = d.shopping; }
   for (const [k, v] of Object.entries(d.views || {})) Object.assign(row.views[k] || (row.views[k] = {}), v);
   row.loaded = true;
@@ -231,7 +237,12 @@ async function liveMaterials(row) {
 function compute(p, ds, name) {
   const F = S[p], tax = taxRate(), now = Date.now() / 1000;
   const keys = meta.servers.map((s) => s.key);
-  const inScope = (r) => r.level >= F.levelMin && r.level <= F.levelMax && r.level <= (F.jobLevels[r.job] ?? 100);
+  const C = S.craft; // 교환 재료로 만들기는 레시피·직업 레벨을 제작 설정으로 거른다
+  const inScope = (r) => {
+    if (p === "exchange") return true;
+    if (p === "exchangeCraft") return r.level >= C.levelMin && r.level <= C.levelMax && r.level <= (C.jobLevels[r.craftJob] ?? 100);
+    return r.level >= F.levelMin && r.level <= F.levelMax && r.level <= (F.jobLevels[r.job] ?? 100);
+  };
   const staleTip = `Universalis 에 마지막으로 올라온 지 ${S.staleHours}시간 넘었다 개굴. 지금 게임 시세랑 다를 수 있다 개굴.`;
 
   function failReasons(r, v) {
@@ -250,6 +261,7 @@ function compute(p, ds, name) {
     const stale = (r.updated || 0) < now - S.staleHours * 3600;
     const scope = inScope(r);
     Object.assign(row, {
+      mat: r.mat, matQty: r.matQty, spend: r.spend,
       id: r.id, item: r.item, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
       updated: r.updated, updatedText: ago(r.updated), stale, sellingHq: r.hq, resultAmount: r.resultAmount,
       badges: (stale ? [{ kind: "stale", text: "⚠ 데이터 오래됨", tip: staleTip }] : []).concat(r.badges),
@@ -262,6 +274,8 @@ function compute(p, ds, name) {
       Object.assign(v, s, {
         net, margin: net != null && r.cost > 0 ? (net / r.cost) * 100 : null,
         daily: net != null ? (net * s.soldQty) / days() : null,
+        // 화폐 1개당 이익: 교환템 팔기 = 개당 순수익 × 받는 개수 ÷ 교환가, 교환 재료로 만들기 = 1회 제작 순수익 ÷ 드는 화폐
+        perCur: net == null ? null : p === "exchange" ? (net * r.resultAmount) / r.level : p === "exchangeCraft" ? (net * r.resultAmount) / r.spend : null,
       });
       v.reasons = net == null ? null : failReasons(row, v);
       v.passes = scope && net != null && !v.reasons.length;
@@ -270,7 +284,7 @@ function compute(p, ds, name) {
     return row;
   });
 
-  const cats = p === "craft" ? CRAFT_CATS : GATHER_CATS;
+  const cats = { craft: CRAFT_CATS, gather: GATHER_CATS, exchange: EXCHANGE_CATS, exchangeCraft: EXCHANGE_CRAFT_CATS }[p];
   const scoped = rows.filter((r) => r.scope);
   const stats = {};
   for (const k of keys) {
@@ -297,8 +311,9 @@ function search(p, rows, q) {
   const items = found.slice(0, 200).map((r) => {
     let kind, why = "";
     const v = r.views.dc;
-    if (!(r.level >= F.levelMin && r.level <= F.levelMax)) { kind = "out"; why = `${p === "craft" ? "레시피" : "채집"} Lv${r.level} — 레벨 범위 ${F.levelMin}~${F.levelMax} 밖이다 개굴`; }
-    else if (r.level > (F.jobLevels[r.job] ?? 100)) { kind = "out"; why = `${r.job} 레벨 ${F.jobLevels[r.job]} < Lv${r.level} 이다 개굴`; }
+    if (p === "exchangeCraft" && !r.scope) { kind = "out"; why = `${r.raw.craftJob} Lv${r.level} — ⚒️ 제작 설정의 레시피·직업 레벨 밖이다 개굴`; }
+    else if (!p.startsWith("exchange") && !(r.level >= F.levelMin && r.level <= F.levelMax)) { kind = "out"; why = `${p === "craft" ? "레시피" : "채집"} Lv${r.level} — 레벨 범위 ${F.levelMin}~${F.levelMax} 밖이다 개굴`; }
+    else if (!p.startsWith("exchange") && r.level > (F.jobLevels[r.job] ?? 100)) { kind = "out"; why = `${r.job} 레벨 ${F.jobLevels[r.job]} < Lv${r.level} 이다 개굴`; }
     else if (v.net == null) { kind = "nocalc"; why = r.raw.reason || "판매 기록이 없다 개굴"; }
     else if (v.passes) kind = "ok";
     else {
@@ -315,10 +330,19 @@ function search(p, rows, q) {
 
 // ── 그리기 ──
 let query = "";
+let lastPage = null;
 async function render() {
   if (page() === "admin") return renderAdmin();
   if (page() === "track") return renderTrack();
-  const p = page(), name = `${p}-${QUALITY_KEY[S.quality]}`;
+  const p = page(), name = p === "exchange" ? "exchange" : `${p}-${QUALITY_KEY[S.quality]}`;
+  // 교환은 화폐마다 값어치가 달라서, 처음 들어오면 군표부터 보여준다
+  if (p !== lastPage) {
+    const st = window.__ffxivDash;
+    if (st && p === "exchange") { st.cat = "군표"; st.tab = "all"; }
+    else if (st && p === "exchangeCraft") { st.cat = "제작자·채집가 화폐"; st.tab = "all"; }
+    else if (st && String(lastPage).startsWith("exchange")) { st.cat = "all"; st.tab = "all"; }
+    lastPage = p;
+  }
   let ds;
   try { ds = await dataset(name); } catch (e) {
     document.getElementById("app").innerHTML = `<div class="boot">⚠ 데이터를 못 받아왔다 개굴. 조금 있다가 새로고침 해 봐라 개굴. (${esc(e.message)})</div>`;
@@ -329,7 +353,7 @@ async function render() {
   const app = document.getElementById("app");
   let host = app.querySelector(".dash-host");
   if (!host) {
-    app.innerHTML = `<div class="search-wrap"><input id="search" type="search" placeholder="${{ craft: "🔍 아이템 이름으로 찾기 (예: 모그루 모그, 루비)", gather: "🔍 채집템 이름으로 찾기 (예: 구리 광석, 라벤더)" }[p]}" autocomplete="off"></div><div class="dash-host"></div>`;
+    app.innerHTML = `<div class="search-wrap"><input id="search" type="search" placeholder="${{ craft: "🔍 아이템 이름으로 찾기 (예: 모그루 모그, 루비)", gather: "🔍 채집템 이름으로 찾기 (예: 구리 광석, 라벤더)", exchange: "🔍 교환템 이름으로 찾기 (예: 마테리쟈, 암흑물질)", exchangeCraft: "🔍 만들 템 이름으로 찾기" }[p]}" autocomplete="off"></div><div class="dash-host"></div>`;
     host = app.querySelector(".dash-host");
     const input = app.querySelector("#search");
     input.value = query;
@@ -340,26 +364,32 @@ async function render() {
     mode: p,
     title: SITE_NAME,
     tagline: TAGLINE[p],
-    statLabels: { gather: [["분석한 채집템", "레벨 조건에 맞는 채집템"], ["시세 있는 템", "최근 팔린 기록이 있는 템"], ["필터 통과", "현재 필터 기준 추천 대상"]] }[p],
+    statLabels: { gather: [["분석한 채집템", "레벨 조건에 맞는 채집템"], ["시세 있는 템", "최근 팔린 기록이 있는 템"], ["필터 통과", "현재 필터 기준 추천 대상"]],
+      exchangeCraft: [["교환 재료 레시피", "교환 재료가 들어가는 레시피 × 화폐"], ["계산 가능", "시세 데이터가 모두 있는 레시피"], ["필터 통과", "현재 필터 기준 추천 대상"]],
+      exchange: [["교환템", "제작·채집 순위에 없는 교환템"], ["시세 있는 템", "최근 팔린 기록이 있는 템"], ["필터 통과", "현재 필터 기준 추천 대상"]] }[p],
     subtitle: [meta.world, `판매 시세 ${meta.dc} 서버별`, ...(p === "craft" ? [`재료 구매 ${meta.dc} 전체`] : []),
-      `${p === "craft" ? "레시피" : "채집"} 레벨 ${F.levelMin}~${F.levelMax}`, `시세 갱신 ${fmtTime(meta.updatedAt)}`],
+      ...(p === "exchange" ? [] : p === "exchangeCraft" ? [`레시피 레벨 ${S.craft.levelMin}~${S.craft.levelMax} (제작 설정)`]
+        : [`${p === "craft" ? "레시피" : "채집"} 레벨 ${F.levelMin}~${F.levelMax}`]), `시세 갱신 ${fmtTime(meta.updatedAt)}`],
     notice: null,
     search: search(p, rows, query),
     servers: meta.servers,
     cats,
-    catIcons: { gather: { all: "✦", "일반": "⛏", "시간 한정": "⏰", "크리스탈": "💎" } }[p],
+    catIcons: { gather: { all: "✦", "일반": "⛏", "시간 한정": "⏰", "크리스탈": "💎" },
+      exchangeCraft: { all: "✦", "군표": "🎖", "제작자·채집가 화폐": "🪙", "알라그 석판": "🔷" },
+      exchange: { all: "✦", "군표": "🎖", "제작자·채집가 화폐": "🪙", "알라그 석판": "🔷", "기타 화폐": "🎟" } }[p],
     subs: p === "craft" ? meta.subs : {},
     quality: S.quality,
     stats,
-    jobs: p === "craft" ? meta.jobs : meta.gatherJobs,
+    jobs: { craft: meta.jobs, gather: meta.gatherJobs }[p] || [],
+    dynamicTabs: p.startsWith("exchange"),
     period: PERIOD(),
     sort: F.sort,
     taxNote: `판매세 ${Math.round(tax * 100)}% 반영`,
     taxRate: tax,
     rows,
     failed,
-    failedTitle: p === "gather" ? "시세를 몰라서 빠진 채집템" : undefined,
-    failedHead: p === "gather" ? ["직업", "채집 레벨"] : undefined,
+    failedTitle: { gather: "시세를 몰라서 빠진 채집템", exchange: "시세를 몰라서 빠진 교환템", exchangeCraft: "계산 못 한 레시피" }[p],
+    failedHead: { gather: ["직업", "채집 레벨"], exchange: ["화폐", "교환가"], exchangeCraft: ["화폐", "레시피 레벨"] }[p],
     failedNote: p === "craft" ? undefined : "최근 팔린 기록이 없어서 계산 못 한 거다 개굴",
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
@@ -612,12 +642,17 @@ function num(label, path, min, max, step = 1, help = "") {
 function seg(path, options, value) {
   return `<div class="seg" data-seg="${path}">${options.map((o) => `<button type="button" class="${o === value ? "on" : ""}" data-val="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
 }
+const QUAL_SEG = () => `<div class="sb-title">필터</div>
+    <label class="field"><span>판매 품질</span></label>
+    ${seg("quality", Object.keys(QUALITY_KEY), S.quality)}`;
 function sideHead(p) {
   return `
     <div class="sb-top"><span class="brand-frog">🐸</span><span class="sb-fold-hint">누르면 접힌다 개굴</span><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button></div>
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
+      <a href="#exchange" class="${p === "exchange" ? "on" : ""}">🪙 교환템 팔기</a>
+      <a href="#exchange-craft" class="${p === "exchangeCraft" ? "on" : ""}">🧪 교환 재료로 만들기</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
     </nav>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
@@ -647,23 +682,26 @@ function renderSide() {
   }
   const F = S[p];
   const jobs = p === "craft" ? meta.jobs : meta.gatherJobs;
-  const sortNames = { craft: { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" }, gather: { daily: "하루 잠재 이익", net: "개당 순수익" } }[p];
+  const sortNames = { craft: { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" }, gather: { daily: "하루 잠재 이익", net: "개당 순수익" },
+    exchange: { perCur: "화폐 1개당", net: "개당 순수익", daily: "하루 잠재 이익" },
+    exchangeCraft: { perCur: "화폐 1개당", net: "순수익", daily: "하루 잠재 이익" } }[p];
   const cities = ["min", ...Object.keys(meta.taxCities)];
   side.innerHTML = `${sideHead(p)}
     <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
     <button type="button" class="btn" data-reload="1">🔄 새 데이터 불러오기</button>
 
-    <div class="sb-title">분석 대상</div>
+    ${p === "exchangeCraft" ? `${QUAL_SEG()}
+    <p class="hint">레시피 레벨·직업 레벨은 ⚒️ 제작 설정을 따른다 개굴. 교환 재료는 길 대신 화폐로 치고, 나머지 재료는 제작 순위처럼 장터에서 산다 개굴.
+    화폐 1개당 = 1회 제작 순수익 ÷ 드는 화폐 개굴.</p>` : p === "exchange" ? `<div class="sb-title">필터</div>
+    <p class="hint">교환해서 받는 건 NQ 라서 NQ 시세로 친다 개굴. 화폐 1개당 = 개당 순수익 × 받는 개수 ÷ 교환가 개굴.</p>` : `<div class="sb-title">분석 대상</div>
     <div class="row2">${num(`${p === "craft" ? "레시피" : "채집"} 레벨 ≥`, `${p}.levelMin`, 1, 100)}${num("≤", `${p}.levelMax`, 1, 100)}</div>
     <details class="jobs"${p === "gather" ? " open" : ""}><summary>직업별 레벨 · ${jobs.length}개 직업</summary>
       <p class="hint">이 레벨보다 높은 ${p === "craft" ? "레시피" : "채집템"}는 뺀다 개굴.</p>
       <div class="row2 wrap">${jobs.map((j) => num(j, `${p}.jobLevels.${j}`, 1, 100)).join("")}</div>
     </details>
 
-    <div class="sb-title">필터</div>
-    <label class="field"><span>판매 품질</span></label>
-    ${seg("quality", Object.keys(QUALITY_KEY), S.quality)}
-    <p class="hint">${{ NQ: "모든 템을 NQ 로 팔 때 순위다 개굴.", HQ: "HQ 로 만들 수 있는 템만, HQ 로 팔 때 순위다 개굴. 가구처럼 HQ 가 없는 템은 빠진다 개굴.", "통합": "NQ 로 팔 때랑 HQ 로 팔 때를 한 순위에 같이 놓는다 개굴. HQ 줄은 이름 끝에 HQ 마크가 붙는다 개굴." }[S.quality]}</p>
+    ${QUAL_SEG()}
+    <p class="hint">${{ NQ: "모든 템을 NQ 로 팔 때 순위다 개굴.", HQ: "HQ 로 만들 수 있는 템만, HQ 로 팔 때 순위다 개굴. 가구처럼 HQ 가 없는 템은 빠진다 개굴.", "통합": "NQ 로 팔 때랑 HQ 로 팔 때를 한 순위에 같이 놓는다 개굴. HQ 줄은 이름 끝에 HQ 마크가 붙는다 개굴." }[S.quality]}</p>`}
     ${num(`${PERIOD()} 판매 건수 ≥`, `${p}.minSales`, 0, 999)}
     ${p === "craft" ? num("재료 판매 수량 배수 ≥", "craft.matRatio", 0, 100, 0.5, "재료마다 팔린 수량이 필요한 수량의 몇 배는 돼야 하는지 정한다 개굴. NPC·직접 채집 재료는 안 따진다 개굴.") : ""}
     ${p === "craft" ? num("최소 수익률(%)", "craft.minMargin", -100, 10000, 5) : ""}

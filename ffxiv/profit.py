@@ -163,6 +163,7 @@ class Calculator:
         self.self_gathered = gd.ids_by_name(cfg.get("self_gathered_items"))
         self.npc_ignore = gd.ids_by_name(cfg.get("npc_ignore_items"))
         self._memo = {}
+        self.free = {}  # {아이템ID: 비고} — 교환으로 얻는 재료라 길은 안 드는 것 (⚒️ 교환 재료로 만들기)
         self._stats = {}
         self._clean = {}
         self.odd_ratio = cfg.get("odd_sale_ratio", 3)
@@ -223,6 +224,10 @@ class Calculator:
         key = (item_id, need)
         if key in self._memo:
             return self._memo[key]
+        if item_id in self.free:
+            node = CostNode(item_id, need, 0, "교환", self.free[item_id])
+            self._memo[key] = node
+            return node
         if item_id in self.self_gathered:
             node = CostNode(item_id, need, 0, "직접 채집")
             self._memo[key] = node

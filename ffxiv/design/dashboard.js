@@ -19,7 +19,7 @@ const COLUMNS = [
   { key: "etc", label: "기타" },
 ];
 
-const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather" };
+const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather", "교환": "src-gather" };
 
 // 탭·정렬·선택 상태는 다시 그려져도 유지되게 페이지에 보관
 const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "all", tab: "all", sort: null, dir: -1, selected: null, sortSeed: null,
@@ -53,8 +53,24 @@ const CAT_ICON = { all: "✦", "가구": "🪑", "장비": "⚔", "재료": "�
 const SUB_ICON = { "무기": "🗡", "방어구": "🛡", "액세서리": "💍", "도구": "🔨" };
 // 채집 페이지는 재료비가 없어서 원가·수익률·장보기 칸을 뺀다
 const isGather = (d) => d.mode === "gather";
+// 교환 페이지: 직업 칸 = 화폐, 레벨 칸 = 교환가, 수익률 대신 화폐 1개당 이익
+const isExchange = (d) => d.mode === "exchange";
+// 교환 재료로 만들기: 화폐 · 교환 재료 · 드는 화폐 칸, 원가는 나머지 재료비
+const isExCraft = (d) => d.mode === "exchangeCraft";
 const hasCart = (d) => !d.mode || d.mode === "craft";
 function columns(d) {
+  if (isExCraft(d)) {
+    const pick = (k) => COLUMNS.find((c) => c.key === k);
+    return [pick("rank"), pick("name"), { ...pick("job"), label: "화폐" }, { key: "mat", label: "교환 재료", sortable: true },
+      { key: "spend", label: "드는 화폐", num: true, sortable: true, asc: true }, pick("sell"), { ...pick("cost"), label: "나머지 재료비" },
+      pick("net"), { key: "perCur", label: "화폐 1개당", num: true, sortable: true }, pick("sales"), pick("listings"), pick("sellDays"),
+      pick("daily"), pick("updated"), pick("etc")];
+  }
+  if (isExchange(d)) {
+    return COLUMNS.filter((c) => !["pick", "cost"].includes(c.key)).map((c) => (
+      c.key === "job" ? { ...c, label: "화폐" } : c.key === "level" ? { ...c, label: "교환가" }
+        : c.key === "net" ? { ...c, label: "개당 순수익" } : c.key === "margin" ? { key: "perCur", label: "화폐 1개당", num: true, sortable: true } : c));
+  }
   if (!isGather(d)) return COLUMNS;
   return COLUMNS.filter((c) => !["pick", "cost", "margin"].includes(c.key))
     .map((c) => (c.key === "level" ? { ...c, label: "채집 레벨" } : c.key === "net" ? { ...c, label: "개당 순수익" } : c));
@@ -99,7 +115,7 @@ function renderHeader(d) {
     </div>`;
   return `
     <header class="page-head">
-      <div class="eyebrow">${isGather(d) ? "GATHERING" : "CRAFTING"} PROFIT REPORT</div>
+      <div class="eyebrow">${isExchange(d) || isExCraft(d) ? "EXCHANGE" : isGather(d) ? "GATHERING" : "CRAFTING"} PROFIT REPORT</div>
       <h1>${esc(d.title || "파판14 제작 수익 분석")}<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
       ${d.tagline ? `<p class="tagline">${esc(d.tagline)}</p>` : ""}
       <div class="subtitle">${sub}</div>
@@ -144,6 +160,13 @@ function renderSubs(d) {
   return `<div class="subs-row"><div class="cats subs">${btn("", `${CAT_ICON[state.cat] || ""} ${esc(state.cat)} 전체`)}${subs.map((x) => btn(x, `${SUB_ICON[x] || ""} ${esc(x)}`)).join("")}</div>${hint}</div>`;
 }
 
+// 교환 페이지는 화폐가 너무 많아서, 지금 분류에 순위가 있는 화폐만 탭으로 (많은 순)
+function tabJobs(d) {
+  if (!d.dynamicTabs) return d.jobs;
+  const counts = {};
+  catRows(d).forEach((r) => (counts[r.job] = (counts[r.job] || 0) + 1));
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, "ko"));
+}
 function renderTabs(d) {
   const counts = {};
   const rows = catRows(d);
@@ -152,7 +175,7 @@ function renderTabs(d) {
     `<button class="tab${state.tab === key ? " active" : ""}" data-tab="${esc(key)}">${label}<span class="cnt">${
       key === "all" ? rows.length : counts[key] || 0
     }</span></button>`;
-  return `<nav class="tabs">${tab("all", "🏆 통합 순위")}${d.jobs.map((j) => tab(j, esc(j))).join("")}</nav>`;
+  return `<nav class="tabs${d.dynamicTabs ? " wrap" : ""}">${tab("all", "🏆 통합 순위")}${tabJobs(d).map((j) => tab(j, esc(j))).join("")}</nav>`;
 }
 
 function sortedRows(d) {
@@ -192,10 +215,13 @@ function renderTable(d, rows) {
       rank: `<td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>`,
       name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}</td>`,
       job: `<td><span class="job">${esc(r.job)}</span></td>`,
-      level: `<td class="num">${r.level}</td>`,
+      mat: `<td>${esc(r.mat || "")}${r.matQty > 1 ? ` <small class="per">×${r.matQty}</small>` : ""}</td>`,
+      spend: `<td class="num">${gil(r.spend)}</td>`,
+      level: `<td class="num">${isExchange(d) ? `${r.level.toLocaleString("ko-KR")}${r.resultAmount > 1 ? `<small class="per"> /${r.resultAmount}개</small>` : ""}` : r.level}</td>`,
       sell: `<td class="num">${gil(v.sell)}</td>`,
       cost: `<td class="num">${gil(r.cost)}</td>`,
       net: `<td class="num">${signed(v.net)}</td>`,
+      perCur: `<td class="num">${v.perCur == null ? '<span class="dash">-</span>' : `<span class="pct ${v.perCur >= 0 ? "pos" : "neg"}">${v.perCur >= 100 ? gil(v.perCur) : v.perCur.toFixed(1)}</span>`}</td>`,
       margin: `<td class="num">${v.margin == null ? "-" : `<span class="pct ${v.margin >= 0 ? "pos" : "neg"}">${v.margin.toFixed(1)}%</span>`}</td>`,
       sales: `<td class="num">${v.sales}</td>`,
       listings: `<td class="num">${v.listings}</td>`,
@@ -238,15 +264,17 @@ function renderDetail(d, row) {
       <div class="detail-card">
         <div class="detail-top">
           <div>
-            <h2>${row.materials ? "📦" : "⛏"} ${itemName(row.name, row.stars, row.sellingHq === true)} — ${row.materials ? "재료 상세" : "판매 상세"}</h2>
+            <h2>${row.materials ? "📦" : isExchange(d) ? "🪙" : "⛏"} ${itemName(row.name, row.stars, row.sellingHq === true)} — ${row.materials ? "재료 상세" : "판매 상세"}</h2>
             <div class="desc">${esc(row.detailDesc)}</div>
           </div>
           <div class="kv">
             ${row.materials ? `<div><span>원가</span><b>${gil(row.cost)}</b></div>` : ""}
             <div><span>판매 예상가 · ${esc(serverName(d))}</span><b>${gil(V(row).sell)}</b></div>
             <div><span>순수익</span><b>${V(row).net == null ? '<span class="dash">-</span>' : signed(V(row).net)}</b></div>
+            ${isExchange(d) || isExCraft(d) ? `<div><span>화폐 1개당</span><b>${V(row).perCur == null ? '<span class="dash">-</span>' : gil(V(row).perCur)}</b></div>` : ""}
           </div>
         </div>
+        ${row.sources && row.sources.length ? `<div class="sources"><h3>📍 어디서 바꾸나</h3><ul>${row.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
         ${renderLive(d, row)}
         ${renderInsights(d, row)}
         ${row.materials ? `<div class="table-wrap"><table>
@@ -694,7 +722,7 @@ export default function (component) {
     state.sort = data.sort;
     state.dir = -1;
   }
-  if (state.tab !== "all" && !data.jobs.includes(state.tab)) state.tab = "all";
+  if (state.tab !== "all" && !data.dynamicTabs && !data.jobs.includes(state.tab)) state.tab = "all";
   if (!(state.cat in data.cats)) state.cat = "all";
   if (state.sub && !((data.subs || {})[state.cat] || []).includes(state.sub)) state.sub = "";
   if (!data.servers.some((s) => s.key === state.server)) state.server = "dc";
@@ -707,6 +735,7 @@ export default function (component) {
     if (body && keepScroll != null) body.scrollTop = keepScroll;
   }
   function renderInner() {
+    if (data.dynamicTabs && state.tab !== "all" && !tabJobs(data).includes(state.tab)) state.tab = "all";
     const rows = sortedRows(data);
     if (!data.rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
     const selected = data.rows.find((r) => r.id === state.selected);
@@ -730,7 +759,7 @@ export default function (component) {
       renderHeader(data) +
       renderTabs(data) +
       `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">${!hasCart(data)
-        ? "줄 누르면 밑에 판매 상세가 나온다 개굴"
+        ? `줄 누르면 밑에 판매 상세${isExchange(data) ? "랑 어디서 바꾸는지" : ""}가 나온다 개굴`
         : "줄 누르면 밑에 재료 상세가 나온다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴"}</span>
          <span class="right">${cartCount && hasCart(data) ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +

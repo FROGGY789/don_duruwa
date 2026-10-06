@@ -31,6 +31,7 @@ class Universalis:
         self._lock = threading.Lock()
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "ffxiv-craft-profit (personal analysis tool)"
+        self.stats = {"missing": 0, "recovered": 0}  # 응답에서 빠진 아이템 수 (로그용)
 
     def _get(self, path, params=None):
         for attempt in range(5):
@@ -85,6 +86,31 @@ class Universalis:
             return {int(data["itemID"]): data}
         return {}
 
+    def _many(self, path, chunk, params, depth=0):
+        """여러 아이템을 한 번에 받는다. 응답에서 말없이 빠진 아이템(없는 아이템 목록에도 없는데 안 온 것)은
+        작게 쪼개서 다시 받는다. Universalis 가 바쁠 때 일부만 돌려주는 일이 있다."""
+        try:
+            data = self._get(f"{path}/{','.join(map(str, chunk))}", params)
+        except requests.HTTPError as e:  # 다시 받을 때 하나짜리 요청은 모르는 아이템이면 404 가 온다
+            if depth and e.response is not None and e.response.status_code == 404:
+                return {}
+            raise
+        got = self._items(data)
+        unresolved = {int(x) for x in data.get("unresolvedItems") or []}
+        missing = [i for i in chunk if i not in got and i not in unresolved]
+        if missing and depth == 0:
+            with self._lock:
+                self.stats["missing"] += len(missing)
+        if missing and depth < 3:
+            step = max(1, len(missing) // 4)
+            for i in range(0, len(missing), step):
+                more = self._many(path, missing[i:i + step], params, depth + 1)
+                got.update(more)
+            if depth == 0:
+                with self._lock:
+                    self.stats["recovered"] += sum(1 for i in missing if i in got)
+        return got
+
     def fetch(self, target, item_ids, history_hours, default_world, progress=None):
         """아이템별 {listings, sales, last_upload, fetched_at} 를 돌려준다.
 
@@ -97,13 +123,10 @@ class Universalis:
         done = [0]
 
         def one(chunk):
-            id_str = ",".join(map(str, chunk))
             now = time.time()
-            current = self._items(self._get(f"/api/v2/{target}/{id_str}", {"entries": 0}))
-            history = self._items(self._get(
-                f"/api/v2/history/{target}/{id_str}",
-                {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999},
-            ))
+            current = self._many(f"/api/v2/{target}", chunk, {"entries": 0})
+            history = self._many(f"/api/v2/history/{target}", chunk,
+                                 {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999})
             part = {}
             for iid in chunk:
                 cur = current.get(iid, {})

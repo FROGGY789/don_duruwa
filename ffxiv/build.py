@@ -259,6 +259,10 @@ def main():
 
         print(f"시세 받는 중: 아이템 {len(ids)}개")
         refresh(api, cache, server, sorted(ids), cfg["history_hours"], full=True, progress=progress)
+        with_sales = sum(1 for i in ids if (cache.items.get(i) or {}).get("sales"))
+        with_listings = sum(1 for i in ids if (cache.items.get(i) or {}).get("listings"))
+        print(f"  판매 기록 있는 템 {with_sales}/{len(ids)} · 매물 있는 템 {with_listings}/{len(ids)} · "
+              f"응답에서 빠진 템 {api.stats['missing']} (다시 받아서 채움 {api.stats['recovered']})")
     print(f"시세 준비 끝 ({time.time() - started:.0f}초)")
 
     site = Path(args.out)

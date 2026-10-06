@@ -394,6 +394,7 @@ async function render() {
     failedNote: p === "craft" ? undefined : "최근 팔린 기록이 없어서 계산 못 한 거다 개굴",
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
+    materialInfo,
     // 재료 이름을 누르면 📈 재료 트래킹에 담고 그리로 간다
     trackMaterial: (id, need) => {
       const list = tracked();
@@ -414,6 +415,22 @@ const saveTracked = (list) => save("ffxivTrack", list);
 const gil = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const quantile = (a, q) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
+// 재료에 마우스 올렸을 때: 서버별 지금 최저 매물(미끼 뺌), 한국 전체 최근 7일 평균 판매가
+const matInfoCache = {};
+function materialInfo(id) {
+  return (matInfoCache[id] = matInfoCache[id] || trackShard(id).then((sh) => {
+    const d = sh[id];
+    if (!d) return null;
+    const names = Object.fromEntries(meta.servers.filter((s) => s.key !== "dc").map((s) => [s.key, s.name]));
+    const worlds = Object.entries(d.w).map(([wid, w]) => {
+      const good = w.lst.filter((l) => !l[3]);
+      return { name: names[wid] || wid, min: good.length ? good[0][0] : null, qty: good.length ? good[0][1] : 0, cnt: w.cnt };
+    }).filter((x) => x.min != null).sort((a, b) => a.min - b.min);
+    const recent = d.h.slice(-7).map((h) => h[1].dc).filter(Boolean); // [중앙값, 팔린 수량, 건수]
+    const sold = recent.reduce((a, x) => a + x[1], 0);
+    return { worlds, sold, avg: sold ? recent.reduce((a, x) => a + x[0] * x[1], 0) / sold : null };
+  }));
+}
 function trackShard(id) {
   const n = id % TRACK_SHARDS;
   return (trackShards[n] = trackShards[n] || getJSON(`data/track/t${n}.json`));

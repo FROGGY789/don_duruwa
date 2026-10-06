@@ -582,7 +582,7 @@ function cartPlan(d) {
       const g = s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
       groups[g] = groups[g] || { name: g, market: s.source === "거래소", items: {} };
-      const it = (groups[g].items[key] = groups[g].items[key] || { name: s.name, qty: 0, spend: 0 });
+      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, qty: 0, spend: 0 });
       it.qty += s.qty * n;
       it.spend += s.qty * n * (s.unit || 0);
     }
@@ -642,7 +642,8 @@ function renderCart(d) {
       <div class="cart-group-head"><b>${g.market ? `${i + 1}. ` : ""}${esc(g.name)}</b>
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
-        <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""}/> ${esc(it.name)}</label></td>
+        <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
+          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
           ? `<button type="button" class="qty-reset" data-qty-reset="${esc(it.key)}" title="필요 수량 ${it.need.toLocaleString("ko-KR")}개로 되돌리기">↺${it.need.toLocaleString("ko-KR")}</button>` : ""}</td>
@@ -845,6 +846,7 @@ export default function (component) {
       if (sel) { sel.live = null; return render(); }
     }
     const mat = e.target.closest("[data-track-mat]");
+    if (mat && data.trackMaterial) hideMatPop();
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     const pick = e.target.closest("[data-pick]");
     if (pick) {
@@ -974,6 +976,45 @@ export default function (component) {
       else row?.scrollIntoView({ block: "nearest" });
     }
   };
+  // 재료 이름에 마우스 올리면: 서버별 지금 최저가 · 최근 평균 판매가 (📈 재료 트래킹 데이터)
+  // 다시 그릴 때마다 이 함수가 새로 불리니까 지금 뜬 창이 누구 건지는 root 에 둔다
+  function hideMatPop() { root.__popFor = null; document.querySelector(".mat-pop")?.remove(); }
+  function placeMatPop(pop, el) {
+    const r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    let top = r.bottom + 6;
+    if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+    pop.style.top = top + "px";
+  }
+  root.onmouseover = (e) => {
+    const el = e.target.closest("[data-track-mat]");
+    if (!el || !data.materialInfo || el === root.__popFor) return;
+    hideMatPop();
+    root.__popFor = el;
+    const pop = document.createElement("div");
+    pop.className = "mat-pop";
+    pop.innerHTML = `<b>${esc(el.textContent.replace("📈", "").trim())}</b><div class="faint">🐸 시세 불러오는 중이다 개굴…</div>`;
+    document.body.appendChild(pop);
+    placeMatPop(pop, el);
+    data.materialInfo(Number(el.dataset.trackMat)).then((info) => {
+      if (root.__popFor !== el) return;
+      const best = info && info.worlds[0];
+      pop.innerHTML = `<b>${esc(el.textContent.replace("📈", "").trim())}</b>` + (!info || !info.worlds.length
+        ? `<div class="faint">지금 올라온 매물이 없다 개굴.</div>`
+        : `<div class="mp-best">🏆 제일 싼 곳 <b>${esc(best.name)}</b> ${gil(best.min)}길 <small>(${best.qty}개)</small></div>
+          <table><tbody>${info.worlds.map((w, i) => `<tr class="${i ? "" : "best"}"><td>${esc(w.name)}</td><td class="num">${gil(w.min)}</td>
+            <td class="num faint">매물 ${w.cnt}</td></tr>`).join("")}</tbody></table>`) +
+        `<div class="mp-avg">한국 전체 최근 7일 평균 판매가 <b>${info && info.avg != null ? gil(info.avg) + "길" : "-"}</b>${info && info.sold ? ` <small>(${info.sold.toLocaleString("ko-KR")}개 팔림)</small>` : ""}</div>
+        <div class="faint">매시간 받아 둔 값이다 개굴 · 누르면 📈 재료 트래킹으로 간다 개굴</div>`;
+      placeMatPop(pop, el);
+    }, () => { if (root.__popFor === el) pop.innerHTML = `<div class="faint">시세를 못 받아왔다 개굴.</div>`; });
+  };
+  root.onmouseout = (e) => {
+    const el = e.target.closest("[data-track-mat]");
+    if (el && el === root.__popFor && !el.contains(e.relatedTarget)) hideMatPop();
+  };
+  if (!root.__matPopBound) { root.__matPopBound = true; window.addEventListener("scroll", hideMatPop, { passive: true, capture: true }); }
+
   root.onchange = (e) => {
     // 살 수량을 직접 고침 (필요 수량이랑 같으면 고친 거 없앰)
     const q = e.target.closest("[data-qty]");

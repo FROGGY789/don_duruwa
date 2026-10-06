@@ -408,3 +408,17 @@ tbody tr.clickable.selected td[data-col="name"] .item::after{content:" ▾";colo
 .qty-reset{margin-left:4px;border:0;background:none;color:var(--text-faint);font-size:var(--fs-xs);cursor:pointer;padding:0}
 .qty-reset:hover{color:var(--primary-strong);text-decoration:underline}
 tr.done .qty-in{text-decoration:line-through;opacity:.6}
+
+/* 재료에 마우스 올리면 뜨는 시세 */
+.mat-pop{position:fixed;z-index:1000012;width:260px;padding:var(--space-3);background:var(--surface);color:var(--text);border:1px solid var(--border-strong);
+  border-radius:var(--radius);box-shadow:var(--shadow);font-size:var(--fs-sm);pointer-events:none;display:flex;flex-direction:column;gap:6px}
+.mat-pop table{width:100%;border-collapse:collapse}
+.mat-pop td{padding:3px 2px;border-bottom:1px solid var(--border);font-size:var(--fs-xs)}
+.mat-pop tr:last-child td{border-bottom:0}
+.mat-pop tr.best td{color:var(--positive);font-weight:600}
+.mat-pop .mp-best{color:var(--text)} .mat-pop .mp-best b{color:var(--positive)}
+.mat-pop .mp-avg b{color:var(--primary-strong)}
+.mat-pop small,.mat-pop .faint{color:var(--text-faint);font-size:var(--fs-xs)}
+.cart-group .mat-link{font-size:inherit}
+.cart-group tr.done .mat-link{text-decoration:line-through;color:var(--text-faint)}
+.cart-group td .buy{display:inline-flex;vertical-align:middle;margin-right:4px}

@@ -4,3 +4,4 @@ cache/
 .venv/
 .streamlit/secrets.toml
 site/
+.wrangler/

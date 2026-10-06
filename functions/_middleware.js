@@ -113,7 +113,7 @@ function loginPage({ error = "", info = "", who = "", mode = "login", status = 2
   </form>`;
   return new Response(`<!doctype html>
 <html lang="ko" data-theme="light" data-palette="jade"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>에오르제아에서 장사꾼으로 살아남기</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>에오르제아 거상되기</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐸</text></svg>">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600&display=swap">
 <link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/web.css">

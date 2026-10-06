@@ -22,13 +22,13 @@ CRYSTAL_UI_CATEGORY = 59
 CSV_DIR = DATA_DIR / "csv"
 
 
-def download_csvs(base_url, force=False, progress=None):
+def download_csvs(base_url, force=False, progress=None, sheets=SHEETS):
     """CSV 를 data/csv/ 에 내려받는다. 이미 있으면 건너뜀 (force=True 면 다시 받음)."""
     CSV_DIR.mkdir(parents=True, exist_ok=True)
-    for i, sheet in enumerate(SHEETS):
+    for i, sheet in enumerate(sheets):
         path = CSV_DIR / f"{sheet}.csv"
         if progress:
-            progress(i / len(SHEETS), f"{sheet}.csv 받는 중")
+            progress(i / len(sheets), f"{sheet}.csv 받는 중")
         if path.exists() and not force:
             continue
         resp = requests.get(f"{base_url}/{sheet}.csv", timeout=120)

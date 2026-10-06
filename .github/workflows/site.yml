@@ -1,4 +1,4 @@
-# 매시간 시세 받기 → 순위 계산 → Cloudflare Pages 에 사이트 올리기
+# 매시간 시세 받기 → 순위 계산 → Cloudflare Pages 에 사이트 올리기 (매시간 실행은 Cloudflare Worker 가 눌러 준다)
 # Cloudflare Pages 프로젝트(don-duruwa)는 이미 만들어 뒀다. 새로 만들 땐: npx wrangler pages project create don-duruwa --production-branch=main
 # 처음 한 번: 저장소 Settings → Secrets and variables → Actions 에
 #   CLOUDFLARE_API_TOKEN (Cloudflare Pages 편집 권한 토큰), CLOUDFLARE_ACCOUNT_ID 를 넣어 둔다.
@@ -6,8 +6,8 @@
 name: 사이트 갱신
 
 on:
-  schedule:
-    - cron: "17 * * * *"  # 매시간 17분 (정각은 GitHub 가 붐벼서 늦어진다)
+  # 매시간 갱신은 Cloudflare Worker(cron/worker.js) 가 매시간 17분에 workflow_dispatch 로 눌러 준다.
+  # GitHub 자체 schedule 은 몇 시간씩 안 돌거나 늦어서 뺐다 (같이 두면 한 시간에 두 번 돈다).
   workflow_dispatch:
   push:
     paths: ["ffxiv/**", "web/**", "functions/**", "config.yaml", ".github/workflows/site.yml"]

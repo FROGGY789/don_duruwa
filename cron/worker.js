@@ -25,6 +25,8 @@ export default {
   },
   // 주소로 들어가 보면 지금 바로 한 번 눌러 보고 결과를 알려준다 (설정 확인용)
   async fetch(request, env) {
+    // 브라우저가 같이 요청하는 /favicon.ico 때문에 두 번 눌리지 않게 맨 앞 주소만 받는다
+    if (new URL(request.url).pathname !== "/") return new Response("", { status: 404 });
     const status = await dispatch(env);
     return new Response(status === 204 ? "사이트 갱신 시작했다 개굴 (204)" : `실패했다 개굴 (${status}) — GH_TOKEN 권한을 확인해라 개굴`,
       { headers: { "content-type": "text/plain; charset=utf-8" } });

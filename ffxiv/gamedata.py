@@ -123,6 +123,7 @@ class GatherItem:
     level: int
     stars: int = 0
     timed: bool = False  # 시간 한정 채집지(미지·전설 등)에서만 나오는지
+    jobs: tuple = ()  # 캘 수 있는 직업 전부 (샤드처럼 광부·원예가 둘 다 되는 것)
 
 
 class GameData:
@@ -225,6 +226,7 @@ class GameData:
             if base:
                 base_timed.setdefault(base, []).append(_int(k) in timed_points)
         found = {}  # 아이템 → (직업, 레벨, 별, [시간 한정 여부...])
+        jobs_of = {}
         for k, v in iter_rows("GatheringPointBase"):
             job = GATHER_TYPE_JOB.get(_int(v[0]))
             if not job:
@@ -234,6 +236,7 @@ class GameData:
                 iid, (level, stars) = gitems.get(_int(g), (0, (0, 0)))
                 if iid <= 0 or iid not in self.items or not level:
                     continue
+                jobs_of.setdefault(iid, set()).add(job)
                 prev = found.get(iid)
                 if prev is None:
                     found[iid] = (job, level, stars, list(timed))
@@ -241,7 +244,7 @@ class GameData:
                     found[iid] = (prev[0], level, stars, prev[3] + timed) if level < prev[1] else (*prev[:3], prev[3] + timed)
         for iid, (job, level, stars, timed) in found.items():
             # 보통 채집지에서도 나오면 시간 한정이 아니다
-            self.gather[iid] = GatherItem(iid, job, level, stars, all(timed))
+            self.gather[iid] = GatherItem(iid, job, level, stars, all(timed), tuple(sorted(jobs_of[iid])))
 
     def name(self, item_id):
         item = self.items.get(item_id)

@@ -109,6 +109,12 @@ def build_craft(gd, cache, cfg, server, tax, hq, badges):
     return summary, details
 
 
+def gather_tag(gd, item_id):
+    """시간 한정이 아니라 언제든 캘 수 있는 채집물이면 {"g": "광부"/"원예가", "gl": 채집 레벨} (장보기 표시용)."""
+    g = gd.gather.get(item_id)
+    return {"g": "·".join(g.jobs or (g.job,)), "gl": g.level} if g and not g.timed else {}
+
+
 def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
     """제작 순위 한 줄(요약)과 상세."""
     ratio = r["재료 여유 배수"]
@@ -129,7 +135,7 @@ def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
     ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
     detail = {
         "evidence": r["근거"], "materials": materials,
-        "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
+        "shopping": [{**s, "name": gd.name(s["id"]), **gather_tag(gd, s["id"])} for s in shopping_list(tree)],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",
         "views": {k: view_detail(v) for k, v in r["보기"].items()},

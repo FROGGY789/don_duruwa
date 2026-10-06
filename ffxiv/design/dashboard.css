@@ -422,3 +422,12 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cart-group .mat-link{font-size:inherit}
 .cart-group tr.done .mat-link{text-decoration:line-through;color:var(--text-faint)}
 .cart-group td .buy{display:inline-flex;vertical-align:middle;margin-right:4px}
+
+/* 장보기: 언제든 캘 수 있는 채집물 표시 */
+.gather-mark{display:inline-flex;align-items:center;gap:2px;margin-left:4px;padding:0 6px;border-radius:var(--radius-pill);font-size:var(--fs-xs);
+  line-height:1.6;vertical-align:middle;cursor:help;white-space:nowrap}
+.gather-mark small{font-size:10px}
+.gather-mark.mine{background:var(--warning-soft);color:var(--warning)}
+.gather-mark.botany{background:var(--positive-soft);color:var(--positive)}
+.mat-for{margin:1px 0 0 26px;font-size:var(--fs-xs);color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.cart-group tr.done .mat-for{text-decoration:line-through}

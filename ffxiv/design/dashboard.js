@@ -582,7 +582,8 @@ function cartPlan(d) {
       const g = s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
       groups[g] = groups[g] || { name: g, market: s.source === "거래소", items: {} };
-      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, qty: 0, spend: 0 });
+      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, qty: 0, spend: 0, for: [] });
+      if (!it.for.includes(r.name)) it.for.push(r.name); // 어느 완성품에 들어가는 재료인지
       it.qty += s.qty * n;
       it.spend += s.qty * n * (s.unit || 0);
     }
@@ -610,7 +611,7 @@ function cartText(d) {
   out.push("", `재료비 ${Math.round(cost).toLocaleString("ko-KR")}길 · 판매액(세후) ${Math.round(revenue).toLocaleString("ko-KR")}길 · 예상 순이익 ${Math.round(revenue - cost).toLocaleString("ko-KR")}길`);
   list.forEach((g, i) => {
     out.push("", `== ${g.market ? `${i + 1}. ` : ""}${g.name} (${Math.round(g.total).toLocaleString("ko-KR")}길) ==`);
-    g.items.forEach((it) => out.push(`[${state.done[it.key] ? "x" : " "}] ${it.name} ×${it.qty.toLocaleString("ko-KR")}${it.edited ? ` (필요 ${it.need.toLocaleString("ko-KR")})` : ""} @${Math.round(it.unit).toLocaleString("ko-KR")} = ${Math.round(it.total).toLocaleString("ko-KR")}`));
+    g.items.forEach((it) => out.push(`[${state.done[it.key] ? "x" : " "}] ${it.name} ×${it.qty.toLocaleString("ko-KR")}${it.edited ? ` (필요 ${it.need.toLocaleString("ko-KR")})` : ""}${it.for.length ? ` [${it.for.join(", ")}]` : ""} @${Math.round(it.unit).toLocaleString("ko-KR")} = ${Math.round(it.total).toLocaleString("ko-KR")}`));
   });
   return out.join("\n");
 }
@@ -643,7 +644,9 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}</td>
+          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}${it.gather
+            ? it.gather.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${it.gatherLv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님)">${j === "광부" ? "⛏" : "🌿"}<small>${esc(j)}</small></span>`).join("") : ""}
+          ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
           ? `<button type="button" class="qty-reset" data-qty-reset="${esc(it.key)}" title="필요 수량 ${it.need.toLocaleString("ko-KR")}개로 되돌리기">↺${it.need.toLocaleString("ko-KR")}</button>` : ""}</td>

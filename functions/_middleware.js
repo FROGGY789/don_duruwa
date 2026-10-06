@@ -1,9 +1,15 @@
-// Cloudflare Pages 문지기: 캐릭터명@서버 + 공용 비밀번호를 맞혀야 사이트(데이터 포함)를 보여준다.
-// 확인은 Cloudflare 서버에서 하니까, 비밀번호를 모르면 순위 데이터 파일도 못 받는다.
+// Cloudflare Pages 문지기: 캐릭터명@서버 + 비밀번호를 맞혀야 사이트(데이터 포함)를 보여준다.
+// 확인은 Cloudflare 서버에서 하니까, 로그인 안 하면 순위 데이터 파일도 못 받는다.
 //
-// Cloudflare 대시보드 → Workers & Pages → don-duruwa → Settings → Variables and Secrets 에 넣는다:
-//   SITE_PASSWORD        공용 비밀번호 (없으면 문지기 꺼짐 = 누구나 들어옴)
-//   ALLOWED_CHARACTERS   들어올 수 있는 캐릭터 목록, 쉼표로 (예: 로살리아@초코보,친구@모그리). 비워 두면 아무 캐릭터나
+// 권한: 처음 온 사람은 "권한 신청" → 관리자(로살리아@초코보)가 사이트 안 🔑 권한 관리에서 허락 → 그다음부터 들어옴
+//
+// Cloudflare 대시보드 → Workers & Pages → don-duruwa → Settings 에서:
+//   Variables and Secrets
+//     SITE_PASSWORD       공용 비밀번호 (없으면 문지기 꺼짐 = 누구나 들어옴). 신청할 때도 이걸 알아야 한다
+//     ADMIN_PASSWORD      관리자 비밀번호 (관리자 캐릭터는 이걸로만 들어온다. 공용 비번으로 관리자 행세 못 하게)
+//     ADMIN_CHARACTERS    관리자 캐릭터, 쉼표로 (없으면 로살리아@초코보)
+//     ALLOWED_CHARACTERS  (선택) 신청 없이 바로 들어올 캐릭터, 쉼표로
+//   Bindings → KV namespace, 변수 이름 ACCESS   신청·허락 기록 저장소 (없으면 신청 기능 없이 ALLOWED_CHARACTERS 만 씀)
 // 바꾼 뒤에는 GitHub Actions 에서 "사이트 갱신" 을 한 번 돌려야 적용된다.
 
 const SERVERS = ["카벙클", "초코보", "모그리", "톤베리", "펜리르"];
@@ -29,48 +35,82 @@ function cookies(request) {
   return out;
 }
 
-// "로살리아@초코보" → {name, server} (서버 이름이 틀리면 null)
+// "로살리아@초코보" → {name, server, full} (서버 이름이 틀리면 null)
 export function parseCharacter(text) {
   const m = String(text || "").trim().replace(/\s+/g, "").match(/^([^@]{1,20})@([^@]+)$/);
   if (!m || !SERVERS.includes(m[2])) return null;
   return { name: m[1], server: m[2], full: `${m[1]}@${m[2]}` };
 }
 
-function allowed(env, who) {
-  const list = String(env.ALLOWED_CHARACTERS || "").split(",").map((s) => s.trim().replace(/\s+/g, "")).filter(Boolean);
-  return !list.length || list.includes(who);
+const list = (s) => String(s || "").split(",").map((x) => x.trim().replace(/\s+/g, "")).filter(Boolean);
+const admins = (env) => (list(env.ADMIN_CHARACTERS).length ? list(env.ADMIN_CHARACTERS) : ["로살리아@초코보"]);
+const isAdmin = (env, who) => admins(env).includes(who);
+
+// 신청·허락 기록: KV 의 "char:캐릭터" → {status: pending|approved|denied, note, requestedAt, decidedAt}
+async function record(env, who, fresh = false) {
+  if (!env.ACCESS) return null;
+  return env.ACCESS.get(`char:${who}`, fresh ? { type: "json" } : { type: "json", cacheTtl: 60 });
+}
+
+// 들어올 수 있나: 관리자, 신청 없이 허락된 목록, 또는 관리자가 허락한 캐릭터
+async function approved(env, who) {
+  if (isAdmin(env, who)) return true;
+  if (list(env.ALLOWED_CHARACTERS).includes(who)) return true;
+  if (!env.ACCESS) return !list(env.ALLOWED_CHARACTERS).length; // 저장소도 목록도 없으면 비밀번호만 맞으면 통과
+  return (await record(env, who))?.status === "approved";
 }
 
 // 출입증: 캐릭터|만료시각|서명. 비밀번호를 바꾸면 서명이 안 맞아서 전부 다시 로그인해야 한다
+const secret = (env) => `${env.SITE_PASSWORD}|${env.ADMIN_PASSWORD || ""}`;
 async function makeToken(env, who) {
   const exp = Math.floor(Date.now() / 1000) + DAYS * 86400;
   const body = `${encodeURIComponent(who)}|${exp}`;
-  return `${body}|${await sign(env.SITE_PASSWORD, body)}`;
+  return `${body}|${await sign(secret(env), body)}`;
 }
 async function checkToken(env, token) {
   try {
-    return await readToken(env, token);
+    const [who, exp, sig] = decodeURIComponent(token || "").split("|");
+    if (!who || !exp || !sig || Number(exp) < Date.now() / 1000) return null;
+    if (sig !== (await sign(secret(env), `${who}|${exp}`))) return null;
+    const name = decodeURIComponent(who);
+    return (await approved(env, name)) ? name : null; // 내보낸 사람은 출입증이 남아 있어도 막힌다
   } catch {
     return null; // 깨진 쿠키는 그냥 로그인 안 한 걸로
   }
-}
-async function readToken(env, token) {
-  const [who, exp, sig] = decodeURIComponent(token || "").split("|");
-  if (!who || !exp || !sig || Number(exp) < Date.now() / 1000) return null;
-  if (sig !== (await sign(env.SITE_PASSWORD, `${who}|${exp}`))) return null;
-  const name = decodeURIComponent(who);
-  return allowed(env, name) ? name : null;
 }
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function loginPage(error = "", who = "") {
+const NO_STORE = { "Cache-Control": "no-store" };
+
+// 로그인 화면. mode: "login" (들어가기) / "request" (권한 신청) / "sent" (신청 끝)
+function loginPage({ error = "", info = "", who = "", mode = "login", status = 200 } = {}) {
   const frogs = Array.from({ length: 24 }, () =>
     `<span style="left:${(Math.random() * 97).toFixed(1)}vw;font-size:${(1.2 + Math.random() * 1.6).toFixed(2)}rem;` +
     `animation-delay:${(Math.random() * 1.8).toFixed(2)}s;animation-duration:${(2.2 + Math.random() * 1.6).toFixed(2)}s;` +
     `--spin:${(Math.random() < 0.5 ? -1 : 1) * Math.round(90 + Math.random() * 450)}deg;--drift:${(Math.random() * 16 - 8).toFixed(1)}vw">🐸</span>`).join("");
+  const form = mode === "request" ? `
+  <form method="post" action="/__request" class="login-form">
+    <div class="login-mode">📝 권한 신청</div>
+    <label class="field"><span>캐릭터명@서버</span>
+      <input name="who" value="${esc(who)}" placeholder="예: 로살리아@초코보" autocomplete="username" required></label>
+    <label class="field"><span>공용 비밀번호</span>
+      <input name="pw" type="password" placeholder="받은 비밀번호" autocomplete="current-password" required></label>
+    <label class="field"><span>한마디 (선택)</span>
+      <input name="note" maxlength="80" placeholder="예: 우리 FC 개구리 친구다 개굴"></label>
+    <button type="submit" class="btn">신청하기</button>
+    <a class="login-switch" href="/">← 들어가기로 돌아가기</a>
+  </form>` : mode === "sent" ? "" : `
+  <form method="post" action="/__login" class="login-form">
+    <label class="field"><span>캐릭터명@서버</span>
+      <input name="who" value="${esc(who)}" placeholder="예: 로살리아@초코보" autocomplete="username" required></label>
+    <label class="field"><span>비밀번호</span>
+      <input name="pw" type="password" placeholder="비밀번호" autocomplete="current-password" required></label>
+    <button type="submit" class="btn">들어가기</button>
+    <a class="login-switch" href="/__request${who ? `?who=${encodeURIComponent(who)}` : ""}">처음이면 📝 권한 신청</a>
+  </form>`;
   return new Response(`<!doctype html>
 <html lang="ko" data-theme="light" data-palette="jade"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>파판14 제작·채집 수익 분석</title>
@@ -84,17 +124,95 @@ if(T[s.theme])document.documentElement.dataset.theme=T[s.theme];if(P[s.palette])
 <main class="login-box">
   <div class="eyebrow">CRAFTING PROFIT REPORT</div>
   <h1>파판14 제작 수익 분석</h1>
-  <p class="login-sub">캐릭터명@서버랑 비밀번호를 쳐야 화면을 열어준다 개굴.</p>
-  <form method="post" action="/__login" class="login-form">
-    <label class="field"><span>캐릭터명@서버</span>
-      <input name="who" value="${esc(who)}" placeholder="예: 로살리아@초코보" autocomplete="username" required></label>
-    <label class="field"><span>비밀번호</span>
-      <input name="pw" type="password" placeholder="비밀번호" autocomplete="current-password" required></label>
-    <button type="submit" class="btn">들어가기</button>
-  </form>
+  <p class="login-sub">${mode === "request" ? "신청하면 로살리아@초코보가 보고 허락해 준다 개굴." : "캐릭터명@서버랑 비밀번호를 쳐야 화면을 열어준다 개굴."}</p>
+  ${form}
   ${error ? `<div class="login-error">🐸 ${esc(error)}</div>` : ""}
+  ${info ? `<div class="login-info">🐸 ${esc(info)}</div>` : ""}
+  ${mode === "sent" ? `<a class="login-switch" href="/">← 들어가기로 돌아가기</a>` : ""}
   <div class="login-contact">🐸 문의는 <b>로살리아@초코보</b> 한테 해라 개굴</div>
-</main></body></html>`, { status: error ? 401 : 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+</main></body></html>`, { status, headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } });
+}
+
+const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...NO_STORE } });
+
+function signedIn(who, token, admin) {
+  const age = DAYS * 86400;
+  return new Response(null, { status: 302, headers: [
+    ["Location", "/"],
+    ["Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${age}; HttpOnly; Secure; SameSite=Lax`],
+    // 화면 인사·관리 메뉴 표시용 (비밀 아님, 진짜 확인은 서버가 출입증으로 한다)
+    ["Set-Cookie", `ffx_who=${encodeURIComponent(who)}; Path=/; Max-Age=${age}; Secure; SameSite=Lax`],
+    ["Set-Cookie", `ffx_admin=${admin ? 1 : 0}; Path=/; Max-Age=${age}; Secure; SameSite=Lax`],
+  ] });
+}
+
+async function handleLogin(env, form) {
+  const who = parseCharacter(form.get("who"));
+  if (!who) return loginPage({ error: "캐릭터명@서버 로 쳐라 개굴. 서버는 카벙클·초코보·모그리·톤베리·펜리르 중 하나다 개굴.", who: form.get("who"), status: 401 });
+  const pw = form.get("pw");
+  if (isAdmin(env, who.full)) {
+    // 관리자는 관리자 비밀번호로만 (정해 두지 않았으면 관리자 캐릭터로는 못 들어온다)
+    if (!env.ADMIN_PASSWORD || pw !== env.ADMIN_PASSWORD) return loginPage({ error: "관리자 비밀번호가 틀렸다 개굴.", who: who.full, status: 401 });
+  } else {
+    if (pw !== env.SITE_PASSWORD) return loginPage({ error: "비밀번호가 틀렸다 개굴. 다시 쳐 봐라 개굴.", who: who.full, status: 401 });
+    if (!(await approved(env, who.full))) {
+      const rec = await record(env, who.full, true);
+      const msg = !env.ACCESS ? "등록 안 된 캐릭터다 개굴. 로살리아@초코보 한테 물어봐라 개굴."
+        : rec?.status === "pending" ? "아직 허락 대기 중이다 개굴. 로살리아@초코보가 보면 허락해 줄 거다 개굴."
+        : rec?.status === "denied" ? "신청이 거절됐다 개굴. 로살리아@초코보 한테 물어봐라 개굴."
+        : "처음 온 캐릭터다 개굴. 아래 📝 권한 신청부터 해라 개굴.";
+      return loginPage({ error: msg, who: who.full, status: 403 });
+    }
+  }
+  return signedIn(who.full, await makeToken(env, who.full), isAdmin(env, who.full));
+}
+
+async function handleRequest(env, form) {
+  const who = parseCharacter(form.get("who"));
+  const back = (error) => loginPage({ mode: "request", error, who: form.get("who"), status: 400 });
+  if (!env.ACCESS) return back("지금은 신청을 못 받는다 개굴. 로살리아@초코보 한테 직접 말해라 개굴.");
+  if (!who) return back("캐릭터명@서버 로 쳐라 개굴. 서버는 카벙클·초코보·모그리·톤베리·펜리르 중 하나다 개굴.");
+  if (form.get("pw") !== env.SITE_PASSWORD) return back("공용 비밀번호가 틀렸다 개굴. 받은 비밀번호를 쳐라 개굴.");
+  if (isAdmin(env, who.full)) return back("그 캐릭터는 관리자다 개굴. 들어가기에서 관리자 비밀번호로 들어와라 개굴.");
+  const rec = await record(env, who.full, true);
+  if (rec?.status === "approved") return loginPage({ info: "이미 허락된 캐릭터다 개굴. 바로 들어와라 개굴.", who: who.full });
+  if (rec?.status === "pending") return loginPage({ mode: "sent", info: "이미 신청돼 있다 개굴. 허락해 줄 때까지 기다려라 개굴." });
+  await env.ACCESS.put(`char:${who.full}`, JSON.stringify({
+    status: "pending", note: String(form.get("note") || "").slice(0, 80), requestedAt: Date.now(),
+  }));
+  return loginPage({ mode: "sent", info: `${who.full} 신청했다 개굴. 로살리아@초코보가 허락하면 들어올 수 있다 개굴.` });
+}
+
+// 🔑 권한 관리 (관리자만): 목록 보기, 허락·거절·내보내기
+async function handleAdmin(env, request, me, url) {
+  if (!isAdmin(env, me)) return json({ error: "관리자만 된다 개굴" }, 403);
+  if (!env.ACCESS) return json({ error: "신청 저장소(ACCESS)가 아직 연결 안 됐다 개굴", items: [] }, 200);
+  if (url.pathname === "/__admin/list") {
+    const items = [];
+    let cursor;
+    do {
+      const page = await env.ACCESS.list({ prefix: "char:", cursor });
+      for (const k of page.keys) {
+        const rec = await env.ACCESS.get(k.name, { type: "json" });
+        if (rec) items.push({ who: k.name.slice(5), ...rec });
+      }
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+    return json({ items, admins: admins(env), preset: list(env.ALLOWED_CHARACTERS) });
+  }
+  if (url.pathname === "/__admin/decide" && request.method === "POST") {
+    const { who, action } = await request.json();
+    const ch = parseCharacter(who);
+    if (!ch || !["approve", "deny", "remove"].includes(action)) return json({ error: "잘못된 요청이다 개굴" }, 400);
+    const key = `char:${ch.full}`;
+    if (action === "remove") await env.ACCESS.delete(key);
+    else {
+      const rec = (await env.ACCESS.get(key, { type: "json" })) || { note: "", requestedAt: Date.now() };
+      await env.ACCESS.put(key, JSON.stringify({ ...rec, status: action === "approve" ? "approved" : "denied", decidedAt: Date.now() }));
+    }
+    return json({ ok: true });
+  }
+  return json({ error: "없는 주소다 개굴" }, 404);
 }
 
 export async function onRequest(ctx) {
@@ -107,28 +225,21 @@ export async function onRequest(ctx) {
       ["Location", "/"],
       ["Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`],
       ["Set-Cookie", "ffx_who=; Path=/; Max-Age=0; Secure; SameSite=Lax"],
+      ["Set-Cookie", "ffx_admin=; Path=/; Max-Age=0; Secure; SameSite=Lax"],
     ] });
   }
-
-  if (url.pathname === "/__login" && request.method === "POST") {
-    const form = await request.formData();
-    const who = parseCharacter(form.get("who"));
-    if (!who) return loginPage("캐릭터명@서버 로 쳐라 개굴. 서버는 카벙클·초코보·모그리·톤베리·펜리르 중 하나다 개굴.", form.get("who"));
-    if (form.get("pw") !== env.SITE_PASSWORD) return loginPage("비밀번호가 틀렸다 개굴. 다시 쳐 봐라 개굴.", who.full);
-    if (!allowed(env, who.full)) return loginPage("등록 안 된 캐릭터다 개굴. 로살리아@초코보 한테 물어봐라 개굴.", who.full);
-    const token = await makeToken(env, who.full);
-    return new Response(null, { status: 302, headers: [
-      ["Location", "/"],
-      ["Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`],
-      // 화면 인사용 (비밀 아님)
-      ["Set-Cookie", `ffx_who=${encodeURIComponent(who.full)}; Path=/; Max-Age=${DAYS * 86400}; Secure; SameSite=Lax`],
-    ] });
+  if (url.pathname === "/__login" && request.method === "POST") return handleLogin(env, await request.formData());
+  if (url.pathname === "/__request") {
+    if (request.method === "POST") return handleRequest(env, await request.formData());
+    return loginPage({ mode: "request", who: url.searchParams.get("who") || "" });
   }
-
   if (PUBLIC.has(url.pathname)) return next();
-  if (await checkToken(env, cookies(request)[COOKIE])) return next();
+
+  const me = await checkToken(env, cookies(request)[COOKIE]);
+  if (url.pathname.startsWith("/__admin/")) return me ? handleAdmin(env, request, me, url) : json({ error: "로그인이 필요하다 개굴" }, 401);
+  if (me) return next();
 
   // 데이터·스크립트 요청은 그냥 막고, 페이지를 열려고 하면 로그인 화면
   const wantsPage = (request.headers.get("Accept") || "").includes("text/html");
-  return wantsPage ? loginPage() : new Response("로그인이 필요하다 개굴", { status: 401, headers: { "Cache-Control": "no-store" } });
+  return wantsPage ? loginPage() : new Response("로그인이 필요하다 개굴", { status: 401, headers: NO_STORE });
 }

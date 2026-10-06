@@ -92,3 +92,20 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
   background:var(--negative-soft);border:1px solid color-mix(in oklab,var(--negative) 30%,transparent)}
 .login-contact{margin-top:var(--space-4);font-size:var(--fs-sm);color:var(--text-muted)}
 .login-contact b{color:var(--primary-strong);font-weight:600}
+
+/* 권한 신청 화면 */
+.login-mode{font-weight:600;color:var(--primary-strong)}
+.login-switch{display:block;margin-top:var(--space-2);text-align:center;font-size:var(--fs-sm);color:var(--primary-strong);text-decoration:none}
+.login-switch:hover{text-decoration:underline}
+.login-info{margin-top:var(--space-3);padding:10px var(--space-4);border-radius:var(--radius);font-size:var(--fs-sm);color:var(--primary-strong);
+  background:var(--primary-soft);border:1px solid color-mix(in oklab,var(--primary) 30%,transparent)}
+
+/* 🔑 권한 관리 */
+.nav-cnt{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:var(--radius-pill);background:var(--negative);color:var(--on-primary);font-size:var(--fs-xs);font-weight:600;text-align:center}
+.admin h1{font-family:var(--font-display);font-weight:600;font-size:var(--fs-2xl);margin:0 0 var(--space-2)}
+.admin .desc{color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 var(--space-5)}
+.admin .faint{color:var(--text-faint);font-size:var(--fs-sm)}
+.admin-group{margin-bottom:var(--space-6)}
+.admin-group h2{font-size:var(--fs-lg);font-weight:600;margin:0 0 var(--space-2)}
+.admin-group h2 .cnt{font-size:var(--fs-xs);color:var(--text-faint);font-weight:400;margin-left:4px}
+.admin-btns{display:flex;gap:6px;justify-content:flex-end}

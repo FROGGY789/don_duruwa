@@ -54,7 +54,10 @@ function who() {
   const m = document.cookie.match(/(?:^|;\s*)ffx_who=([^;]*)/);
   try { return m ? decodeURIComponent(m[1]) : ""; } catch { return ""; }
 }
-const page = () => (location.hash === "#gather" ? "gather" : "craft");
+// 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
+const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#admin" && adminUI() ? "admin" : "craft");
+let adminPending = 0;
 const days = () => meta.hours / 24;
 const PERIOD = () => (meta.hours % 24 === 0 ? `${meta.hours / 24}일` : `${meta.hours}시간`);
 
@@ -208,6 +211,7 @@ function search(p, rows, q) {
 // ── 그리기 ──
 let query = "";
 async function render() {
+  if (page() === "admin") return renderAdmin();
   const p = page(), name = `${p}-${QUALITY_KEY[S.quality]}`;
   let ds;
   try { ds = await dataset(name); } catch (e) {
@@ -253,6 +257,60 @@ async function render() {
   dashboard({ data, parentElement: host });
 }
 
+// ── 🔑 권한 관리 (관리자만) ──
+const fmtMs = (ms) => (ms ? fmtTime(ms / 1000) : "-");
+async function adminList() {
+  const res = await fetch("/__admin/list", { cache: "no-store" });
+  const data = await res.json().catch(() => ({ error: `응답이 이상하다 개굴 (${res.status})` }));
+  if (!res.ok && !data.error) data.error = `못 불러왔다 개굴 (${res.status})`;
+  return data;
+}
+async function refreshPending() {
+  if (!adminUI()) return;
+  try {
+    const d = await adminList();
+    const n = (d.items || []).filter((x) => x.status === "pending").length;
+    if (n !== adminPending) { adminPending = n; renderSide(); }
+  } catch { /* 관리 메뉴 숫자만 못 띄운다 */ }
+}
+async function renderAdmin() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<section class="admin"><div class="eyebrow">ACCESS</div><h1>🔑 권한 관리</h1><p class="faint">불러오는 중이다 개굴…</p></section>`;
+  const d = await adminList();
+  const items = d.items || [];
+  adminPending = items.filter((x) => x.status === "pending").length;
+  renderSide();
+  const group = (status, title, empty, buttons) => {
+    const rs = items.filter((x) => x.status === status).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
+    const body = rs.length ? rs.map((x) => `<tr><td><b>${esc(x.who)}</b></td><td>${esc(x.note || "")}</td>
+        <td class="num">${fmtMs(x.requestedAt)}</td><td class="num">${fmtMs(x.decidedAt)}</td>
+        <td class="admin-btns">${buttons.map(([act, label, cls]) => `<button type="button" class="cart-btn ${cls}" data-decide="${act}" data-who="${esc(x.who)}">${label}</button>`).join("")}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="faint">${empty}</td></tr>`;
+    return `<div class="admin-group"><h2>${title} <span class="cnt">${rs.length}</span></h2>
+      <div class="table-wrap"><table><thead><tr><th>캐릭터</th><th>한마디</th><th class="num">신청</th><th class="num">처리</th><th></th></tr></thead>
+      <tbody>${body}</tbody></table></div></div>`;
+  };
+  app.innerHTML = `<section class="admin">
+    <div class="eyebrow">ACCESS</div><h1>🔑 권한 관리</h1>
+    <p class="desc">신청한 캐릭터를 허락하면 공용 비밀번호로 들어올 수 있다 개굴. 내보내면 1분 안에 막힌다 개굴.</p>
+    ${d.error ? `<div class="notice error"><span>⚠</span><span>${esc(d.error)}</span></div>` : ""}
+    ${group("pending", "⏳ 허락 대기", "기다리는 신청이 없다 개굴.", [["approve", "허락", "primary"], ["deny", "거절", ""]])}
+    ${group("approved", "✅ 허락됨", "아직 허락한 캐릭터가 없다 개굴.", [["remove", "내보내기", ""]])}
+    ${group("denied", "🚫 거절됨", "거절한 신청이 없다 개굴.", [["approve", "허락", ""], ["remove", "지우기", ""]])}
+    <p class="faint">관리자: ${esc((d.admins || []).join(", ") || "-")}${(d.preset || []).length ? ` · 설정으로 바로 허락: ${esc(d.preset.join(", "))}` : ""}</p>
+  </section>`;
+}
+document.getElementById("app").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-decide]");
+  if (!b) return;
+  const action = b.dataset.decide, whoName = b.dataset.who;
+  if (action === "remove" && !window.confirm(`${whoName} 내보내도 되나 개굴?`)) return;
+  b.disabled = true;
+  const res = await fetch("/__admin/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ who: whoName, action }) });
+  if (!res.ok) window.alert((await res.json().catch(() => ({}))).error || "처리 못 했다 개굴");
+  renderAdmin();
+});
+
 // ── 사이드바 ──
 function num(label, path, min, max, step = 1, help = "") {
   const v = path.split(".").reduce((o, k) => o[k], S);
@@ -262,20 +320,27 @@ function num(label, path, min, max, step = 1, help = "") {
 function seg(path, options, value) {
   return `<div class="seg" data-seg="${path}">${options.map((o) => `<button type="button" class="${o === value ? "on" : ""}" data-val="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
 }
-function renderSide() {
-  const p = page(), F = S[p], side = document.getElementById("side");
-  const jobs = p === "craft" ? meta.jobs : meta.gatherJobs;
-  const sortNames = p === "craft" ? { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" } : { daily: "하루 잠재 이익", net: "개당 순수익" };
-  const cities = ["min", ...Object.keys(meta.taxCities)];
-  side.innerHTML = `
+function sideHead(p) {
+  return `
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
+      ${adminUI() ? `<a href="#admin" class="${p === "admin" ? "on" : ""}">🔑 권한 관리${adminPending ? ` <span class="nav-cnt">${adminPending}</span>` : ""}</a>` : ""}
     </nav>
     <div class="brand"><span class="brand-frog">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
-    <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-palette="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>
+    <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-palette="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>`;
+}
+
+function renderSide() {
+  const p = page(), side = document.getElementById("side");
+  if (p === "admin") { side.innerHTML = sideHead(p); return; }
+  const F = S[p];
+  const jobs = p === "craft" ? meta.jobs : meta.gatherJobs;
+  const sortNames = p === "craft" ? { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" } : { daily: "하루 잠재 이익", net: "개당 순수익" };
+  const cities = ["min", ...Object.keys(meta.taxCities)];
+  side.innerHTML = `${sideHead(p)}
     <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
     <button type="button" class="btn" data-reload="1">🔄 새 데이터 불러오기</button>
 
@@ -380,6 +445,7 @@ async function start() {
   applyTheme();
   renderSide();
   await render();
+  refreshPending();
 }
 
 window.addEventListener("hashchange", () => {

@@ -27,8 +27,20 @@ jobs:
           python-version: "3.11"
       - name: 필요한 것 설치
         run: pip install requests pyyaml
+      # 📈 재료 트래킹 가격 기록 (실행할 때마다 이어 붙인다)
+      - name: 가격 기록 불러오기
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/history.json.gz
+          key: history-${{ github.run_id }}
+          restore-keys: history-
       - name: 시세 받고 계산
         run: python -m ffxiv.build
+      - name: 가격 기록 저장
+        uses: actions/cache/save@v4
+        with:
+          path: cache/history.json.gz
+          key: history-${{ github.run_id }}
       - name: Cloudflare Pages 에 올리기
         uses: cloudflare/wrangler-action@v3
         with:

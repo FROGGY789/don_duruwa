@@ -27,6 +27,7 @@ from .config import JOB_NAMES, ROOT, TAX_CITIES, load_config
 from .gamedata import GATHER_JOBS, GameData, download_csvs, scope_recipes, target_recipes
 from .market import MarketCache, Universalis, refresh, resolve_server
 from .profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
+from .track import build_tracking, load_history, save_history, update_history
 
 QUALITIES = {"nq": False, "hq": True, "all": None}
 SHARDS = 32
@@ -204,6 +205,14 @@ def main():
         write_page(data, f"craft-{key}", *build_craft(gd, cache, cfg, server, tax, hq))
         write_page(data, f"gather-{key}", *build_gather(gd, cache, cfg, server, tax, hq))
         print(f"계산 끝: 판매 품질 {key} ({time.time() - t:.0f}초)")
+
+    # 📈 재료 트래킹: 하루 단위 기록을 쌓고 화면용 파일
+    t = time.time()
+    hist_path = ROOT / "cache" / "history.json.gz"
+    hist = update_history(load_history(hist_path), cache.items, cfg)
+    save_history(hist_path, hist)
+    n = build_tracking(gd, cache.items, hist, cfg, write, data)
+    print(f"트래킹: 아이템 {n}개, 기록 {len(hist['days'])}일치 ({time.time() - t:.0f}초)")
 
     home = server["world_id"]
     worlds = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))

@@ -43,8 +43,12 @@ function defaults() {
     craft: page("craft"), gather: page("gather"),
   };
 }
+// 기본값이 바뀌면 숫자를 올린다. 예전에 저장된 설정에서 그 값만 새 기본값으로 바꿔 준다
+const SETTINGS_VERSION = 2; // 2: 예상 판매 소요일 기본 7일
 function loadSettings() {
   const d = defaults(), s = load("ffxivSettings", {});
+  if ((s.v || 1) < 2) { delete (s.craft || {}).maxDays; delete (s.gather || {}).maxDays; }
+  s.v = SETTINGS_VERSION;
   return { ...d, ...s, craft: { ...d.craft, ...(s.craft || {}), jobLevels: { ...d.craft.jobLevels, ...((s.craft || {}).jobLevels || {}) } },
     gather: { ...d.gather, ...(s.gather || {}), jobLevels: { ...d.gather.jobLevels, ...((s.gather || {}).jobLevels || {}) } } };
 }
@@ -56,7 +60,8 @@ function who() {
 }
 // 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
 const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
-const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#admin" && adminUI() ? "admin" : "craft");
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track"
+  : location.hash === "#admin" && adminUI() ? "admin" : "craft");
 let adminPending = 0;
 const days = () => meta.hours / 24;
 const PERIOD = () => (meta.hours % 24 === 0 ? `${meta.hours / 24}일` : `${meta.hours}시간`);
@@ -212,6 +217,7 @@ function search(p, rows, q) {
 let query = "";
 async function render() {
   if (page() === "admin") return renderAdmin();
+  if (page() === "track") return renderTrack();
   const p = page(), name = `${p}-${QUALITY_KEY[S.quality]}`;
   let ds;
   try { ds = await dataset(name); } catch (e) {
@@ -256,6 +262,182 @@ async function render() {
   };
   dashboard({ data, parentElement: host });
 }
+
+// ── 📈 재료 트래킹 ──
+const TRACK_SHARDS = 64;
+const trackShards = {};
+let trackNames = null;
+let trackQuery = "";
+const tracked = () => load("ffxivTrack", null) ?? [{ id: 8026, qty: 99 }]; // 처음엔 안개비단
+const saveTracked = (list) => save("ffxivTrack", list);
+const gil = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
+const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const quantile = (a, q) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
+function trackShard(id) {
+  const n = id % TRACK_SHARDS;
+  return (trackShards[n] = trackShards[n] || getJSON(`data/track/t${n}.json`));
+}
+
+// 한 재료 분석: 서버별 지금 매물, 살 때 판단, 구매 계획
+function analyzeTrack(id, d, qty) {
+  const servers = meta.servers.filter((x) => x.key !== "dc");
+  const worlds = servers.map((sv) => {
+    const w = (d.w || {})[sv.key] || { lst: [], cnt: 0 };
+    const real = w.lst.filter((l) => !l[3]);
+    const recent = d.h.slice(-7).map((h) => (h[1][sv.key] || [])[0]).filter((x) => x != null);
+    return { ...sv, lst: w.lst, cnt: w.cnt, min: real[0]?.[0] ?? null, minQty: real.filter((l) => l[0] === real[0]?.[0]).reduce((a, l) => a + l[1], 0),
+      med7: median(recent), sold7: d.h.slice(-7).reduce((a, h) => a + ((h[1][sv.key] || [])[1] || 0), 0) };
+  });
+  const listed = worlds.filter((w) => w.min != null).sort((a, b) => a.min - b.min);
+  const cur = listed[0]?.min ?? null;
+  const days = d.h.map((h) => ({ date: h[0], med: (h[1].dc || [])[0] ?? null, units: (h[1].dc || [])[1] || 0,
+    min: Object.values(h[2] || {}).length ? Math.min(...Object.values(h[2])) : null }));
+  // 판단 기준: 같은 것끼리 비교한다 (서버마다 시세 수준이 달라서)
+  //  1) 그날 최저 매물 기록이 5일치 넘게 쌓였으면: 지금 최저가 vs 지난날들의 최저 매물
+  //  2) 아직이면: 제일 싼 서버의 지금 최저가 vs 그 서버의 하루 판매 중앙값
+  const today = days.length ? days[days.length - 1].date : null;
+  const pastMins = days.slice(-29).filter((x) => x.date !== today).map((x) => x.min).filter((x) => x != null);
+  const bestW = listed[0];
+  let refs, basis;
+  if (pastMins.length >= 5) { refs = pastMins; basis = `최근 ${refs.length}일 그날 최저 매물`; }
+  else {
+    refs = bestW ? d.h.slice(-28).map((h) => (h[1][bestW.key] || [])[0]).filter((x) => x != null) : [];
+    basis = bestW ? `${bestW.name} 최근 ${refs.length}일 판매 중앙값` : "";
+  }
+  const ref = median(refs), p25 = quantile(refs, 0.25), p75 = quantile(refs, 0.75);
+  const r3 = median(days.slice(-3).map((x) => x.med).filter((x) => x != null));
+  const before = median(days.slice(-10, -3).map((x) => x.med).filter((x) => x != null));
+  const trend = r3 && before ? (r3 / before - 1) * 100 : null;
+  let signal;
+  if (cur == null) signal = { kind: "none", icon: "⚪", label: "매물 없음", text: "지금 올라온 매물이 없다 개굴. 조금 있다가 다시 봐라 개굴." };
+  else if (refs.length < 3) signal = { kind: "none", icon: "⚪", label: "판단 보류", text: `비교할 기록이 ${refs.length}일치밖에 없어서 아직 판단을 못 한다 개굴. 며칠 쌓이면 알려준다 개굴.` };
+  else {
+    const diff = (cur / ref - 1) * 100, pct = Math.abs(diff).toFixed(0);
+    const base = `지금 최저 ${gil(cur)}길 (${bestW.name}) — ${basis} ${gil(ref)}길보다 ${pct}% ${diff < 0 ? "싸다" : "비싸다"} 개굴.`;
+    if (cur <= p25 || diff <= -10) signal = { kind: "buy", icon: "🟢", label: "지금 살 때", text: `${base} 쌀 때 사 둬라 개굴.` };
+    else if (cur >= p75 || diff >= 15) signal = { kind: "wait", icon: "🔴", label: "기다려라", text: `${base} 급한 거 아니면 며칠 기다려 봐라 개굴.` };
+    else signal = { kind: "ok", icon: "🟡", label: "보통", text: `${base} 평소 가격대다 개굴.` };
+  }
+  if (trend != null && Math.abs(trend) >= 10) signal.trend = `최근 3일 ${trend > 0 ? "📈 +" : "📉 "}${trend.toFixed(0)}% ${trend > 0 ? "오르는 중" : "내리는 중"}이다 개굴.`;
+  // 구매 계획: 모든 서버의 싼 매물부터 필요 수량만큼 (미끼는 빼고)
+  const pool = worlds.flatMap((w) => w.lst.filter((l) => !l[3]).map((l) => ({ w: w.name, price: l[0], qty: l[1] }))).sort((a, b) => a.price - b.price);
+  const plan = {}; let got = 0, spend = 0;
+  for (const l of pool) {
+    if (got >= qty) break;
+    const take = Math.min(l.qty, qty - got);
+    got += take; spend += take * l.price;
+    const p = (plan[l.w] = plan[l.w] || { qty: 0, spend: 0, lots: 0 });
+    p.qty += take; p.spend += take * l.price; p.lots += 1;
+  }
+  // 그래프: 판단에 쓴 서버의 하루 판매 중앙값도 같이 (보통 가격대 띠랑 같은 기준)
+  if (bestW && pastMins.length < 5) d.h.forEach((h, i) => (days[i].wmed = (h[1][bestW.key] || [])[0] ?? null));
+  return { worlds, cur, ref, p25, p75, days, signal, plan, got, spend, bestName: bestW && pastMins.length < 5 ? bestW.name : null };
+}
+
+function trackChart(a) {
+  const pts = a.days.filter((x) => x.med != null || x.min != null || x.wmed != null);
+  if (pts.length < 2) return `<div class="chart-empty">기록이 쌓이면 그래프가 나온다 개굴.</div>`;
+  const W = 640, H = 170, L = 52, R = 10, T = 12, B = 24;
+  const vals = pts.flatMap((x) => [x.med, x.min, x.wmed]).filter((v) => v != null).concat([a.p25, a.p75].filter((v) => v != null));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo *= 0.9; hi *= 1.1; }
+  const x = (i) => L + (i * (W - L - R)) / Math.max(1, pts.length - 1);
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const line = (key) => { let d = "", prev = false; pts.forEach((p, i) => { if (p[key] == null) { prev = false; return; } d += `${prev ? "L" : "M"}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`; prev = true; }); return d; };
+  const band = a.p25 != null ? `<rect x="${L}" y="${y(a.p75)}" width="${W - L - R}" height="${Math.max(1, y(a.p25) - y(a.p75))}" class="band"><title>보통 가격대 (하위 25% ~ 상위 25%)</title></rect>` : "";
+  const grid = [lo, (lo + hi) / 2, hi].map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L - 6}" y="${y(v) + 3}" class="axis" text-anchor="end">${gil(v)}</text>`).join("");
+  const labels = pts.map((p, i) => (i === 0 || i === pts.length - 1 || i === Math.floor(pts.length / 2)) ? `<text x="${x(i)}" y="${H - 6}" class="axis" text-anchor="middle">${esc(p.date)}</text>` : "").join("");
+  const dots = pts.map((p, i) => p.med != null ? `<circle cx="${x(i)}" cy="${y(p.med)}" r="3" class="dot"><title>${esc(p.date)} 판매 중앙값 ${gil(p.med)}길 · ${p.units}개 팔림</title></circle>` : "").join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart track-chart">${band}${grid}${labels}<path d="${line("min")}" class="line-min"/>${a.bestName ? `<path d="${line("wmed")}" class="line-w"/>` : ""}<path d="${line("med")}" class="line"/>${dots}</svg>
+    <div class="legend"><span><i class="sw sw-med"></i>한국 전체 판매 중앙값</span>${a.bestName ? `<span><i class="sw sw-w"></i>${esc(a.bestName)} 판매 중앙값</span>` : ""}
+      <span><i class="sw sw-min"></i>그날 최저 매물</span>${a.p25 != null ? `<span><i class="sw sw-band"></i>보통 가격대 (판단 기준)</span>` : ""}</div>`;
+}
+
+function trackCard(t, name, d) {
+  if (!d) return `<section class="track-card"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
+    <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button></div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
+  const a = analyzeTrack(t.id, d, t.qty);
+  const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
+  const rows = a.worlds.map((w) => `<tr class="${best && w.key === best.key ? "best" : ""}">
+      <td>${best && w.key === best.key ? "👑 " : ""}${esc(w.name)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
+      <td class="num">${w.min == null ? '<span class="dash">-</span>' : `${gil(w.min)} <small class="faint">×${w.minQty}</small>`}</td>
+      <td class="num">${w.cnt}</td><td class="num">${gil(w.med7)}</td><td class="num">${w.sold7.toLocaleString("ko-KR")}</td>
+      <td class="lots">${w.lst.slice(0, 5).map((l) => `<span class="lot${l[3] ? " bait" : ""}${l[2] ? " hq" : ""}" title="${l[3] ? "미끼 매물 (그 서버 보통 가격의 절반도 안 된다)" : ""}">${gil(l[0])}×${l[1]}${l[2] ? " HQ" : ""}</span>`).join("")}</td></tr>`).join("");
+  const plan = Object.entries(a.plan).sort((x, y) => y[1].qty - x[1].qty).map(([w, p]) => `<li><b>${esc(w)}</b> ${p.qty.toLocaleString("ko-KR")}개 <span class="faint">(평균 ${gil(p.spend / p.qty)}길 · 매물 ${p.lots}개)</span></li>`).join("");
+  return `<section class="track-card">
+    <div class="track-head">
+      <h2>${esc(name)}</h2>
+      <span class="signal ${a.signal.kind}">${a.signal.icon} ${a.signal.label}</span>
+      <span class="faint">데이터 ${ago(d.upd)}</span>
+      <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>
+    </div>
+    <p class="signal-text">${esc(a.signal.text)}${a.signal.trend ? ` ${esc(a.signal.trend)}` : ""}</p>
+    <div class="track-grid">
+      <div>
+        <div class="ev-cap">가격 추이 (${a.days.length}일)</div>
+        ${trackChart(a)}
+      </div>
+      <div class="buy-plan">
+        <div class="ev-cap">🛒 구매 계획</div>
+        <label class="field"><span>필요 수량</span><input type="number" min="1" max="99999" value="${t.qty}" data-track-qty="${t.id}"></label>
+        ${a.got ? `<div class="plan-total"><b>${gil(a.spend)}</b>길 <span class="faint">(개당 평균 ${gil(a.spend / a.got)}길${a.got < t.qty ? ` · 지금 매물로는 ${a.got}개까지만` : ""})</span></div>
+          <ul class="plan-list">${plan}</ul>` : `<p class="faint">살 수 있는 매물이 없다 개굴.</p>`}
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>서버</th><th class="num">최저 매물</th><th class="num">매물 수</th><th class="num">7일 판매 중앙값</th><th class="num">7일 판매량</th><th>싼 매물 (가격×수량)</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </section>`;
+}
+
+async function renderTrack() {
+  const app = document.getElementById("app");
+  if (!trackNames) {
+    app.innerHTML = `<div class="boot">🐸 재료 목록 불러오는 중이다 개굴…</div>`;
+    try { trackNames = new Map(await getJSON("data/track/items.json")); } catch (e) {
+      app.innerHTML = `<div class="boot">⚠ 트래킹 데이터를 못 받아왔다 개굴. (${esc(e.message)})</div>`; return;
+    }
+  }
+  const list = tracked();
+  const datas = await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)));
+  const q = trackQuery.replace(/\s/g, "");
+  const sugg = q ? [...trackNames].filter(([, n]) => n.replace(/\s/g, "").includes(q)).slice(0, 12) : [];
+  const keep = app.querySelector("#track-search");
+  const caret = keep && document.activeElement === keep ? keep.selectionStart : null;
+  app.innerHTML = `<section class="track">
+    <div class="eyebrow">MATERIAL TRACKER</div><h1>📈 재료 트래킹</h1>
+    <div class="track-add">
+      <input id="track-search" type="search" placeholder="🔍 재료 이름으로 추가 (예: 안개비단, 다마스쿠스 주괴)" autocomplete="off" value="${esc(trackQuery)}">
+      ${sugg.length ? `<div class="track-sugg">${sugg.map(([id, n]) => `<button type="button" data-track-add="${id}"${list.some((t) => t.id === id) ? " disabled" : ""}>${esc(n)}${list.some((t) => t.id === id) ? " ✓" : ""}</button>`).join("")}</div>`
+        : q ? `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>` : ""}
+    </div>
+    ${list.length ? list.map((t, i) => trackCard(t, trackNames.get(t.id), datas[i])).join("") : `<div class="detail-hint">🐸 위에서 재료를 검색해서 추가해라 개굴.</div>`}
+  </section>`;
+  if (caret != null) { const el = app.querySelector("#track-search"); el.focus(); el.setSelectionRange(caret, caret); }
+}
+
+document.getElementById("app").addEventListener("input", (e) => {
+  if (e.target.id !== "track-search") return;
+  trackQuery = e.target.value;
+  clearTimeout(window.__trackTimer);
+  window.__trackTimer = setTimeout(renderTrack, 200);
+});
+document.getElementById("app").addEventListener("change", (e) => {
+  const q = e.target.closest("[data-track-qty]");
+  if (!q) return;
+  const list = tracked(), t = list.find((x) => x.id === Number(q.dataset.trackQty));
+  if (t) { t.qty = Math.max(1, Math.round(Number(q.value) || 1)); saveTracked(list); renderTrack(); }
+});
+document.getElementById("app").addEventListener("click", (e) => {
+  const add = e.target.closest("[data-track-add]");
+  if (add) {
+    const list = tracked(), id = Number(add.dataset.trackAdd);
+    if (!list.some((t) => t.id === id)) list.unshift({ id, qty: 99 });
+    saveTracked(list); trackQuery = ""; renderTrack(); return;
+  }
+  const rm = e.target.closest("[data-untrack]");
+  if (rm) { saveTracked(tracked().filter((t) => t.id !== Number(rm.dataset.untrack))); renderTrack(); }
+});
 
 // ── 🔑 권한 관리 (관리자만) ──
 const fmtMs = (ms) => (ms ? fmtTime(ms / 1000) : "-");
@@ -325,6 +507,7 @@ function sideHead(p) {
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
+      <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
     </nav>
     <div class="brand"><span class="brand-frog">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
@@ -342,6 +525,16 @@ function adminLink(p) {
 function renderSide() {
   const p = page(), side = document.getElementById("side");
   if (p === "admin") { side.innerHTML = sideHead(p) + adminLink(p); return; }
+  if (p === "track") {
+    side.innerHTML = sideHead(p) + `
+      <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
+      <p class="hint">관심 재료를 등록해 두면 서버별 최저가, 살 때인지 기다릴 때인지, 어디서 몇 개 사면 제일 싼지 알려준다 개굴.
+      가격 기록은 매일 쌓여서 최대 ${60}일까지 본다 개굴.</p>
+      <p class="hint">🟢 지금 살 때 · 🟡 보통 · 🔴 기다려라 — 지금 최저가를 지난날 최저 매물이랑 비교한다 개굴.
+      기록이 아직 적으면 제일 싼 서버의 평소 판매가랑 비교한다 개굴 (서버마다 시세가 달라서).</p>
+      ${adminLink(p)}`;
+    return;
+  }
   const F = S[p];
   const jobs = p === "craft" ? meta.jobs : meta.gatherJobs;
   const sortNames = p === "craft" ? { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" } : { daily: "하루 잠재 이익", net: "개당 순수익" };

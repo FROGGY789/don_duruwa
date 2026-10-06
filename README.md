@@ -13,6 +13,10 @@
 - 지금 바로 갱신: GitHub 저장소 **Actions → 사이트 갱신 → Run workflow**
 - 내 PC 에서 확인: `python -m ffxiv.build` (시세 받기까지) 또는 `python -m ffxiv.build --no-fetch` (저장된 시세로 계산만) → `cd site && python -m http.server` → http://localhost:8000
 
+- **📈 재료 트래킹** (새 사이트만): 관심 재료를 등록하면 서버별 최저 매물, 🟢 지금 살 때 / 🟡 보통 / 🔴 기다려라, 필요 수량을 어느 서버에서 몇 개씩 사면 제일 싼지, 가격 추이를 보여줍니다.
+  가격 기록은 `ffxiv/track.py` 가 하루 단위로 쌓고 (`cache/history.json.gz`, GitHub Actions 캐시로 이어짐) 최대 60일 보관합니다.
+  판단은 지금 최저가를 지난날 "그날 최저 매물"과 비교하고, 기록이 5일치 안 되면 제일 싼 서버의 평소 판매가와 비교합니다.
+
 ### 처음 한 번 설정
 1. Cloudflare 가입 → **API 토큰**(Account · Cloudflare Pages · Edit 권한)과 **Account ID** 준비
 2. GitHub 저장소 **Settings → Secrets and variables → Actions** 에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 추가

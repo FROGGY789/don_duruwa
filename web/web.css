@@ -110,3 +110,43 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .admin-group h2 .cnt{font-size:var(--fs-xs);color:var(--text-faint);font-weight:400;margin-left:4px}
 .admin-btns{display:flex;gap:6px;justify-content:flex-end}
 .nav-admin{border-bottom:0;padding-bottom:0;margin-bottom:0}
+
+/* 📈 재료 트래킹 */
+.track h1{font-family:var(--font-display);font-weight:600;font-size:var(--fs-2xl);margin:0 0 var(--space-4)}
+.track-add{position:relative;max-width:560px;margin-bottom:var(--space-5)}
+.track-add input{width:100%;padding:10px 14px;border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface);color:var(--text)}
+.track-add input:focus{outline:0;border-color:var(--primary);box-shadow:var(--ring)}
+.track-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--space-2)}
+.track-sugg button{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:var(--radius-pill);padding:4px 12px;font-size:var(--fs-sm);cursor:pointer}
+.track-sugg button:hover:not(:disabled){border-color:var(--primary);color:var(--primary-strong)}
+.track-sugg button:disabled{color:var(--text-faint);cursor:default}
+.track-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-5)}
+.track-card .table-wrap{box-shadow:none;margin-top:var(--space-3)}
+.track-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.track-head h2{margin:0;font-size:var(--fs-xl);font-weight:600}
+.track-head .chip-x{margin-left:auto}
+.track .faint{color:var(--text-faint);font-size:var(--fs-sm)}
+.signal{padding:3px 12px;border-radius:var(--radius-pill);font-size:var(--fs-sm);font-weight:600}
+.signal.buy{background:var(--positive-soft);color:var(--positive)}
+.signal.ok{background:var(--warning-soft);color:var(--warning)}
+.signal.wait{background:var(--negative-soft);color:var(--negative)}
+.signal.none{background:var(--surface-2);color:var(--text-muted)}
+.signal-text{margin:var(--space-2) 0 var(--space-3);color:var(--text-muted);font-size:var(--fs-sm)}
+.track-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:var(--space-5);align-items:start}
+@media (max-width:900px){.track-grid{grid-template-columns:1fr}}
+.track-chart .line-min{fill:none;stroke:var(--info);stroke-width:1.5;stroke-dasharray:4 3}
+.track-chart .band{fill:var(--primary-soft)}
+.legend{display:flex;gap:var(--space-4);font-size:var(--fs-xs);color:var(--text-faint);margin-top:4px}
+.track-chart .line-w{fill:none;stroke:var(--warning);stroke-width:2;stroke-linejoin:round}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{display:inline-block;width:12px;height:3px;border-radius:2px}
+.sw-med{background:var(--primary)}.sw-w{background:var(--warning)}.sw-min{background:var(--info)}
+.sw-band{height:10px;background:var(--primary-soft);border:1px solid var(--border-strong)}
+.buy-plan{display:flex;flex-direction:column;gap:var(--space-2)}
+.plan-total{font-size:var(--fs-sm)}.plan-total b{font-size:var(--fs-lg);color:var(--primary-strong)}
+.plan-list{margin:0;padding-left:18px;font-size:var(--fs-sm);line-height:1.8}
+.track-card tr.best td{background:var(--primary-soft)}
+.lots{white-space:normal}
+.lot{display:inline-block;margin:1px 4px 1px 0;padding:1px 6px;border-radius:var(--radius-sm);background:var(--surface-2);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.lot.hq{color:var(--primary-strong)}
+.lot.bait{text-decoration:line-through;color:var(--text-faint)}

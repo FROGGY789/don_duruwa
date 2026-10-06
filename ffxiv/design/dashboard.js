@@ -231,7 +231,10 @@ function renderTable(d, rows) {
       etc: `<td><div class="badges">${badges}</div></td>`,
     };
     return `
-      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>`;
+      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
+      // 누른 줄 바로 아래에 상세를 펼친다 (다시 누르면 접힘)
+      (state.selected === r.id ? `<tr class="detail-row"><td colspan="${cols.length}"><div class="detail-inline">
+        <div class="detail-close"><button type="button" data-close-detail="1">▲ 접기</button></div>${renderDetail(d, r)}</div></td></tr>` : "");
   }).join("");
   return `<div class="table-wrap rank-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -737,7 +740,7 @@ export default function (component) {
   function renderInner() {
     if (data.dynamicTabs && state.tab !== "all" && !tabJobs(data).includes(state.tab)) state.tab = "all";
     const rows = sortedRows(data);
-    if (!data.rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
+    if (state.selected != null && !rows.some((r) => r.id === state.selected)) state.selected = null; // 지금 표에 없으면 접는다
     const selected = data.rows.find((r) => r.id === state.selected);
     // 정적 사이트: 상세(근거·재료·추이)는 누를 때 받아온다
     if (selected && data.loadDetail && !selected.loaded) data.loadDetail(selected.id).then(() => render(), () => {});
@@ -759,14 +762,16 @@ export default function (component) {
       renderHeader(data) +
       renderTabs(data) +
       `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">${!hasCart(data)
-        ? `줄 누르면 밑에 판매 상세${isExchange(data) ? "랑 어디서 바꾸는지" : ""}가 나온다 개굴`
-        : "줄 누르면 밑에 재료 상세가 나온다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴"}</span>
+        ? `줄 누르면 바로 밑에 판매 상세${isExchange(data) ? "랑 어디서 바꾸는지" : ""}가 펼쳐진다 개굴 · 다시 누르면 접힌다 개굴`
+        : "줄 누르면 바로 밑에 재료 상세가 펼쳐진다 개굴 · 다시 누르면 접힌다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴"}</span>
          <span class="right">${cartCount && hasCart(data) ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
-      renderDetail(data, selected) +
       renderFailed(data) +
       (hasCart(data) ? renderCart(data) + renderCartFab() : "") +
       `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었다 개굴 · 문의도 여기로 해라 개굴</footer>`;
+    // 펼친 상세는 가로로 긴 표 안에서도 화면 폭에 맞게
+    const wrap = root.querySelector(".rank-table");
+    if (wrap) wrap.style.setProperty("--wrap-w", wrap.clientWidth + "px");
     state.cartAnim = false;
     state.fabBump = false;
     root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount && hasCart(data)));
@@ -940,11 +945,23 @@ export default function (component) {
       state.sort = key;
       return render();
     }
+    if (e.target.closest("[data-close-detail]")) {
+      const id = state.selected;
+      state.selected = null;
+      render();
+      root.querySelector(`tr[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+      return;
+    }
     const tr = e.target.closest("tr[data-id]");
     if (tr) {
-      state.selected = Number(tr.dataset.id);
+      // 같은 줄을 또 누르면 접고, 다른 줄이면 그 줄 밑에 펼친다
+      const id = Number(tr.dataset.id);
+      state.selected = state.selected === id ? null : id;
       render();
-      root.querySelector(".detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // 펼치면 그 줄을 화면 위쪽으로 올려서 밑에 펼친 상세가 바로 보이게
+      const row = root.querySelector(`tr[data-id="${id}"]`);
+      if (row && state.selected === id) window.scrollTo({ top: row.getBoundingClientRect().top + window.scrollY - 12, behavior: "smooth" });
+      else row?.scrollIntoView({ block: "nearest" });
     }
   };
   root.onchange = (e) => {

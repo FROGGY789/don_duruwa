@@ -316,9 +316,9 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .bundles td.bundle-best{background:var(--primary-soft);color:var(--primary-strong);font-weight:600}
 
 /* 순위 표 촘촘하게: 칸 제목은 두 줄까지 접는다 */
-.rank-table thead th{white-space:normal;word-break:keep-all;line-height:1.3;vertical-align:bottom;padding:10px 8px}
-.rank-table thead th.num{min-width:3.5em}
-.rank-table tbody td{padding:10px 8px}
+.rank-table > table > thead th{white-space:normal;word-break:keep-all;line-height:1.3;vertical-align:bottom;padding:10px 8px}
+.rank-table > table > thead th.num{min-width:3.5em}
+.rank-table > table > tbody > tr > td{padding:10px 8px}
 .rank-table td[data-col="etc"]{min-width:150px}
 .rank-table td[data-col="etc"] .badges{max-width:200px}
 .rank-table td[data-col="name"]{white-space:normal;word-break:keep-all;min-width:140px;max-width:220px;line-height:1.35}
@@ -388,3 +388,12 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .live tr.dc td{font-weight:600}
 .live-sub{margin:var(--space-4) 0 var(--space-2);font-size:var(--fs-sm);font-weight:600;color:var(--text)}
 .live-sub .faint{font-weight:400;font-size:var(--fs-xs)}
+
+/* 누른 줄 바로 아래에 펼치는 상세 */
+.rank-table > table > tbody > tr.detail-row > td{padding:0;background:var(--surface-2);border-bottom:2px solid var(--primary)}
+.detail-inline{position:sticky;left:0;width:var(--wrap-w,100%);padding:var(--space-2) var(--space-3) var(--space-4)}
+.detail-inline .detail{margin-top:0}
+.detail-close{display:flex;justify-content:flex-end;margin-bottom:var(--space-2)}
+.detail-close button{border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);border-radius:var(--radius-sm);padding:3px 12px;font-size:var(--fs-xs);cursor:pointer}
+.detail-close button:hover{color:var(--primary-strong);border-color:var(--primary)}
+tbody tr.clickable.selected td[data-col="name"] .item::after{content:" ▾";color:var(--primary)}

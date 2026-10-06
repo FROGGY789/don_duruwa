@@ -863,9 +863,9 @@ const TOUR = [
   { sel: ".cats.servers", title: "서버 고르기", text: "🌏 통합은 한국 전체 시세, 서버 버튼은 그 서버에서 팔 때 순위다 개굴. 🏠 가 내 서버다 개굴." },
   { sel: ".cats:not(.servers)", title: "분류", text: "가구·장비·재료·소모품처럼 종류별로 나눠 본다 개굴. 숫자는 필터 통과한 개수다 개굴." },
   { sel: ".rank-table thead", title: "순위 표", text: "칸 제목을 누르면 그걸로 정렬된다 개굴. 판매 예상가는 최근 판매 중앙값이고, 이상 거래·미끼 매물은 뺀 값이다 개굴." },
-  { sel: ".rank-table tbody tr", title: "품목 누르기", text: "줄을 누르면 밑에 재료 상세가 나온다 개굴. 누르는 순간 그 템이랑 재료 시세를 Universalis 에서 새로 받아온다 개굴." },
-  { sel: ".live", title: "⚡ 지금 시세", text: "방금 받은 서버별 최저 매물, 재료 지금 값, 지금 기준 순수익이다 개굴. 만들기 전에 여기서 재료값이 표보다 비싸졌는지 꼭 봐라 개굴." },
-  { sel: ".mat-link", title: "재료 → 트래킹", text: "재료 이름을 누르면 📈 재료 트래킹에 담기고 그리로 간다 개굴. 서버별 최저가랑 살 때인지 알려준다 개굴." },
+  { sel: ".rank-table tbody tr", title: "품목 누르기", text: "줄을 누르면 바로 밑에 재료 상세가 펼쳐진다 개굴. 다시 누르면 접힌다 개굴. 누르는 순간 그 템이랑 재료 시세를 Universalis 에서 새로 받아온다 개굴." },
+  { sel: ".live", open: true, title: "⚡ 지금 시세", text: "방금 받은 서버별 최저 매물, 재료 지금 값, 지금 기준 순수익이다 개굴. 만들기 전에 여기서 재료값이 표보다 비싸졌는지 꼭 봐라 개굴." },
+  { sel: ".mat-link", open: true, title: "재료 → 트래킹", text: "재료 이름을 누르면 📈 재료 트래킹에 담기고 그리로 간다 개굴. 서버별 최저가랑 살 때인지 알려준다 개굴." },
   { sel: ".rank-table .pick", title: "장보기", text: "+ 를 누르면 장보기에 담긴다 개굴. 오른쪽 아래 장바구니에서 서버별로 뭘 몇 개 살지 정리해 준다 개굴." },
   { sel: ".side-fold", side: true, title: "사이드바 접기", text: "표를 넓게 보고 싶으면 « 를 눌러 접어라 개굴. 왼쪽 위 ☰ 설정으로 다시 편다 개굴. 사용법은 사이드바 맨 아래에서 다시 볼 수 있다 개굴." },
 ];
@@ -902,6 +902,13 @@ function tour() {
     Object.assign(card.style, { left: left + "px", top: top + "px" });
   }
   function show(n) {
+    // 상세 단계는 첫 줄을 펼쳐 놓고 보여준다
+    const want = steps[n];
+    if (want && want.open && !document.querySelector(".detail-row")) {
+      document.querySelector(".rank-table tbody tr.clickable")?.click();
+      setTimeout(() => show(n), 500);
+      return;
+    }
     // 화면에 없는 단계(예: 장보기 없는 페이지)는 건너뛴다
     while (n >= 0 && n < steps.length && !target(steps[n])) n += n >= i ? 1 : -1;
     if (n < 0 || n >= steps.length) return end();

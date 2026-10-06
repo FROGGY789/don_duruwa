@@ -27,6 +27,7 @@ const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "
 
 state.done = state.done || loadJSON("ffxivCartDone", {});
 state.saved = state.saved || loadJSON("ffxivSavedCarts", []);
+state.qty = state.qty || loadJSON("ffxivCartQty", {}); // 장보기에서 직접 고친 살 수량 {"서버|재료": 개수}
 
 // 장보기에 담은 것 {레시피ID: 제작 횟수}, 산 재료 체크 {"서버|재료": true}, 저장해 둔 목록 — 브라우저에 기억해 둔다
 function loadJSON(key, fallback) {
@@ -38,6 +39,7 @@ function saveJSON(key, value) {
 function saveCart() {
   saveJSON("ffxivCart", state.cart);
   saveJSON("ffxivCartDone", state.done);
+  saveJSON("ffxivCartQty", state.qty);
 }
 function nowText() {
   const t = new Date(), p = (n) => String(n).padStart(2, "0");
@@ -586,13 +588,17 @@ function cartPlan(d) {
     }
   }
   const list = Object.values(groups).map((g) => {
-    const items = Object.values(g.items).map((it) => ({ ...it, qty: Math.ceil(it.qty - 1e-9), unit: it.qty ? it.spend / it.qty : 0 }));
+    // need = 레시피대로 필요한 수량, qty = 실제로 살 수량 (가진 거 빼고 직접 고친 값이 있으면 그걸로)
+    const items = Object.values(g.items).map((it) => {
+      const need = Math.ceil(it.qty - 1e-9), key = `${g.name}|${it.name}`;
+      const fixed = state.qty[key];
+      return { ...it, key, need, qty: fixed != null ? fixed : need, edited: fixed != null, unit: it.qty ? it.spend / it.qty : 0 };
+    });
     items.forEach((it) => (it.total = it.qty * it.unit));
     const total = items.reduce((a, it) => a + it.total, 0);
     cost += total;
     return { ...g, items, total };
   }).sort((a, b) => (b.market - a.market) || (b.total - a.total));
-  list.forEach((g) => g.items.forEach((it) => (it.key = `${g.name}|${it.name}`)));
   return { ids, rows, missing, list, cost, revenue };
 }
 
@@ -604,7 +610,7 @@ function cartText(d) {
   out.push("", `재료비 ${Math.round(cost).toLocaleString("ko-KR")}길 · 판매액(세후) ${Math.round(revenue).toLocaleString("ko-KR")}길 · 예상 순이익 ${Math.round(revenue - cost).toLocaleString("ko-KR")}길`);
   list.forEach((g, i) => {
     out.push("", `== ${g.market ? `${i + 1}. ` : ""}${g.name} (${Math.round(g.total).toLocaleString("ko-KR")}길) ==`);
-    g.items.forEach((it) => out.push(`[${state.done[it.key] ? "x" : " "}] ${it.name} ×${it.qty.toLocaleString("ko-KR")} @${Math.round(it.unit).toLocaleString("ko-KR")} = ${Math.round(it.total).toLocaleString("ko-KR")}`));
+    g.items.forEach((it) => out.push(`[${state.done[it.key] ? "x" : " "}] ${it.name} ×${it.qty.toLocaleString("ko-KR")}${it.edited ? ` (필요 ${it.need.toLocaleString("ko-KR")})` : ""} @${Math.round(it.unit).toLocaleString("ko-KR")} = ${Math.round(it.total).toLocaleString("ko-KR")}`));
   });
   return out.join("\n");
 }
@@ -637,7 +643,9 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""}/> ${esc(it.name)}</label></td>
-        <td class="num">×${it.qty.toLocaleString("ko-KR")}</td>
+        <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
+          title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
+          ? `<button type="button" class="qty-reset" data-qty-reset="${esc(it.key)}" title="필요 수량 ${it.need.toLocaleString("ko-KR")}개로 되돌리기">↺${it.need.toLocaleString("ko-KR")}</button>` : ""}</td>
         <td class="num faint">@${gil(it.unit)}</td><td class="num">${gil(it.total)}</td></tr>`).join("")}</tbody></table>
     </div>`;
   }).join("");
@@ -853,7 +861,9 @@ export default function (component) {
       saveCart();
       return render();
     }
-    if (e.target.closest("[data-clear]")) { state.cart = {}; state.done = {}; state.cartOpen = false; saveCart(); return render(); }
+    if (e.target.closest("[data-clear]")) { state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
+    const reset = e.target.closest("[data-qty-reset]");
+    if (reset) { delete state.qty[reset.dataset.qtyReset]; saveCart(); return render(); }
     if (e.target.closest("[data-save]")) return saveList();
     if (e.target.closest("[data-download]")) {
       const blob = new Blob([cartText(data)], { type: "text/plain;charset=utf-8" });
@@ -874,7 +884,7 @@ export default function (component) {
     if (load) {
       const x = state.saved[Number(load.dataset.load)];
       if (x && (!Object.keys(state.cart).length || window.confirm(`지금 장보기를 "${x.name}" 로 바꿔도 되나 개굴?`))) {
-        state.cart = { ...x.cart }; state.done = { ...(x.done || {}) }; saveCart();
+        state.cart = { ...x.cart }; state.done = { ...(x.done || {}) }; state.qty = { ...(x.qty || {}) }; saveCart();
         flash(`"${x.name}" 불러왔다 개굴.`);
       }
       return;
@@ -965,6 +975,15 @@ export default function (component) {
     }
   };
   root.onchange = (e) => {
+    // 살 수량을 직접 고침 (필요 수량이랑 같으면 고친 거 없앰)
+    const q = e.target.closest("[data-qty]");
+    if (q) {
+      const n = Math.max(0, Math.min(99999, Math.round(Number(q.value) || 0)));
+      const it = cartPlan(data).list.flatMap((g) => g.items).find((x) => x.key === q.dataset.qty);
+      if (it && n === it.need) delete state.qty[q.dataset.qty]; else state.qty[q.dataset.qty] = n;
+      saveCart();
+      return render();
+    }
     const box = e.target.closest("[data-done]");
     if (box) {
       if (box.checked) state.done[box.dataset.done] = true; else delete state.done[box.dataset.done];
@@ -986,7 +1005,7 @@ export default function (component) {
     const name = (state.saveName || "").trim() || `장보기 ${nowText()}`;
     const names = Object.keys(state.cart).map((id) => data.rows.find((r) => r.id === Number(id))?.name).filter(Boolean);
     const same = state.saved.findIndex((x) => x.name === name);
-    const entry = { name, savedAt: nowText(), cart: { ...state.cart }, done: { ...state.done }, names };
+    const entry = { name, savedAt: nowText(), cart: { ...state.cart }, done: { ...state.done }, qty: { ...state.qty }, names };
     if (same >= 0) state.saved[same] = entry; else state.saved.unshift(entry);
     state.saved = state.saved.slice(0, 20);
     saveJSON("ffxivSavedCarts", state.saved);

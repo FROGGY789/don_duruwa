@@ -110,12 +110,14 @@ def cleaned(entry, hq, hours, outlier_ratio=0.0, odd_ratio=0.0):
 
 
 def item_reference(entry):
-    """그 템의 '보통 값': 품질·서버·기간 상관없이 받아 둔 판매가 전부의 가운데(낮은 쪽) 값.
-    판매가 3건이 안 되면 지금 매물값도 같이 본다. HQ 판매가 몇 건 없어서 이상한 거래가 기준이 되는 걸 막는다."""
-    prices = [s[0] for s in entry["sales"]]
-    if len(prices) < 3:
-        prices += [l[0] for l in entry["listings"]]
-    return statistics.median_low(prices) if len(prices) >= 3 else None
+    """그 템의 '보통 값' (이상 거래 거르는 기준).
+    판매가 가운데(낮은 쪽) 값과 지금 매물 가운데 값 중 낮은 쪽. 품질·서버·기간 상관없이 받아 둔 것 전부로 본다.
+    길 옮기기용 거래(50길짜리 은반지를 3,000만 길에 4번)가 판매 기록 절반을 넘으면 판매가만으론 못 거르는데,
+    그런 템도 장터 매물은 보통 값이라 매물 가운데 값이 잡아 준다."""
+    sales = [s[0] for s in entry["sales"]]
+    listings = [l[0] for l in entry["listings"]]
+    refs = [statistics.median_low(x) for x in (sales, listings) if len(x) >= 3]
+    return min(refs) if refs else None
 
 
 def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0, clean=None):

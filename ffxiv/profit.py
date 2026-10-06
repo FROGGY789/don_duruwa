@@ -59,6 +59,9 @@ class Stats:
     bait: list = field(default_factory=list)  # 미끼로 본 매물
 
 
+DC_ODD_RATIO = 10  # 한국 전체 판매가 가운데 값의 몇 배 넘으면 서버랑 상관없이 이상 거래로 볼지
+
+
 def split_odd_sales(sales, ratio):
     """중앙값보다 ratio 배 넘게 비싸거나 1/ratio 보다 싼 거래를 이상 거래로 뺀다. (남긴 것, 뺀 것)
 
@@ -78,6 +81,14 @@ def clean_by_world(sales, listings, odd_ratio, outlier_ratio):
     톤베리가 원래 1,000길대면 1,000길은 정상이다. 그 서버 중앙값이랑만 비교한다.
     """
     kept, dropped, good, bait = [], [], [], []
+    # 서버 하나에 판매가 몇 건 없거나 이상한 거래만 몰려 있으면 그 서버 중앙값으론 못 거른다.
+    # 그래서 한국 전체 판매가(가운데 값)보다 DC_ODD_RATIO 배 넘게 비싼 건 먼저 뺀다 (예: 50길짜리 은반지가 수천만 길)
+    if odd_ratio and len(sales) >= 3:
+        ref = statistics.median_low(s[0] for s in sales)
+        crazy = [s for s in sales if s[0] > ref * DC_ODD_RATIO]
+        if crazy:
+            dropped += crazy
+            sales = [s for s in sales if s[0] <= ref * DC_ODD_RATIO]
     for w in {s[4] for s in sales} | {l[3] for l in listings}:
         k, d = split_odd_sales([s for s in sales if s[4] == w], odd_ratio)
         kept += k

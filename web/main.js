@@ -303,6 +303,12 @@ async function render() {
     failedHead: { gather: ["직업", "채집 레벨"], exchange: ["화폐", "교환가"] }[p],
     failedNote: p === "craft" ? undefined : "최근 팔린 기록이 없어서 계산 못 한 거다 개굴",
     loadDetail: (id) => loadDetail(name, id),
+    // 재료 이름을 누르면 📈 재료 트래킹에 담고 그리로 간다
+    trackMaterial: (id, need) => {
+      const list = tracked();
+      if (!list.some((t) => t.id === id)) { list.unshift({ id, qty: need }); saveTracked(list); }
+      location.hash = "#track";
+    },
   };
   dashboard({ data, parentElement: host });
 }

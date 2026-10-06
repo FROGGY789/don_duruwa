@@ -367,3 +367,9 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .sources{margin:var(--space-3) 0;padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
 .sources h3{margin:0 0 var(--space-2);font-size:var(--fs-sm);color:var(--text)}
 .sources ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px;font-size:var(--fs-sm);color:var(--text-muted)}
+
+/* 재료 이름 → 📈 재료 트래킹 */
+.mat-link{border:0;background:none;padding:0;font:inherit;color:var(--text);cursor:pointer;text-align:left;display:inline-flex;align-items:center;gap:6px}
+.mat-link:hover{color:var(--primary-strong);text-decoration:underline}
+.mat-link .mat-go{font-size:var(--fs-xs);opacity:0;transition:opacity .15s}
+.mat-link:hover .mat-go,.mat-link:focus-visible .mat-go{opacity:1}

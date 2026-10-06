@@ -237,7 +237,7 @@ function renderDetail(d, row) {
     const market = m.source === "거래소";
     return `
       <tr class="${m.depth ? "sub" : ""}">
-        <td>${tree}${esc(m.name)}</td>
+        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}</td>
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -763,6 +763,8 @@ export default function (component) {
     }
     if (!e.target.closest(".pop")) closePop();
     if (e.target.closest("[data-frogs]")) return frogRain();
+    const mat = e.target.closest("[data-track-mat]");
+    if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     const pick = e.target.closest("[data-pick]");
     if (pick) {
       const id = Number(pick.dataset.pick);

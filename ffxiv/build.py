@@ -19,7 +19,6 @@ import json
 import math
 import shutil
 import time
-from urllib.parse import quote
 from pathlib import Path
 
 from .badges import badge
@@ -114,7 +113,7 @@ def build_craft(gd, cache, cfg, server, tax, hq, badges):
             "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
         })
         materials = [{
-            "depth": d["depth"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
+            "depth": d["depth"], "id": d["id"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
             "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
             "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
             "world": d["비고(구매 서버)"] if d["구매처"] == "거래소" else "",
@@ -269,24 +268,6 @@ def main():
               f"30일 안 {recent(720)} / {len(ids)}")
         print(f"  판매 기록 있는 템 {with_sales}/{len(ids)} · 매물 있는 템 {with_listings}/{len(ids)} · "
               f"응답에서 빠진 템 {api.stats['missing']} (다시 받아서 채움 {api.stats['recovered']})")
-        # 임시 점검: 최근 업로드는 있는데 판매 기록이 빈 템 하나로 history API 를 여러 방법으로 불러 본다
-        probe = next((i for i in ids if not (cache.items.get(i) or {}).get("sales")
-                      and now_ms - ((cache.items.get(i) or {}).get("last_upload") or 0) < 24 * 3600 * 1000), None)
-        if probe:
-            target = quote(str(server["dc"] or server["world_id"]))
-            for params in ({}, {"entriesWithin": cfg["history_hours"] * 3600},
-                           {"entriesWithin": cfg["history_hours"] * 3600, "entriesToReturn": 999},
-                           {"entriesToReturn": 999}):
-                try:
-                    h = api._get(f"/api/v2/history/{target}/{probe}", params)
-                    ts = [e["timestamp"] for e in h.get("entries", [])]
-                    print(f"  점검 {probe} {params}: {len(ts)}건, 최근 {max(ts) if ts else '-'}, 오래된 {min(ts) if ts else '-'}, "
-                          f"keys {sorted(h)[:12]}")
-                except Exception as e:  # noqa: BLE001
-                    print(f"  점검 {probe} {params}: 오류 {e}")
-            cur = api._get(f"/api/v2/{target}/{probe}", {"entries": 5})
-            print(f"  점검 현재 {probe}: recentHistory {len(cur.get('recentHistory', []))}건 "
-                  f"{[e.get('timestamp') for e in cur.get('recentHistory', [])][:5]}, now {int(time.time())}")
     print(f"시세 준비 끝 ({time.time() - started:.0f}초)")
 
     site = Path(args.out)

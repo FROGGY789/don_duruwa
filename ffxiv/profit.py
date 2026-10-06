@@ -595,6 +595,7 @@ def detail_rows(calc, tree):
         st = calc.stats(node.item_id, world=calc.buy_world)
         rows.append({
             "depth": depth,
+            "id": node.item_id,
             "name": calc.gd.name(node.item_id),
             "재료": "　" * depth + ("└ " if depth else "") + calc.gd.name(node.item_id),
             "1회 제작당 수량": amt,

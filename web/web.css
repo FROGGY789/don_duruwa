@@ -186,3 +186,18 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .link-btn{border:0;background:none;padding:2px 0;color:var(--text-muted);font-size:var(--fs-xs);cursor:pointer;text-align:left}
 .link-btn:hover{color:var(--primary-strong);text-decoration:underline}
 @media (max-width:560px){.ob-jobs{grid-template-columns:repeat(2,1fr)}.ob-card{padding:var(--space-4)}}
+
+/* ❓ 사용법 둘러보기: 어둡게 깔고 설명할 곳만 하얗게 빛나는 네모 */
+.tour{position:fixed;inset:0;z-index:80;pointer-events:none}
+.tour-spot{position:fixed;border-radius:var(--radius);border:2px solid var(--tour-glow);
+  box-shadow:0 0 0 9999px var(--tour-dim),0 0 18px 4px var(--tour-glow);transition:all .25s ease;animation:tour-glow 1.6s ease-in-out infinite}
+@keyframes tour-glow{50%{box-shadow:0 0 0 9999px var(--tour-dim),0 0 30px 9px var(--tour-glow)}}
+.tour-card{position:fixed;width:min(340px,calc(100vw - 16px));pointer-events:auto;background:var(--surface);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:var(--space-4);transition:top .25s ease,left .25s ease}
+.tour-card b{font-size:var(--fs-lg)}
+.tour-card p{margin:var(--space-2) 0 var(--space-3);font-size:var(--fs-sm);line-height:1.6;color:var(--text-muted)}
+.tour-step{font-size:var(--fs-xs);color:var(--primary-strong);margin-bottom:4px}
+.tour-btns{display:flex;align-items:center;gap:var(--space-2)}
+.tour-btns .link-btn{margin-right:auto}
+.tour-btns .btn{padding:7px 16px}
+.tour-btns .btn-ghost{padding:7px 12px}

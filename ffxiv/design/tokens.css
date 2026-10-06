@@ -2,6 +2,9 @@
    디자인 토큰 (Claude Design 원본). ffxiv/ui.py 가 테마·색감에 맞는 블록을 골라 :root 에 적용한다.
    ========================================================= */
 :root{
+  /* 사용법 둘러보기: 비추는 네모 빛, 바깥 어둡게 (테마 상관없이 하얗게) */
+  --tour-glow:#ffffff;
+  --tour-dim:rgba(4,6,10,.62);
   /* 폰트 */
   --font-sans:"IBM Plex Sans KR",system-ui,sans-serif;
   --font-display:"Noto Serif KR",serif;

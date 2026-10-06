@@ -719,6 +719,7 @@ function renderSide() {
     <p class="hint">중간재료 직접 제작은 직업 레벨 ${Math.min(...Object.values(meta.jobLevelsForIntermediates))}~${Math.max(...Object.values(meta.jobLevelsForIntermediates))} 기준으로 미리 계산해 뒀다 개굴.</p>
 
     <button type="button" class="link-btn" data-onboard="1">⚙ 기본 설정 다시 하기</button>
+    <button type="button" class="link-btn" data-tour="1">❓ 사용법 다시 보기</button>
 
     <div class="sb-title">업데이트 내역</div>
     <details class="changelog-box"><summary>v${esc(meta.changelog[0].version)} · ${esc(meta.changelog[0].date.slice(5))}</summary>
@@ -765,6 +766,7 @@ function bindSide() {
     if (dot) { S.palette = dot.dataset.pal; saveSettings(); applyTheme(); renderSide(); return; }
     if (e.target.closest("[data-fold]")) { setFold(true); return; }
     if (e.target.closest("[data-onboard]")) { onboard(); return; }
+    if (e.target.closest("[data-tour]")) { tour(); return; }
     if (e.target.closest("[data-reload]")) { Object.keys(datasets).forEach((k) => delete datasets[k]); start(); }
   });
   document.getElementById("side-toggle").addEventListener("click", () => {
@@ -845,9 +847,82 @@ function onboard() {
     saveSettings();
     box.remove();
     renderSide();
-    render();
+    // 처음 들어온 사람은 설정 끝나면 바로 사용법 둘러보기
+    render().then(() => { if (!load("ffxivTourDone", false)) tour(); });
   });
   document.body.appendChild(box);
+}
+
+// ❓ 사용법 둘러보기: 화면을 어둡게 깔고 설명할 곳만 하얗게 빛나는 네모로 비춘다
+const TOUR = [
+  { sel: ".nav", side: true, title: "메뉴", text: "⚒️ 제작 · ⛏️ 채집 순위, 🪙 교환템 팔기 · 🧪 교환 재료로 만들기, 📈 재료 트래킹으로 옮겨 다닌다 개굴." },
+  { sel: "[data-seg=quality]", side: true, title: "판매 품질", text: "NQ 로 팔지, HQ 로 팔지, 둘 다 한 순위에 볼지(통합) 고른다 개굴. 통합에선 HQ 줄 이름 끝에 HQ 마크가 붙는다 개굴." },
+  { sel: "[data-path$='.minSales']", up: ".field", side: true, title: "필터", text: "판매 건수, 수익률, 순수익, 매물 수, 판매 소요일로 순위를 거른다 개굴. 숫자 바꾸면 바로 다시 계산된다 개굴." },
+  { sel: ".cats.servers", title: "서버 고르기", text: "🌏 통합은 한국 전체 시세, 서버 버튼은 그 서버에서 팔 때 순위다 개굴. 🏠 가 내 서버다 개굴." },
+  { sel: ".cats:not(.servers)", title: "분류", text: "가구·장비·재료·소모품처럼 종류별로 나눠 본다 개굴. 숫자는 필터 통과한 개수다 개굴." },
+  { sel: ".rank-table thead", title: "순위 표", text: "칸 제목을 누르면 그걸로 정렬된다 개굴. 판매 예상가는 최근 판매 중앙값이고, 이상 거래·미끼 매물은 뺀 값이다 개굴." },
+  { sel: ".rank-table tbody tr", title: "품목 누르기", text: "줄을 누르면 밑에 재료 상세가 나온다 개굴. 누르는 순간 그 템이랑 재료 시세를 Universalis 에서 새로 받아온다 개굴." },
+  { sel: ".live", title: "⚡ 지금 시세", text: "방금 받은 서버별 최저 매물, 재료 지금 값, 지금 기준 순수익이다 개굴. 만들기 전에 여기서 재료값이 표보다 비싸졌는지 꼭 봐라 개굴." },
+  { sel: ".mat-link", title: "재료 → 트래킹", text: "재료 이름을 누르면 📈 재료 트래킹에 담기고 그리로 간다 개굴. 서버별 최저가랑 살 때인지 알려준다 개굴." },
+  { sel: ".rank-table .pick", title: "장보기", text: "+ 를 누르면 장보기에 담긴다 개굴. 오른쪽 아래 장바구니에서 서버별로 뭘 몇 개 살지 정리해 준다 개굴." },
+  { sel: ".side-fold", side: true, title: "사이드바 접기", text: "표를 넓게 보고 싶으면 « 를 눌러 접어라 개굴. 왼쪽 위 ☰ 설정으로 다시 편다 개굴. 사용법은 사이드바 맨 아래에서 다시 볼 수 있다 개굴." },
+];
+function tour() {
+  if (page() !== "craft") { location.hash = "#craft"; setTimeout(tour, 900); return; }
+  document.querySelector(".tour")?.remove();
+  document.body.classList.remove("side-folded");
+  const box = document.createElement("div");
+  box.className = "tour";
+  box.innerHTML = `<div class="tour-spot"></div><div class="tour-card" role="dialog" aria-live="polite"></div>`;
+  document.body.appendChild(box);
+  const spot = box.querySelector(".tour-spot"), card = box.querySelector(".tour-card");
+  const steps = TOUR;
+  let i = 0;
+  const target = (st) => { const el = document.querySelector(st.sel); return el && st.up ? el.closest(st.up) || el : el; };
+  const end = () => {
+    save("ffxivTourDone", true);
+    box.remove();
+    document.body.classList.remove("side-open");
+    window.removeEventListener("resize", place);
+    window.removeEventListener("scroll", place, true);
+  };
+  function place() {
+    const st = steps[i], el = target(st);
+    if (!el) return;
+    const r = el.getBoundingClientRect(), pad = 6;
+    const x1 = Math.max(4, r.left - pad), x2 = Math.min(innerWidth - 4, r.right + pad); // 가로로 넘치는 표는 화면 안까지만
+    Object.assign(spot.style, { left: x1 + "px", top: r.top - pad + "px", width: x2 - x1 + "px", height: r.height + pad * 2 + "px" });
+    const cw = card.offsetWidth, ch = card.offsetHeight, vw = innerWidth, vh = innerHeight;
+    let top = r.bottom + 14;
+    if (top + ch > vh - 8) top = Math.max(8, r.top - ch - 14);
+    let left = Math.min(Math.max(8, r.left), vw - cw - 8);
+    if (st.side && vw > 900) { left = Math.min(r.right + 16, vw - cw - 8); top = Math.min(Math.max(8, r.top), vh - ch - 8); }
+    Object.assign(card.style, { left: left + "px", top: top + "px" });
+  }
+  function show(n) {
+    // 화면에 없는 단계(예: 장보기 없는 페이지)는 건너뛴다
+    while (n >= 0 && n < steps.length && !target(steps[n])) n += n >= i ? 1 : -1;
+    if (n < 0 || n >= steps.length) return end();
+    i = n;
+    const st = steps[i];
+    document.body.classList.toggle("side-open", !!st.side && innerWidth <= 900);
+    const el = target(st);
+    el.scrollIntoView({ block: "center", behavior: "instant" });
+    card.innerHTML = `<div class="tour-step">${i + 1} / ${steps.length}</div><b>${esc(st.title)}</b><p>${esc(st.text)}</p>
+      <div class="tour-btns"><button type="button" class="link-btn" data-t="skip">건너뛰기</button>
+      ${i ? '<button type="button" class="btn-ghost" data-t="prev">이전</button>' : ""}
+      <button type="button" class="btn" data-t="next">${i === steps.length - 1 ? "🐸 다 봤다" : "다음"}</button></div>`;
+    requestAnimationFrame(place);
+  }
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-t]");
+    if (!b) return;
+    if (b.dataset.t === "skip") return end();
+    show(b.dataset.t === "prev" ? i - 1 : i + 1);
+  });
+  window.addEventListener("resize", place);
+  window.addEventListener("scroll", place, true);
+  show(0);
 }
 
 function frogRain() {

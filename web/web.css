@@ -109,3 +109,4 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .admin-group h2{font-size:var(--fs-lg);font-weight:600;margin:0 0 var(--space-2)}
 .admin-group h2 .cnt{font-size:var(--fs-xs);color:var(--text-faint);font-weight:400;margin-left:4px}
 .admin-btns{display:flex;gap:6px;justify-content:flex-end}
+.nav-admin{border-bottom:0;padding-bottom:0;margin-bottom:0}

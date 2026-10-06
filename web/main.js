@@ -325,7 +325,6 @@ function sideHead(p) {
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
-      ${adminUI() ? `<a href="#admin" class="${p === "admin" ? "on" : ""}">🔑 권한 관리${adminPending ? ` <span class="nav-cnt">${adminPending}</span>` : ""}</a>` : ""}
     </nav>
     <div class="brand"><span class="brand-frog">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
@@ -333,9 +332,16 @@ function sideHead(p) {
     <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-palette="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>`;
 }
 
+// 🔑 권한 관리 (관리자만, 사이드바 맨 아래)
+function adminLink(p) {
+  if (!adminUI()) return "";
+  return `<div class="sb-title">관리</div>
+    <nav class="nav nav-admin"><a href="#admin" class="${p === "admin" ? "on" : ""}">🔑 권한 관리${adminPending ? ` <span class="nav-cnt">${adminPending}</span>` : ""}</a></nav>`;
+}
+
 function renderSide() {
   const p = page(), side = document.getElementById("side");
-  if (p === "admin") { side.innerHTML = sideHead(p); return; }
+  if (p === "admin") { side.innerHTML = sideHead(p) + adminLink(p); return; }
   const F = S[p];
   const jobs = p === "craft" ? meta.jobs : meta.gatherJobs;
   const sortNames = p === "craft" ? { net: "순수익", margin: "수익률", daily: "하루 잠재 이익" } : { daily: "하루 잠재 이익", net: "개당 순수익" };
@@ -373,7 +379,8 @@ function renderSide() {
     <div class="sb-title">업데이트 내역</div>
     <details class="changelog-box"><summary>v${esc(meta.changelog[0].version)} · ${esc(meta.changelog[0].date.slice(5))}</summary>
       <div class="changelog">${meta.changelog.map((e) => `<div class="cl-entry"><div class="cl-head"><b>v${esc(e.version)}</b><span>${esc(e.date)}</span></div><ul>${e.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>`).join("")}</div>
-    </details>`;
+    </details>
+    ${adminLink(p)}`;
 }
 
 function applyTheme() {

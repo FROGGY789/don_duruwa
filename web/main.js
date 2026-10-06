@@ -91,7 +91,7 @@ function who() {
 }
 // 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
 const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
-const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#journal" ? "journal" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
   : location.hash === "#admin" && adminUI() ? "admin" : "craft");
 let adminPending = 0;
 const days = () => meta.hours / 24;
@@ -335,6 +335,7 @@ let lastPage = null;
 async function render() {
   if (page() === "admin") return renderAdmin();
   if (page() === "track") return renderTrack();
+  if (page() === "journal") return renderJournal();
   const p = page(), name = p === "exchange" ? "exchange" : `${p}-${QUALITY_KEY[S.quality]}`;
   // 교환은 화폐마다 값어치가 달라서, 처음 들어오면 군표부터 보여준다
   if (p !== lastPage) {
@@ -395,6 +396,11 @@ async function render() {
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
     materialInfo,
+    // 장보기 '📒 만들었다': 담은 걸 오늘 제작일지에 적는다 (HQ 줄은 ID 를 원래 레시피로)
+    logCraft: async (list) => {
+      await journalLoad();
+      journalAdd(list.map(({ id, n }) => ({ rid: id >= 10_000_000 ? id - 10_000_000 : id, n })));
+    },
     buyerTax: meta.buyerTax,
     // 장보기 ⚡: 여러 재료 매물을 한 번에 (100개씩)
     fetchListings: async (ids) => {
@@ -422,6 +428,153 @@ async function render() {
   dashboard({ data, parentElement: host });
 }
 
+// ── 📒 나의 제작일지 ──
+// 기록: {e: [[날짜 "YYYY-MM-DD", 레시피ID, 제작 횟수], ...], at: 고친 시각} — 캐릭터마다 서버(KV)에 저장, 이 브라우저에도 복사
+let J = null, jQuery = "", jPick = null, jTimer = 0;
+const JOURNAL_DAYS = 365, JOURNAL_MAX = 5000;
+const ymd = (t) => { const p2 = (n) => String(n).padStart(2, "0"); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
+const daysAgo = (n) => ymd(new Date(Date.now() - n * 86400000));
+async function journalLoad() {
+  if (J) return J;
+  const key = `ffxivJournal:${who()}`;
+  J = load(key, null);
+  if (who()) {
+    try {
+      const res = await fetch("/__journal", { cache: "no-cache" });
+      const remote = res.ok ? (await res.json()).journal : null;
+      if (remote && (!J || (remote.at || 0) >= (J.at || 0))) J = remote;
+    } catch { /* 서버 못 가면 이 브라우저 것만 */ }
+  }
+  J = J && Array.isArray(J.e) ? J : { e: [], at: 0 };
+  return J;
+}
+function journalSave() {
+  const cut = daysAgo(JOURNAL_DAYS);
+  J.e = J.e.filter((x) => x[0] >= cut).slice(-JOURNAL_MAX);
+  J.at = Date.now();
+  save(`ffxivJournal:${who()}`, J);
+  if (!who()) return;
+  clearTimeout(jTimer);
+  jTimer = setTimeout(() => fetch("/__journal", { method: "PUT", body: JSON.stringify(J) }).catch(() => {}), 800);
+}
+function journalAdd(list, day = ymd(new Date())) {
+  for (const { rid, n } of list) {
+    if (!rid || !(n > 0)) continue;
+    const same = J.e.find((x) => x[0] === day && x[1] === rid);
+    if (same) same[2] += n; else J.e.push([day, rid, n]);
+  }
+  J.e.sort((a, b) => a[0].localeCompare(b[0]));
+  journalSave();
+}
+const jTier = (t) => (t ? ` <span class="tier-mark t${Math.min(t, 3)}" data-tip="${t}차 제작">${t}차</span>` : "");
+const jGather = (g) => (g ? g.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} 로 언제든 캘 수 있다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("") : "");
+async function renderJournal() {
+  const app = document.getElementById("app");
+  if (!app.querySelector(".journal")) app.innerHTML = `<div class="boot">🐸 제작일지 불러오는 중이다 개굴…</div>`;
+  await journalLoad();
+  let ds;
+  try { ds = await dataset("craft-nq"); } catch (e) { app.innerHTML = `<div class="boot">⚠ 레시피 목록을 못 받아왔다 개굴. (${esc(e.message)})</div>`; return; }
+  const byId = new Map(ds.rows.map((r) => [r.id, r]));
+  const q = jQuery.replace(/\s/g, "");
+  const sugg = q ? ds.rows.filter((r) => r.name.replace(/\s/g, "").includes(q)).slice(0, 10) : [];
+  // 최근 30일: 자주 만든 것, 거기 들어간 재료
+  const since = daysAgo(30), freq = {};
+  J.e.filter((x) => x[0] >= since).forEach(([, rid, n]) => (freq[rid] = (freq[rid] || 0) + n));
+  const rids = Object.keys(freq).map(Number).filter((id) => byId.has(id));
+  await Promise.all(rids.map((id) => loadDetail("craft-nq", id).catch(() => null)));
+  const mats = {};
+  for (const rid of rids) {
+    for (const s of (ds.details[rid] || {}).shopping || []) {
+      const m = mats[s.id] || (mats[s.id] = { id: s.id, name: s.name, qty: 0, for: [], t: s.t, g: s.g, market: false });
+      m.qty += s.qty * freq[rid];
+      if (s.source === "거래소") m.market = true;
+      const nm = byId.get(rid).name;
+      if (!m.for.includes(nm)) m.for.push(nm);
+    }
+  }
+  const matList = Object.values(mats).filter((m) => m.market).sort((a, b) => b.qty - a.qty).slice(0, 40);
+  const infos = await Promise.all(matList.map((m) => materialInfo(m.id).catch(() => null)));
+  const matRows = matList.map((m, i) => {
+    const info = infos[i], best = info && info.worlds[0], avg = info && info.avg;
+    // 지난날 최저 매물이랑 비교 (기록이 5일 안 되면 7일 평균 판매가랑)
+    const ref = info && (info.lowMed || avg), r = best && ref ? best.min / ref : null;
+    const sig = r == null ? ["-", ""] : r <= 0.9 ? ["🟢 쌀 때", "good"] : r >= 1.15 ? ["🔴 비쌈", "bad"] : ["🟡 보통", ""];
+    return `<tr class="${sig[1]}"><td><button type="button" class="mat-link" data-j-track="${m.id}" data-need="${Math.ceil(m.qty)}">${esc(m.name)}</button>${jTier(m.t)}${jGather(m.g)}
+        <div class="mat-for">↳ ${esc(m.for.slice(0, 3).join(" · "))}${m.for.length > 3 ? " …" : ""}</div></td>
+      <td class="num">${Math.ceil(m.qty).toLocaleString("ko-KR")}</td>
+      <td>${best ? `${esc(best.name)} <b>${gil(best.min)}</b>` : '<span class="faint">매물 없음</span>'}</td>
+      <td class="num">${info && info.lowMed ? gil(info.lowMed) : '<span class="faint">-</span>'}</td>
+      <td class="num">${avg ? gil(avg) : "-"}</td><td class="sig">${sig[0]}</td></tr>`;
+  }).join("");
+  const top = Object.entries(freq).filter(([id]) => byId.has(Number(id))).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([id, n]) => `<li><span>${esc(byId.get(Number(id)).name)}</span><b>×${n}</b></li>`).join("");
+  // 날짜별 기록 (최근 것부터)
+  const days = {};
+  J.e.forEach((x, i) => (days[x[0]] = days[x[0]] || []).push([x, i]));
+  const log = Object.keys(days).sort().reverse().slice(0, 30).map((d) => `<div class="j-day"><div class="j-date">${esc(d)}</div><ul>${days[d].map(([x, i]) =>
+    `<li><span>${esc((byId.get(x[1]) || { name: `레시피 ${x[1]}` }).name)}</span><b>×${x[2]}</b><button type="button" class="chip-x" data-j-del="${i}" title="지우기">✕</button></li>`).join("")}</ul></div>`).join("");
+  const keep = app.querySelector("#j-search");
+  const caret = keep && document.activeElement === keep ? keep.selectionStart : null;
+  app.innerHTML = `<section class="journal">
+    <div class="eyebrow">CRAFTING JOURNAL</div><h1>📒 나의 제작일지</h1>
+    <p class="tagline">만든 걸 적어 두면 자주 쓰는 재료를 모아서, 평소보다 싸게 올라왔을 때 미리 사 두라고 알려준다 개굴.</p>
+    <div class="j-card j-add">
+      <h2>✏️ 만든 거 적기</h2>
+      <input id="j-search" type="search" placeholder="🔍 만든 템 이름 (예: 파인애플 케이크)" autocomplete="off" value="${esc(jQuery)}">
+      ${sugg.length ? `<div class="track-sugg">${sugg.map((r) => `<button type="button" data-j-pick="${r.id}">${esc(r.name)} <small>${esc(r.job)} Lv${r.level}</small></button>`).join("")}</div>`
+        : q ? `<div class="track-sugg"><span class="faint">그런 레시피는 없다 개굴.</span></div>` : ""}
+      ${jPick && byId.has(jPick) ? `<div class="j-pick"><b>${esc(byId.get(jPick).name)}</b>
+        <label>횟수 <input type="number" id="j-n" min="1" max="999" value="1"></label>
+        <label>날짜 <input type="date" id="j-d" value="${ymd(new Date())}"></label>
+        <button type="button" class="btn" data-j-add="1">📒 기록</button></div>` : ""}
+    </div>
+    <div class="j-grid">
+      <div class="j-card"><div class="j-head"><h2>🧺 단골 재료 · 최근 30일</h2>
+        ${matList.length ? `<button type="button" class="cart-btn" data-j-trackall="1">📈 전부 트래킹에 담기</button>` : ""}</div>
+        ${matList.length ? `<div class="table-wrap"><table><thead><tr><th>재료</th><th class="num">30일 사용</th><th>제일 싼 곳 (지금 매물)</th><th class="num" data-tip="지난 14일 동안 하루 최저 매물의 가운데 값 개굴">평소 최저가</th><th class="num">7일 평균 판매가</th><th>상태</th></tr></thead>
+          <tbody>${matRows}</tbody></table></div>` : `<div class="detail-hint">🐸 아직 기록이 없다 개굴. 위에서 만든 걸 적거나, 장보기에서 '📒 만들었다' 를 눌러라 개굴.</div>`}</div>
+      <div class="j-card"><h2>🏆 자주 만드는 것 · 최근 30일</h2>${top ? `<ul class="j-top">${top}</ul>` : `<div class="faint">아직 없다 개굴.</div>`}</div>
+    </div>
+    <div class="j-card"><h2>🗓 기록</h2>${log || `<div class="faint">아직 없다 개굴.</div>`}</div>
+  </section>`;
+  if (caret != null) { const el = app.querySelector("#j-search"); el.focus(); el.setSelectionRange(caret, caret); }
+}
+document.getElementById("app").addEventListener("input", (e) => {
+  if (e.target.id !== "j-search") return;
+  jQuery = e.target.value;
+  clearTimeout(renderJournal.t);
+  renderJournal.t = setTimeout(renderJournal, 200);
+});
+document.getElementById("app").addEventListener("click", (e) => {
+  if (page() !== "journal") return;
+  const pick = e.target.closest("[data-j-pick]");
+  if (pick) { jPick = Number(pick.dataset.jPick); jQuery = ""; renderJournal(); return; }
+  if (e.target.closest("[data-j-add]")) {
+    const n = Math.max(1, Math.min(999, Math.round(Number(document.getElementById("j-n").value) || 1)));
+    const d = document.getElementById("j-d").value || ymd(new Date());
+    journalAdd([{ rid: jPick, n }], d);
+    jPick = null; renderJournal(); return;
+  }
+  const del = e.target.closest("[data-j-del]");
+  if (del) { J.e.splice(Number(del.dataset.jDel), 1); journalSave(); renderJournal(); return; }
+  const one = e.target.closest("[data-j-track]");
+  if (one) {
+    const list = tracked(), id = Number(one.dataset.jTrack);
+    if (!list.some((t) => t.id === id)) { list.unshift({ id, qty: Number(one.dataset.need) || 1 }); saveTracked(list); }
+    location.hash = "#track"; return;
+  }
+  if (e.target.closest("[data-j-trackall]")) {
+    const list = tracked();
+    app_journalMats().forEach(({ id, qty }) => { if (!list.some((t) => t.id === id)) list.push({ id, qty }); });
+    saveTracked(list);
+    location.hash = "#track";
+  }
+});
+// 지금 화면의 단골 재료 (전부 트래킹에 담기용)
+function app_journalMats() {
+  return [...document.querySelectorAll(".journal [data-j-track]")].map((b) => ({ id: Number(b.dataset.jTrack), qty: Number(b.dataset.need) || 1 }));
+}
+
 // ── 📈 재료 트래킹 ──
 const TRACK_SHARDS = 64;
 const trackShards = {};
@@ -445,7 +598,10 @@ function materialInfo(id) {
     }).filter((x) => x.min != null).sort((a, b) => a.min - b.min);
     const recent = d.h.slice(-7).map((h) => h[1].dc).filter(Boolean); // [중앙값, 팔린 수량, 건수]
     const sold = recent.reduce((a, x) => a + x[1], 0);
-    return { worlds, sold, avg: sold ? recent.reduce((a, x) => a + x[0] * x[1], 0) / sold : null };
+    // 지난날(오늘 빼고 최근 14일) 하루 최저 매물들의 가운데 값 — "평소 제일 쌀 때 얼마였나"
+    const lows = d.h.slice(-15, -1).map((h) => Math.min(...Object.values(h[2] || {}))).filter((x) => Number.isFinite(x));
+    const lowMed = lows.length >= 5 ? median(lows) : null;
+    return { worlds, sold, lowMed, lowDays: lows.length, avg: sold ? recent.reduce((a, x) => a + x[0] * x[1], 0) / sold : null };
   }));
 }
 function trackShard(id) {
@@ -689,6 +845,7 @@ function sideHead(p) {
       <a href="#exchange" class="${p === "exchange" ? "on" : ""}">🪙 교환템 팔기</a>
       <a href="#exchange-craft" class="${p === "exchangeCraft" ? "on" : ""}">🧪 교환 재료로 만들기</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
+      <a href="#journal" class="${p === "journal" ? "on" : ""}">📒 나의 제작일지</a>
     </nav>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
@@ -705,6 +862,15 @@ function adminLink(p) {
 function renderSide() {
   const p = page(), side = document.getElementById("side");
   if (p === "admin") { side.innerHTML = sideHead(p) + adminLink(p); return; }
+  if (p === "journal") {
+    side.innerHTML = sideHead(p) + `
+      <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
+      <p class="hint">만든 걸 적어 두면 최근 30일 동안 자주 쓴 재료를 모아서, 평소보다 싸게 올라왔을 때 미리 사 두라고 알려준다 개굴.</p>
+      <p class="hint">장보기에서 '📒 만들었다' 를 누르면 담은 걸 한 번에 적는다 개굴. 기록은 이 캐릭터에만 저장되고 다른 기기에서도 따라온다 개굴 (최근 1년치).</p>
+      <p class="hint">🟢 평소보다 10%↓ 쌀 때 · 🟡 보통 · 🔴 평소보다 15%↑ 비쌀 때 — 제일 싼 서버 지금 매물을 지난 14일 하루 최저 매물(평소 최저가)이랑 비교한다 개굴. 기록이 5일 안 되면 7일 평균 판매가랑 비교한다 개굴.</p>
+      ${adminLink(p)}`;
+    return;
+  }
   if (p === "track") {
     side.innerHTML = sideHead(p) + `
       <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>

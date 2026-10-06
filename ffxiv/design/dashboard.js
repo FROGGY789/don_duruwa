@@ -103,14 +103,13 @@ const HQ_MARK = `<svg class="hq-mark" viewBox="0 0 16 16" aria-label="HQ"><title
 // 언제든 캘 수 있는 채집물(시간 한정 아님): ⛏ 광부 / 🌿 원예가 — 직접 캐면 재료비가 안 들어서 처음 장사할 때 좋다
 function gatherMarks(jobs, lv) {
   if (!jobs) return "";
-  return jobs.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${lv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님). 직접 캐면 재료비가 안 든다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("");
+  return jobs.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" data-tip="${esc(j)} Lv${lv} 로 언제든 캘 수 있다 개굴. 직접 캐면 재료비가 안 든다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("");
 }
 // 몇 차 제작인지: 1차 = 캐거나 산 재료로 바로 만드는 것, 2차 = 만든 걸 또 넣어 만드는 것
 function tierMark(t) {
   if (!t) return "";
-  const tip = t === 1 ? "1차 제작: 캐거나 산 재료로 바로 만든다 개굴. 장터 시세보다 재료값이 싸면 직접 만드는 게 낫다 개굴."
-    : `${t}차 제작: 다른 제작템을 재료로 또 만든다 개굴. 손이 많이 가니까 중간 재료를 사는 게 나을 때도 많다 개굴.`;
-  return ` <span class="tier-mark t${Math.min(t, 3)}" title="${esc(tip)}">${t}차</span>`;
+  const tip = t === 1 ? "1차 제작: 캔 재료로 바로 만든다 개굴" : `${t}차 제작: 만든 재료를 또 넣는다 개굴`;
+  return ` <span class="tier-mark t${Math.min(t, 3)}" data-tip="${esc(tip)}">${t}차</span>`;
 }
 function itemName(name, stars, hq) {
   return (stars ? `<span class="stars">${"★".repeat(stars)}</span>` : "") + `<span class="item">${esc(name)}</span>` + (hq ? HQ_MARK : "");
@@ -259,7 +258,10 @@ function renderDetail(d, row) {
     return `<section class="detail"><div class="detail-card"><div class="detail-top"><div>
       <h2>${itemName(row.name, row.stars, row.sellingHq === true)}</h2><div class="desc">🐸 상세 불러오는 중이다 개굴…</div></div></div></div></section>`;
   }
-  const body = (row.materials || []).map((m) => {
+  const L = row.live, liveMats = L && L.mats, waiting = L && L.loading;
+  const body = (row.materials || []).map((m, i) => {
+    const lm = liveMats && liveMats[i] && liveMats[i].live ? liveMats[i] : null;
+    const ch = lm && m.unit ? ((lm.now - m.unit) / m.unit) * 100 : null;
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
     const market = m.source === "거래소";
@@ -269,11 +271,13 @@ function renderDetail(d, row) {
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
+        <td class="num live-col">${lm ? `<b>${gil(lm.now)}</b>${lm.live.short ? ' <small class="short">부족</small>' : ""}` : market && waiting ? '<span class="faint">…</span>' : '<span class="dash">-</span>'}</td>
+        <td class="num live-col">${ch == null ? '<span class="dash">-</span>' : `<span class="pct ${ch > 5 ? "neg" : ch < -5 ? "pos" : ""}">${ch > 0 ? "+" : ""}${ch.toFixed(0)}%</span>`}</td>
         <td class="num">${gil(m.subtotal)}</td>
         <td>${src}</td>
         <td class="num">${market ? m.sold.toLocaleString("ko-KR") : '<span class="dash">-</span>'}</td>
         <td class="num">${market ? m.listings.toLocaleString("ko-KR") : '<span class="dash">-</span>'}</td>
-        <td>${m.world ? esc(m.world) : '<span class="dash">-</span>'}</td>
+        <td>${lm ? `⚡ ${esc(lm.live.worlds)}` : m.world ? esc(m.world) : '<span class="dash">-</span>'}</td>
       </tr>`;
   }).join("");
   return `
@@ -296,7 +300,8 @@ function renderDetail(d, row) {
         ${renderInsights(d, row)}
         ${row.materials ? `<div class="table-wrap"><table>
           <thead><tr>
-            <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">단가</th>
+            <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">표 단가</th>
+            <th class="num live-col" data-tip="품목을 누를 때 Universalis 에서 방금 받은 매물로, 필요 수량만큼 싼 것부터 샀을 때 개당 값 (구매세 포함) 개굴">⚡ 지금 단가</th><th class="num live-col">차이</th>
             <th class="num">소계</th><th>구매처</th><th class="num">${esc(d.period)} 판매 수량</th><th class="num">현재 매물 수</th><th>구매 서버</th>
           </tr></thead>
           <tbody>${body}</tbody>
@@ -331,22 +336,7 @@ function renderLive(d, row) {
     <div class="table-wrap"><table>
       <thead><tr><th>서버</th><th class="num">지금 최저 매물</th><th class="num">매물 수</th><th class="num">${esc(L.period)} 판매 중앙값</th><th class="num">판매 건수</th><th>마지막 판매</th><th>마지막 업로드</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    ${L.mats ? renderLiveMats(L.mats) : ""}
   </div>`;
-}
-function renderLiveMats(mats) {
-  const rows = mats.filter((m) => m.live).map((m) => {
-    const ch = m.unit ? ((m.now - m.unit) / m.unit) * 100 : null;
-    return `<tr><td>${"　".repeat(m.depth)}${esc(m.name)}</td><td class="num">${m.need}</td><td class="num">${gil(m.unit)}</td>
-      <td class="num"><b>${gil(m.now)}</b>${m.live.short ? ' <span class="badge stale">매물 부족</span>' : ""}</td>
-      <td class="num">${ch == null ? "-" : `<span class="pct ${ch > 5 ? "neg" : ch < -5 ? "pos" : ""}">${ch > 0 ? "+" : ""}${ch.toFixed(0)}%</span>`}</td>
-      <td>${esc(m.live.worlds)}</td></tr>`;
-  }).join("");
-  if (!rows) return "";
-  return `<div class="live-sub">🧺 거래소 재료 지금 값 <span class="faint">필요 수량만큼 싼 매물부터 샀을 때 개당 값 (구매세 포함) 개굴</span></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>재료</th><th class="num">필요 수량</th><th class="num">표 단가</th><th class="num">지금 단가</th><th class="num">차이</th><th>살 서버</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
 }
 
 // ── 시세 추이 (판매가 선 그래프 + 판매 수량 막대, 축은 각자 하나) ──
@@ -681,6 +671,7 @@ function renderCart(d) {
         <button type="button" class="cart-btn" data-download="1">⬇ 텍스트 파일로 받기</button>
         <button type="button" class="cart-btn" data-copy="1">📋 복사</button>
         ${bought ? `<button type="button" class="cart-btn" data-undone="1">체크 다 풀기</button>` : ""}
+        ${d.logCraft ? `<button type="button" class="cart-btn" data-log-craft="1" data-tip="담은 완성품이랑 횟수를 오늘 날짜로 📒 나의 제작일지에 적는다 개굴">📒 만들었다</button>` : ""}
       </div>
       ${state.cartMsg ? `<div class="cart-msg">${esc(state.cartMsg)}</div>` : ""}
       ${saved ? `<div class="ev-cap">저장한 목록 (이 브라우저에만 저장된다 개굴)</div><ul class="cart-saved">${saved}</ul>` : ""}
@@ -886,6 +877,11 @@ export default function (component) {
       return render();
     }
     if (e.target.closest("[data-cart-live]")) { refreshCartLive(); return; }
+    if (e.target.closest("[data-log-craft]")) {
+      data.logCraft(Object.entries(state.cart).map(([id, n]) => ({ id: Number(id), n }))).then(
+        () => flash("📒 제작일지에 적었다 개굴. 사이드바 📒 나의 제작일지에서 볼 수 있다 개굴"), () => flash("제작일지에 못 적었다 개굴"));
+      return;
+    }
     // 재료 이름 복사 (게임 장터 검색창에 붙여 넣기용)
     const cp = e.target.closest("[data-copy-name]");
     if (cp) {

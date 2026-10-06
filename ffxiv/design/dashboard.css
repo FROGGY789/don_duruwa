@@ -466,3 +466,8 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .tier-mark.t1{color:var(--info);background:var(--info-soft);border-color:color-mix(in oklab,var(--info) 40%,transparent)}
 .tier-mark.t2{color:var(--violet);background:var(--violet-soft);border-color:color-mix(in oklab,var(--violet) 40%,transparent)}
 .tier-mark.t3{color:var(--negative);background:var(--negative-soft);border-color:color-mix(in oklab,var(--negative) 40%,transparent)}
+
+/* 사이트 툴팁: 긴 설명은 줄바꿈 */
+.tip{white-space:normal;max-width:320px}
+.tier-mark,.gather-mark{cursor:default}
+.detail th.live-col,.detail td.live-col{background:color-mix(in oklab,var(--warning-soft) 45%,transparent)}

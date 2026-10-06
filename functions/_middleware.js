@@ -216,13 +216,13 @@ async function handleAdmin(env, request, me, url) {
 }
 
 // 캐릭터별 기본 설정 (처음 설정 화면에서 정한 것). 다른 기기에서 로그인해도 따라온다
-async function handleSettings(env, request, me) {
-  if (!env.ACCESS) return json({ settings: null });
-  const key = `set:${me}`;
-  if (request.method === "GET") return json({ settings: await env.ACCESS.get(key, { type: "json" }) });
+async function handleSettings(env, request, me, prefix = "set", field = "settings", limit = 8000) {
+  if (!env.ACCESS) return json({ [field]: null });
+  const key = `${prefix}:${me}`;
+  if (request.method === "GET") return json({ [field]: await env.ACCESS.get(key, { type: "json" }) });
   if (request.method === "PUT") {
     const text = await request.text();
-    if (text.length > 8000) return json({ error: "설정이 너무 크다 개굴" }, 413);
+    if (text.length > limit) return json({ error: "너무 크다 개굴" }, 413);
     try { JSON.parse(text); } catch { return json({ error: "설정 모양이 이상하다 개굴" }, 400); }
     await env.ACCESS.put(key, text);
     return json({ ok: true });
@@ -252,6 +252,8 @@ export async function onRequest(ctx) {
 
   const me = await checkToken(env, cookies(request)[COOKIE]);
   if (url.pathname === "/__settings") return me ? handleSettings(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
+  // 📒 제작일지: 캐릭터마다 따로 (한 줄 50바이트쯤, 최대 400KB)
+  if (url.pathname === "/__journal") return me ? handleSettings(env, request, me, "log", "journal", 400000) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (url.pathname.startsWith("/__admin/")) return me ? handleAdmin(env, request, me, url) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (me) return next();
 

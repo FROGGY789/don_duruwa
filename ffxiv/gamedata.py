@@ -246,6 +246,19 @@ class GameData:
             # 보통 채집지에서도 나오면 시간 한정이 아니다
             self.gather[iid] = GatherItem(iid, job, level, stars, all(timed), tuple(sorted(jobs_of[iid])))
 
+    def craft_tier(self, item_id, _seen=()):
+        """몇 차 제작인지: 0 = 제작 안 되는 템(채집·구매·드랍), 1 = 재료가 전부 0차, 2 = 1차 재료가 들어감 …
+        레시피가 여러 개면 제일 낮은 차수."""
+        memo = self.__dict__.setdefault("_tier", {})
+        if item_id in memo:
+            return memo[item_id]
+        recipes = self.recipes_by_result.get(item_id)
+        if not recipes or item_id in _seen:
+            return 0
+        tier = min(1 + max((self.craft_tier(i, _seen + (item_id,)) for i, _ in r.ingredients), default=0) for r in recipes)
+        memo[item_id] = tier
+        return tier
+
     def name(self, item_id):
         item = self.items.get(item_id)
         return item.name if item else f"#{item_id}"

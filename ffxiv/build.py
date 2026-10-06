@@ -110,9 +110,15 @@ def build_craft(gd, cache, cfg, server, tax, hq, badges):
 
 
 def gather_tag(gd, item_id):
-    """시간 한정이 아니라 언제든 캘 수 있는 채집물이면 {"g": "광부"/"원예가", "gl": 채집 레벨} (장보기 표시용)."""
+    """재료 표시용: 언제든 캘 수 있는 채집물이면 {"g": "광부·원예가", "gl": 채집 레벨}, 제작템이면 {"t": 몇 차 제작}."""
+    out = {}
     g = gd.gather.get(item_id)
-    return {"g": "·".join(g.jobs or (g.job,)), "gl": g.level} if g and not g.timed else {}
+    if g and not g.timed:
+        out.update(g="·".join(g.jobs or (g.job,)), gl=g.level)
+    tier = gd.craft_tier(item_id)
+    if tier:
+        out["t"] = tier
+    return out
 
 
 def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
@@ -120,6 +126,7 @@ def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
     ratio = r["재료 여유 배수"]
     row = {
         "id": r["recipe_id"], "item": recipe.result_id, "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
+        "tier": gd.craft_tier(recipe.result_id),
         "level": r["레시피 레벨"], "cat": r["분류"], "sub": r["세부"], "cost": r["원가"],
         "matRatio": None if math.isinf(ratio) else ratio, "resultAmount": r["결과물 개수"],
         "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],

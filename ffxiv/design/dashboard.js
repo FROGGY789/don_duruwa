@@ -103,7 +103,14 @@ const HQ_MARK = `<svg class="hq-mark" viewBox="0 0 16 16" aria-label="HQ"><title
 // 언제든 캘 수 있는 채집물(시간 한정 아님): ⛏ 광부 / 🌿 원예가 — 직접 캐면 재료비가 안 들어서 처음 장사할 때 좋다
 function gatherMarks(jobs, lv) {
   if (!jobs) return "";
-  return jobs.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${lv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님). 직접 캐면 재료비가 안 든다 개굴">${j === "광부" ? "⛏" : "🌿"}<small>${esc(j)}</small></span>`).join("");
+  return jobs.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${lv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님). 직접 캐면 재료비가 안 든다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("");
+}
+// 몇 차 제작인지: 1차 = 캐거나 산 재료로 바로 만드는 것, 2차 = 만든 걸 또 넣어 만드는 것
+function tierMark(t) {
+  if (!t) return "";
+  const tip = t === 1 ? "1차 제작: 캐거나 산 재료로 바로 만든다 개굴. 장터 시세보다 재료값이 싸면 직접 만드는 게 낫다 개굴."
+    : `${t}차 제작: 다른 제작템을 재료로 또 만든다 개굴. 손이 많이 가니까 중간 재료를 사는 게 나을 때도 많다 개굴.`;
+  return ` <span class="tier-mark t${Math.min(t, 3)}" title="${esc(tip)}">${t}차</span>`;
 }
 function itemName(name, stars, hq) {
   return (stars ? `<span class="stars">${"★".repeat(stars)}</span>` : "") + `<span class="item">${esc(name)}</span>` + (hq ? HQ_MARK : "");
@@ -220,7 +227,7 @@ function renderTable(d, rows) {
       pick: `<td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
           title="${state.cart[r.id] ? "장보기에서 빼기" : "장보기에 담기"}">${state.cart[r.id] ? "✓" : "+"}</button></td>`,
       rank: `<td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>`,
-      name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}</td>`,
+      name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}${tierMark(r.tier)}</td>`,
       job: `<td><span class="job">${esc(r.job)}</span></td>`,
       mat: `<td>${esc(r.mat || "")}${r.matQty > 1 ? ` <small class="per">×${r.matQty}</small>` : ""}</td>`,
       spend: `<td class="num">${gil(r.spend)}</td>`,
@@ -258,7 +265,7 @@ function renderDetail(d, row) {
     const market = m.source === "거래소";
     return `
       <tr class="${m.depth ? "sub" : ""}">
-        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${gatherMarks(m.g, m.gl)}</td>
+        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${tierMark(m.t)}${gatherMarks(m.g, m.gl)}</td>
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -589,7 +596,7 @@ function cartPlan(d) {
       const g = live ? live.world : s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
       groups[g] = groups[g] || { name: g, market: s.source === "거래소", items: {} };
-      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, qty: 0, spend: 0, for: [] });
+      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, tier: s.t, qty: 0, spend: 0, for: [] });
       if (!it.for.includes(r.name)) it.for.push(r.name); // 어느 완성품에 들어가는 재료인지
       it.qty += s.qty * n;
       it.spend += s.qty * n * ((live ? live.unit : s.unit) || 0);
@@ -652,7 +659,7 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}
+          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${tierMark(it.tier)}${gatherMarks(it.gather, it.gatherLv)}
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited

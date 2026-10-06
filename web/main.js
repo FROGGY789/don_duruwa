@@ -263,7 +263,7 @@ function compute(p, ds, name) {
     const scope = inScope(r);
     Object.assign(row, {
       mat: r.mat, matQty: r.matQty, spend: r.spend,
-      id: r.id, item: r.item, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
+      tier: r.tier, id: r.id, item: r.item, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
       updated: r.updated, updatedText: ago(r.updated), stale, sellingHq: r.hq, resultAmount: r.resultAmount,
       badges: (stale ? [{ kind: "stale", text: "⚠ 데이터 오래됨", tip: staleTip }] : []).concat(r.badges),
       scope, raw: r,

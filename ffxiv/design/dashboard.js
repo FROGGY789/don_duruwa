@@ -652,7 +652,7 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}${gatherMarks(it.gather, it.gatherLv)}
+          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
@@ -879,6 +879,17 @@ export default function (component) {
       return render();
     }
     if (e.target.closest("[data-cart-live]")) { refreshCartLive(); return; }
+    // 재료 이름 복사 (게임 장터 검색창에 붙여 넣기용)
+    const cp = e.target.closest("[data-copy-name]");
+    if (cp) {
+      const name = cp.dataset.copyName;
+      const done = () => { cp.textContent = "✓"; cp.classList.add("copied"); setTimeout(() => { cp.textContent = "📋"; cp.classList.remove("copied"); }, 1200); };
+      (navigator.clipboard ? navigator.clipboard.writeText(name) : Promise.reject()).then(done, () => {
+        const t = document.createElement("textarea"); t.value = name; document.body.appendChild(t); t.select();
+        try { document.execCommand("copy"); done(); } catch { /* 못 해도 괜찮다 */ } t.remove();
+      });
+      return;
+    }
     if (e.target.closest("[data-clear]")) { state.liveCart = null; state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
     const reset = e.target.closest("[data-qty-reset]");
     if (reset) { delete state.qty[reset.dataset.qtyReset]; saveCart(); return render(); }

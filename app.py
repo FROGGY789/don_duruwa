@@ -18,6 +18,9 @@ from ffxiv.changelog import CHANGELOG
 from ffxiv.profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 
 st.set_page_config(page_title="에오르제아에서 장사꾼으로 살아남기", page_icon="🐸", layout="wide")
+# Streamlit 판은 닫았다 (새 사이트로 이사). 이사 안내만 보여주고 멈춘다. 아래 코드는 예전 그대로 둔다
+ui.moved_page()
+st.stop()
 ui.password_gate()  # Streamlit Secrets 에 app_password 가 있으면 비밀번호 화면부터
 
 cfg = load_config()

@@ -6,4 +6,5 @@
   - 내용은 짧게, 화면의 다른 멘트처럼 개굴체로
 - 화면에 보이는 안내·오류 멘트는 개굴체로 쓴다: 표준어 반말 문장 끝에 " 개굴" 을 붙인다 (예: "판매 기록이 없다 개굴."). 메뉴 이름·컬럼 제목·뱃지 글자는 표준어 그대로.
 - 디자인 색은 `ffxiv/design/tokens.css` 변수만 쓴다 (화이트/다크 × 색감 모두 확인).
-- 화면은 두 벌이다: Streamlit(`app.py`)과 정적 사이트(`web/` + `python -m ffxiv.build`). 표·상세(`ffxiv/design/dashboard.*`)는 같이 쓰니 고치면 둘 다 확인한다. 📈 재료 트래킹·🔑 권한 관리는 정적 사이트에만 있다.
+- 화면은 정적 사이트(`web/` + `python -m ffxiv.build`, Cloudflare Pages) 하나만 고친다.
+  Streamlit(`app.py`)은 문 닫았다: 이사 안내 화면(`ui.moved_page`)만 보여주고 멈춘다. 더 이상 업데이트하지 않는다 (예전 코드는 그대로 둔다).

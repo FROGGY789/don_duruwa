@@ -24,10 +24,9 @@ from pathlib import Path
 from .badges import badge
 from .changelog import CHANGELOG
 from .config import JOB_NAMES, ROOT, TAX_CITIES, load_config
-from .exchange import SHEETS as EXCHANGE_SHEETS, load_offers, source_text
 from .gamedata import GATHER_JOBS, GameData, download_csvs, scope_recipes, target_recipes
 from .market import MarketCache, Universalis, refresh, resolve_server
-from .profit import Calculator, analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
+from .profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 from .track import build_tracking, load_history, save_history, update_history
 
 # 판매 품질: nq = 모든 템을 NQ 로 팔 때, hq = HQ 되는 템만 HQ 로 팔 때, all = 둘을 한 순위에 (HQ 줄은 ID 에 HQ_OFFSET)
@@ -154,52 +153,6 @@ def build_gather(gd, cache, cfg, server, tax, hq, badges):
     return summary, details
 
 
-def exchange_offers(gd):
-    """🪙 교환: 제작·채집 순위에 없는 템만 (그건 이미 다른 탭에 있다)."""
-    crafted = {r.result_id for r in gd.recipes}
-    return [o for o in load_offers(gd) if o.item_id not in crafted and o.item_id not in gd.gather]
-
-
-def build_exchange(gd, cache, cfg, server, tax, offers, badges):
-    """군표·화폐·석판으로 바꿔서 파는 템. 재료비가 없으니 판매가 × (1 − 판매세) 가 개당 순수익이고,
-    화폐 1개당 이익은 브라우저가 (개당 순수익 × 받는 개수 ÷ 교환가) 로 계산한다.
-    줄 ID 는 아이템ID × 100 + 순번 (같은 템을 여러 화폐로 바꿀 수 있어서)."""
-    calc = Calculator(gd, cache.items, cfg, tax, sell_hq=False, world_names=server["world_names"],
-                      home_world=server["world_id"])
-    seen = {}
-    summary, details = [], {}
-    for o in sorted(offers, key=lambda o: (o.item_id, o.currency, o.price)):
-        item = gd.items[o.item_id]
-        n = seen[o.item_id] = seen.get(o.item_id, -1) + 1
-        rid = o.item_id * 100 + n
-        hq = False if item.can_hq else None  # 교환해서 받는 건 NQ
-        dc = calc.stats(o.item_id, hq, calc.outlier_ratio, None)
-        views = {key: calc.view(o.item_id, item, hq, world, 0) for key, world in calc.views}
-        row = {"보기": views}
-        calc.world_badge(row)
-        tags = []
-        if o.unlock:
-            tags.append(badges.ref(f"🔒 {o.unlock}", "이 조건을 채워야 교환할 수 있다 개굴."))
-        places = list(dict.fromkeys(s.get("place") for s in o.sources if s.get("place")))
-        if places:
-            tags.append(badges.ref("📍 " + places[0] + (f" 외 {len(places) - 1}곳" if len(places) > 1 else ""),
-                                   " / ".join(source_text(s) for s in o.sources[:4])))
-        summary.append({
-            "id": rid, "item": o.item_id, "name": item.name, "stars": 0, "job": o.currency, "level": o.price, "cat": o.group, "sub": "",
-            "cost": 0, "matRatio": None, "resultAmount": o.amount, "updated": dc.last_upload or 0, "hq": hq,
-            "reason": "" if dc.median is not None else f"{cfg['history_hours'] // 24}일 동안 판매 기록이 없다 개굴",
-            "badges": tags, "v": {k: view_summary(v, badges) for k, v in row["보기"].items()},
-        })
-        details[rid] = {
-            "evidence": calc.evidence(o.item_id, hq),
-            "detailDesc": f"{o.currency} {o.price:,}개 → {item.name} {o.amount}개"
-                          f"{' · ' + o.unlock if o.unlock else ''} · 재료비 없음, 판매세만 뺀다 개굴",
-            "sources": [source_text(s) for s in o.sources[:8]],
-            "views": {k: view_detail(v) for k, v in row["보기"].items()},
-        }
-    return summary, details
-
-
 def combine(nq, hq):
     """통합: NQ 줄과 HQ 줄을 한 순위로. 뱃지 번호를 새로 매기고 HQ 줄은 ID 를 띄운다."""
     badges, rows, details = Badges(), [], {}
@@ -240,16 +193,13 @@ def main():
     started = time.time()
     cfg = load_config()
     download_csvs(cfg["datamining_base_url"])
-    download_csvs(cfg["datamining_base_url"], sheets=EXCHANGE_SHEETS)
     gd = GameData()
-    offers = exchange_offers(gd)
     api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"], cfg.get("request_workers", 4))
     server = resolve_server(api, cfg)
     cache = MarketCache(server)
     if not args.no_fetch:
         ids = set(market_item_ids(gd, list(scope_recipes(gd, cfg, True))))
         ids |= {iid for iid in gd.gather if gd.items[iid].marketable}
-        ids |= {o.item_id for o in offers}
         last = [0]
 
         def progress(p, msg):
@@ -300,20 +250,6 @@ def main():
             print("  시세 없는 재료 상위: " + ", ".join(f"{k} {v}" for k, v in why.most_common(12)))
         print(f"계산 끝: {page} ({time.time() - t:.0f}초)")
 
-    t = time.time()
-    badges = Badges()
-    summary, details = build_exchange(gd, cache, cfg, server, tax, offers, badges)
-    write_page(data, "exchange", summary, details, badges.items)
-    print(f"계산 끝: exchange {len(summary)}줄 ({time.time() - t:.0f}초)")
-    for group in ("군표", "제작자·채집가 화폐", "알라그 석판"):  # 로그로 대충 맞는지 보려고
-        top = []
-        for r in summary:
-            sell, sales = r["v"]["dc"][0], r["v"]["dc"][3]
-            if r["cat"] == group and sell and sales >= 3:
-                top.append((sell * (1 - tax) * r["resultAmount"] / r["level"], r))
-        for per, r in sorted(top, key=lambda x: -x[0])[:5]:
-            print(f"  {group} · {r['name']} ×{r['resultAmount']} = {r['job']} {r['level']} → 1개당 {per:,.1f}길")
-
     # 📈 재료 트래킹: 하루 단위 기록을 쌓고 화면용 파일
     t = time.time()
     hist_path = ROOT / "cache" / "history.json.gz"
@@ -326,7 +262,6 @@ def main():
     worlds = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))
     rates = {c: r for c, r in (cache.tax_rates or {}).items() if c in TAX_CITIES}
     G = cfg.get("gather") or {}
-    E = cfg.get("exchange") or {}
     write(data / "meta.json", {
         "updatedAt": cache.updated_at, "builtAt": time.time(),
         "world": server["world"], "dc": server["dc"], "home": str(home),
@@ -334,6 +269,7 @@ def main():
                    + [{"key": w, "name": server["world_names"][w], "home": w == str(home)} for w in worlds],
         "hours": cfg["history_hours"], "taxCities": TAX_CITIES, "taxRates": rates,
         "defaultTaxCity": default_city, "defaultTaxRate": cfg["default_tax_rate"],
+        "buyerTax": cfg["buyer_tax_rate"],
         "jobs": JOB_NAMES, "gatherJobs": GATHER_JOBS,
         "subs": {"장비": list((cfg.get("item_groups") or {}).get("장비") or {})},
         "defaults": {
@@ -342,8 +278,6 @@ def main():
             "gather": {"levelMin": G.get("level_min", 1), "levelMax": G.get("level_max", 60),
                        "jobLevels": G.get("job_levels") or {}, "filters": G.get("filters") or {},
                        "sort": G.get("sort_by", "하루 잠재 이익")},
-            "exchange": {"levelMin": 0, "levelMax": 0, "jobLevels": {}, "filters": E.get("filters") or {},
-                         "sort": E.get("sort_by", "화폐 1개당")},
             "quality": cfg.get("sell_quality", "NQ"),
         },
         "jobLevelsForIntermediates": cfg["job_levels"],

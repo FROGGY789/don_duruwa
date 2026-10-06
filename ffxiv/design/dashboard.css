@@ -361,13 +361,6 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .hq-mark{width:.95em;height:.95em;margin-left:3px;vertical-align:-.1em;fill:var(--star);stroke:var(--star);stroke-width:1.8;stroke-linecap:round}
 .hq-mark path:first-of-type{stroke:none}
 
-/* 🪙 교환 페이지 */
-.tabs.wrap{flex-wrap:wrap;overflow-x:visible}
-.rank-table small.per{color:var(--text-faint);font-size:var(--fs-xs)}
-.sources{margin:var(--space-3) 0;padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
-.sources h3{margin:0 0 var(--space-2);font-size:var(--fs-sm);color:var(--text)}
-.sources ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px;font-size:var(--fs-sm);color:var(--text-muted)}
-
 /* 재료 이름 → 📈 재료 트래킹 */
 .mat-link{border:0;background:none;padding:0;font:inherit;color:var(--text);cursor:pointer;text-align:left;display:inline-flex;align-items:center;gap:6px}
 .mat-link:hover{color:var(--primary-strong);text-decoration:underline}
@@ -386,3 +379,5 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .live-kv span{font-size:var(--fs-xs);color:var(--text-muted)}
 .live-kv b{font-size:var(--fs-lg);font-variant-numeric:tabular-nums}
 .live tr.dc td{font-weight:600}
+.live-sub{margin:var(--space-4) 0 var(--space-2);font-size:var(--fs-sm);font-weight:600;color:var(--text)}
+.live-sub .faint{font-weight:400;font-size:var(--fs-xs)}

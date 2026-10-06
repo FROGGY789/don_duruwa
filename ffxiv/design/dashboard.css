@@ -431,3 +431,10 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .gather-mark.botany{background:var(--positive-soft);color:var(--positive)}
 .mat-for{margin:1px 0 0 26px;font-size:var(--fs-xs);color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 .cart-group tr.done .mat-for{text-decoration:line-through}
+
+/* 장보기 ⚡ 지금 시세로 다시 받기 */
+.cart-live{display:flex;flex-wrap:wrap;align-items:center;gap:6px var(--space-3);padding:var(--space-3) var(--space-5) 0}
+.cart-live .faint{font-size:var(--fs-xs)}
+.cart-live button[disabled]{opacity:.6;cursor:wait}
+.live-mark{color:var(--warning);margin-right:2px}
+.cart-group small.short{margin-left:3px;color:var(--negative);font-size:10px}

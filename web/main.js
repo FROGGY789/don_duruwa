@@ -395,6 +395,23 @@ async function render() {
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
     materialInfo,
+    buyerTax: meta.buyerTax,
+    // 장보기 ⚡: 여러 재료 매물을 한 번에 (100개씩)
+    fetchListings: async (ids) => {
+      const names = Object.fromEntries(meta.servers.map((s) => [s.key, s.name]));
+      const out = {};
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const res = await fetch(`${UNIVERSALIS}/${encodeURIComponent(meta.dc)}/${chunk.join(",")}?listings=100&entries=0`);
+        if (!res.ok) throw new Error(`시세 ${res.status}`);
+        const data = await res.json();
+        const items = chunk.length === 1 ? { [chunk[0]]: data } : data.items || {};
+        for (const id of chunk) {
+          out[id] = ((items[id] || {}).listings || []).map((l) => ({ price: l.pricePerUnit, qty: l.quantity, hq: !!l.hq, world: names[String(l.worldID)] || l.worldName || "?" }));
+        }
+      }
+      return out;
+    },
     // 재료 이름을 누르면 📈 재료 트래킹에 담고 그리로 간다
     trackMaterial: (id, need) => {
       const list = tracked();

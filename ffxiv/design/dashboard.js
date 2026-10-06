@@ -584,13 +584,16 @@ function cartPlan(d) {
     const n = state.cart[r.id];
     revenue += (V(r).sell || 0) * (1 - d.taxRate) * n * r.resultAmount;
     for (const s of r.shopping) {
-      const g = s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
+      // ⚡ 지금 시세로 다시 받았으면 그 값·서버로 (거래소 재료만)
+      const live = s.source === "거래소" && state.liveCart ? state.liveCart[s.id] : null;
+      const g = live ? live.world : s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
       groups[g] = groups[g] || { name: g, market: s.source === "거래소", items: {} };
       const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, qty: 0, spend: 0, for: [] });
       if (!it.for.includes(r.name)) it.for.push(r.name); // 어느 완성품에 들어가는 재료인지
       it.qty += s.qty * n;
-      it.spend += s.qty * n * (s.unit || 0);
+      it.spend += s.qty * n * ((live ? live.unit : s.unit) || 0);
+      if (live) { it.live = true; it.short = live.short; }
     }
   }
   const list = Object.values(groups).map((g) => {
@@ -654,7 +657,7 @@ function renderCart(d) {
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
           ? `<button type="button" class="qty-reset" data-qty-reset="${esc(it.key)}" title="필요 수량 ${it.need.toLocaleString("ko-KR")}개로 되돌리기">↺${it.need.toLocaleString("ko-KR")}</button>` : ""}</td>
-        <td class="num faint">@${gil(it.unit)}</td><td class="num">${gil(it.total)}</td></tr>`).join("")}</tbody></table>
+        <td class="num faint">${it.live ? `<span class="live-mark" title="방금 받은 값${it.short ? " · 매물이 모자라서 있는 만큼만 쳤다 개굴" : ""}">⚡</span>` : ""}@${gil(it.unit)}${it.short ? '<small class="short">부족</small>' : ""}</td><td class="num">${gil(it.total)}</td></tr>`).join("")}</tbody></table>
     </div>`;
   }).join("");
   const saved = state.saved.map((x, i) => `
@@ -693,6 +696,11 @@ function renderCart(d) {
           </div>
         </div>
         <div class="cart-chips">${chips}<button type="button" class="cart-clear" data-clear="1">전부 비우기</button></div>
+        <div class="cart-live">
+          ${d.fetchListings ? `<button type="button" class="cart-btn primary" data-cart-live="1"${state.liveBusy ? " disabled" : ""}>${state.liveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>` : ""}
+          <span class="faint">${state.liveCart ? `⚡ ${esc(state.liveTime)} 에 Universalis 에서 다시 받은 값이다 개굴 (구매세 포함, 필요 수량만큼 싼 매물부터)`
+            : "지금은 매시간 받아 둔 값이다 개굴. 사러 가기 전에 눌러서 지금 값으로 다시 짜라 개굴"}${state.liveMsg ? ` · ⚠ ${esc(state.liveMsg)}` : ""}</span>
+        </div>
         <div class="cart-groups">${tables}</div>
         ${save}
       </div>
@@ -870,7 +878,8 @@ export default function (component) {
       saveCart();
       return render();
     }
-    if (e.target.closest("[data-clear]")) { state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
+    if (e.target.closest("[data-cart-live]")) { refreshCartLive(); return; }
+    if (e.target.closest("[data-clear]")) { state.liveCart = null; state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
     const reset = e.target.closest("[data-qty-reset]");
     if (reset) { delete state.qty[reset.dataset.qtyReset]; saveCart(); return render(); }
     if (e.target.closest("[data-save]")) return saveList();
@@ -1003,7 +1012,9 @@ export default function (component) {
     pop.innerHTML = `<b>${esc(el.textContent.replace("📈", "").trim())}</b><div class="faint">🐸 시세 불러오는 중이다 개굴…</div>`;
     document.body.appendChild(pop);
     placeMatPop(pop, el);
-    data.materialInfo(Number(el.dataset.trackMat)).then((info) => {
+    const liveInfo = state.liveCart && state.liveCart[Number(el.dataset.trackMat)];
+    data.materialInfo(Number(el.dataset.trackMat)).catch(() => null).then((info) => {
+      if (liveInfo) info = { ...(info || {}), worlds: liveInfo.mins, live: true }; // 매물은 방금 받은 값, 평균 판매가는 매시간 기록
       if (root.__popFor !== el) return;
       const best = info && info.worlds[0];
       pop.innerHTML = `<b>${esc(el.textContent.replace("📈", "").trim())}</b>` + (!info || !info.worlds.length
@@ -1012,7 +1023,7 @@ export default function (component) {
           <table><tbody>${info.worlds.map((w, i) => `<tr class="${i ? "" : "best"}"><td>${esc(w.name)}</td><td class="num">${gil(w.min)}</td>
             <td class="num faint">매물 ${w.cnt}</td></tr>`).join("")}</tbody></table>`) +
         `<div class="mp-avg">한국 전체 최근 7일 평균 판매가 <b>${info && info.avg != null ? gil(info.avg) + "길" : "-"}</b>${info && info.sold ? ` <small>(${info.sold.toLocaleString("ko-KR")}개 팔림)</small>` : ""}</div>
-        <div class="faint">매시간 받아 둔 값이다 개굴 · 누르면 📈 재료 트래킹으로 간다 개굴</div>`;
+        <div class="faint">${info && info.live ? `⚡ ${esc(state.liveTime)} 에 방금 받은 매물이다 개굴` : "매시간 받아 둔 값이다 개굴"} · 누르면 📈 재료 트래킹으로 간다 개굴</div>`;
       placeMatPop(pop, el);
     }, () => { if (root.__popFor === el) pop.innerHTML = `<div class="faint">시세를 못 받아왔다 개굴.</div>`; });
   };
@@ -1021,6 +1032,46 @@ export default function (component) {
     if (el && el === root.__popFor && !el.contains(e.relatedTarget)) hideMatPop();
   };
   if (!root.__matPopBound) { root.__matPopBound = true; window.addEventListener("scroll", hideMatPop, { passive: true, capture: true }); }
+
+  // ⚡ 장보기 재료 시세를 지금 다시 받아서, 필요 수량만큼 싼 매물부터 샀을 때 값·서버로 다시 짠다
+  async function refreshCartLive() {
+    const need = {};
+    for (const g of cartPlan(data).list) for (const it of g.items) {
+      if (it.id && (g.market || it.live)) need[it.id] = (need[it.id] || 0) + it.qty;
+    }
+    const ids = Object.keys(need).map(Number);
+    if (!ids.length) return;
+    state.liveBusy = true; state.liveMsg = null; render();
+    try {
+      const res = await data.fetchListings(ids);
+      const tax = data.buyerTax ?? 0.05, out = {};
+      for (const id of ids) {
+        const ls = (res[id] || []).slice().sort((a, b) => a.price - b.price);
+        if (!ls.length) continue;
+        let got = 0, spent = 0, world = null;
+        for (const l of ls) {
+          const take = Math.min(l.qty, Math.max(need[id] - got, 0));
+          if (!take) break;
+          world = world || l.world;
+          got += take; spent += take * l.price;
+        }
+        const mins = {};
+        for (const l of ls) {
+          const m = mins[l.world] || (mins[l.world] = { name: l.world, min: l.price, qty: l.qty, cnt: 0 });
+          m.cnt += 1;
+        }
+        out[id] = { unit: got ? (spent / got) * (1 + tax) : ls[0].price * (1 + tax), world: world || ls[0].world, short: got < need[id],
+          mins: Object.values(mins).sort((a, b) => a.min - b.min) };
+      }
+      state.liveCart = out;
+      const t = new Date(), p2 = (x) => String(x).padStart(2, "0");
+      state.liveTime = `${p2(t.getHours())}:${p2(t.getMinutes())}`;
+    } catch (err) {
+      state.liveMsg = `못 받아왔다 개굴 (${err.message || err})`;
+    }
+    state.liveBusy = false;
+    render();
+  }
 
   root.onchange = (e) => {
     // 살 수량을 직접 고침 (필요 수량이랑 같으면 고친 거 없앰)

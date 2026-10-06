@@ -113,7 +113,7 @@ function loginPage({ error = "", info = "", who = "", mode = "login", status = 2
   </form>`;
   return new Response(`<!doctype html>
 <html lang="ko" data-theme="light" data-palette="jade"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>파판14 제작·채집 수익 분석</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>에오르제아에서 장사꾼으로 살아남기</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐸</text></svg>">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600&display=swap">
 <link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/web.css">
@@ -122,8 +122,8 @@ if(T[s.theme])document.documentElement.dataset.theme=T[s.theme];if(P[s.palette])
 </head><body class="login">
 <div class="frog-rain" aria-hidden="true">${frogs}</div>
 <main class="login-box">
-  <div class="eyebrow">CRAFTING PROFIT REPORT</div>
-  <h1>파판14 제작 수익 분석</h1>
+  <div class="eyebrow">FFXIV CRAFTING · GATHERING PROFIT</div>
+  <h1>에오르제아에서 장사꾼으로 살아남기</h1>
   <p class="login-sub">${mode === "request" ? "신청하면 로살리아@초코보가 보고 허락해 준다 개굴." : "캐릭터명@서버랑 비밀번호를 쳐야 화면을 열어준다 개굴."}</p>
   ${form}
   ${error ? `<div class="login-error">🐸 ${esc(error)}</div>` : ""}
@@ -215,6 +215,21 @@ async function handleAdmin(env, request, me, url) {
   return json({ error: "없는 주소다 개굴" }, 404);
 }
 
+// 캐릭터별 기본 설정 (처음 설정 화면에서 정한 것). 다른 기기에서 로그인해도 따라온다
+async function handleSettings(env, request, me) {
+  if (!env.ACCESS) return json({ settings: null });
+  const key = `set:${me}`;
+  if (request.method === "GET") return json({ settings: await env.ACCESS.get(key, { type: "json" }) });
+  if (request.method === "PUT") {
+    const text = await request.text();
+    if (text.length > 8000) return json({ error: "설정이 너무 크다 개굴" }, 413);
+    try { JSON.parse(text); } catch { return json({ error: "설정 모양이 이상하다 개굴" }, 400); }
+    await env.ACCESS.put(key, text);
+    return json({ ok: true });
+  }
+  return json({ error: "없는 방법이다 개굴" }, 405);
+}
+
 export async function onRequest(ctx) {
   const { request, env, next } = ctx;
   if (!env.SITE_PASSWORD) return next(); // 비밀번호를 안 정해 두면 문지기 꺼짐
@@ -236,6 +251,7 @@ export async function onRequest(ctx) {
   if (PUBLIC.has(url.pathname)) return next();
 
   const me = await checkToken(env, cookies(request)[COOKIE]);
+  if (url.pathname === "/__settings") return me ? handleSettings(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (url.pathname.startsWith("/__admin/")) return me ? handleAdmin(env, request, me, url) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (me) return next();
 

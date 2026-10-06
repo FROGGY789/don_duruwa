@@ -17,7 +17,7 @@ from ffxiv.market import MarketCache, Universalis, refresh, resolve_server
 from ffxiv.changelog import CHANGELOG
 from ffxiv.profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
 
-st.set_page_config(page_title="파판14 제작 수익 분석", page_icon="🐸", layout="wide")
+st.set_page_config(page_title="에오르제아에서 장사꾼으로 살아남기", page_icon="🐸", layout="wide")
 ui.password_gate()  # Streamlit Secrets 에 app_password 가 있으면 비밀번호 화면부터
 
 cfg = load_config()

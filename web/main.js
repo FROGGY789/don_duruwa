@@ -44,13 +44,33 @@ function defaults() {
   };
 }
 // 기본값이 바뀌면 숫자를 올린다. 예전에 저장된 설정에서 그 값만 새 기본값으로 바꿔 준다
-const SETTINGS_VERSION = 2; // 2: 예상 판매 소요일 기본 7일
+const SETTINGS_VERSION = 3; // 2: 예상 판매 소요일 기본 7일, 3: 판매 품질 기본 통합
 function loadSettings() {
   const d = defaults(), s = load("ffxivSettings", {});
   if ((s.v || 1) < 2) { delete (s.craft || {}).maxDays; delete (s.gather || {}).maxDays; }
+  if ((s.v || 1) < 3) delete s.quality;
+  if (!(s.palette in PALETTES)) delete s.palette; // 예전 버그로 이상한 값이 저장됐을 수 있다
   s.v = SETTINGS_VERSION;
   return { ...d, ...s, craft: { ...d.craft, ...(s.craft || {}), jobLevels: { ...d.craft.jobLevels, ...((s.craft || {}).jobLevels || {}) } },
     gather: { ...d.gather, ...(s.gather || {}), jobLevels: { ...d.gather.jobLevels, ...((s.gather || {}).jobLevels || {}) } } };
+}
+
+// 설정 저장: 이 브라우저 + 캐릭터별로 서버에도 (다른 기기에서도 따라오게). 연달아 바꾸면 모아서 한 번만 올린다
+let pushTimer = 0;
+function saveSettings() {
+  save("ffxivSettings", S);
+  if (!who()) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    fetch("/__settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(S) }).catch(() => {});
+  }, 1500);
+}
+async function remoteSettings() {
+  if (!who()) return null;
+  try {
+    const res = await fetch("/__settings", { cache: "no-cache" });
+    return res.ok ? (await res.json()).settings || null : null;
+  } catch { return null; }
 }
 
 // 로그인한 캐릭터 (Cloudflare 문지기가 넣어 준 쿠키, 없으면 빈칸)
@@ -509,10 +529,10 @@ function sideHead(p) {
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
     </nav>
-    <div class="brand"><span class="brand-frog">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>
+    <div class="brand"><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button><span class="brand-frog">🐸</span><span class="brand-name">에오르제아에서 장사꾼으로 살아남기</span></div>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
-    <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-palette="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>`;
+    <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-pal="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>`;
 }
 
 // 🔑 권한 관리 (관리자만, 사이드바 맨 아래)
@@ -570,6 +590,8 @@ function renderSide() {
     ${num("데이터 오래됨 기준(시간)", "staleHours", 1, 720)}
     <p class="hint">중간재료 직접 제작은 직업 레벨 ${Math.min(...Object.values(meta.jobLevelsForIntermediates))}~${Math.max(...Object.values(meta.jobLevelsForIntermediates))} 기준으로 미리 계산해 뒀다 개굴.</p>
 
+    <button type="button" class="link-btn" data-onboard="1">⚙ 기본 설정 다시 하기</button>
+
     <div class="sb-title">업데이트 내역</div>
     <details class="changelog-box"><summary>v${esc(meta.changelog[0].version)} · ${esc(meta.changelog[0].date.slice(5))}</summary>
       <div class="changelog">${meta.changelog.map((e) => `<div class="cl-entry"><div class="cl-head"><b>v${esc(e.version)}</b><span>${esc(e.date)}</span></div><ul>${e.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>`).join("")}</div>
@@ -586,7 +608,7 @@ function setPath(path, value) {
   let o = S;
   for (const k of keys.slice(0, -1)) o = o[k];
   o[keys.at(-1)] = value;
-  save("ffxivSettings", S);
+  saveSettings();
 }
 
 function bindSide() {
@@ -604,17 +626,100 @@ function bindSide() {
     if (segBtn) {
       const key = segBtn.closest("[data-seg]").dataset.seg;
       S[key] = segBtn.dataset.val;
-      save("ffxivSettings", S);
+      saveSettings();
       if (key === "theme") applyTheme();
       renderSide();
       if (key !== "theme") render();
       return;
     }
-    const dot = e.target.closest("[data-palette]");
-    if (dot) { S.palette = dot.dataset.palette; save("ffxivSettings", S); applyTheme(); renderSide(); return; }
+    // 색감 버튼 (data-palette 는 <html> 에도 붙어 있어서 이름을 다르게 둔다)
+    const dot = e.target.closest("[data-pal]");
+    if (dot) { S.palette = dot.dataset.pal; saveSettings(); applyTheme(); renderSide(); return; }
+    if (e.target.closest("[data-fold]")) { setFold(true); return; }
+    if (e.target.closest("[data-onboard]")) { onboard(); return; }
     if (e.target.closest("[data-reload]")) { Object.keys(datasets).forEach((k) => delete datasets[k]); start(); }
   });
-  document.getElementById("side-toggle").addEventListener("click", () => document.body.classList.toggle("side-open"));
+  document.getElementById("side-toggle").addEventListener("click", () => {
+    if (wide()) setFold(false);
+    else document.body.classList.toggle("side-open");
+  });
+  if (wide() && load("ffxivSideFolded", false)) document.body.classList.add("side-folded");
+}
+// 사이드바 접기: 넓은 화면은 접은 상태를 기억하고, 폰은 원래처럼 열고 닫기만 한다
+const wide = () => window.matchMedia("(min-width: 901px)").matches;
+function setFold(folded) {
+  if (!wide()) { document.body.classList.remove("side-open"); return; }
+  document.body.classList.toggle("side-folded", folded);
+  save("ffxivSideFolded", folded);
+}
+
+// ⚙ 처음 설정: 권한 받고 처음 들어온 캐릭터(이 기기·서버 둘 다 설정이 없을 때)한테 한 번 보여준다
+function onboard() {
+  const O = JSON.parse(JSON.stringify(S));
+  const box = document.createElement("div");
+  box.className = "onboard";
+  const get = (path) => path.split(".").reduce((o, k) => o[k], O);
+  const set = (path, v) => { const k = path.split("."); k.slice(0, -1).reduce((o, x) => o[x], O)[k.at(-1)] = v; };
+  const n = (label, path, min, max, step = 1) => `<label class="field"><span>${esc(label)}</span>
+    <input type="number" data-o="${path}" min="${min}" max="${max}" step="${step}" value="${get(path)}"></label>`;
+  const all = (p) => { const v = Object.values(O[p].jobLevels); return v.every((x) => x === v[0]) ? v[0] : ""; };
+  const jobsBlock = (p, jobs, title) => `
+    <div class="ob-sec"><div class="ob-title">${title}</div>
+      <div class="row2">${n(`${p === "craft" ? "레시피" : "채집"} 레벨 ≥`, `${p}.levelMin`, 1, 100)}${n("≤", `${p}.levelMax`, 1, 100)}</div>
+      <label class="field ob-all"><span>${p === "craft" ? "제작" : "채집"} 직업 레벨 한 번에</span>
+        <input type="number" data-all="${p}" min="1" max="100" value="${all(p)}" placeholder="직업마다 다르다"></label>
+      <div class="ob-jobs">${jobs.map((j) => n(j, `${p}.jobLevels.${j}`, 1, 100)).join("")}</div>
+    </div>`;
+  const draw = () => {
+    box.innerHTML = `<div class="ob-card" role="dialog" aria-modal="true" aria-label="기본 설정">
+      <div class="ob-head"><span class="brand-frog">🐸</span><div><b>어서 와라 개굴!</b>
+        <p class="hint">처음이니까 기본 설정부터 정하자 개굴. 직업 레벨보다 높은 레시피·채집템은 순위에서 뺀다 개굴.
+        여기서 정한 건 이 캐릭터에 저장돼서 다른 기기에서도 따라온다 개굴. 나중에 사이드바에서 언제든 바꿀 수 있다 개굴.</p></div></div>
+      <div class="ob-sec"><div class="ob-title">판매 품질</div>
+        <div class="seg">${Object.keys(QUALITY_KEY).map((q) => `<button type="button" class="${O.quality === q ? "on" : ""}" data-oq="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+        <p class="hint">통합은 NQ·HQ 로 팔 때를 한 순위에 같이 보여준다 개굴.</p></div>
+      ${jobsBlock("craft", meta.jobs, "⚒️ 제작")}
+      ${jobsBlock("gather", meta.gatherJobs, "⛏️ 채집")}
+      <div class="ob-sec"><div class="ob-title">제작 필터</div>
+        <div class="row2">${n("최소 수익률(%)", "craft.minMargin", -100, 10000, 5)}${n("개당 최소 순수익(길)", "craft.minProfit", -1000000, 10000000, 500)}
+        ${n("현재 등록 건수 ≤", "craft.maxListings", 0, 9999)}${n("예상 판매 소요일 ≤", "craft.maxDays", 0, 365)}</div></div>
+      <div class="ob-foot">
+        <button type="button" class="btn-ghost" data-ob="default">기본값으로 시작</button>
+        <button type="button" class="btn" data-ob="ok">🐸 이대로 시작</button>
+      </div></div>`;
+  };
+  draw();
+  box.addEventListener("change", (e) => {
+    const el = e.target;
+    const v = el.value === "" ? null : Number(el.value);
+    // 다시 그리면 입력 칸 포커스가 날아가니까 값만 바꿔 준다
+    if (el.dataset.all && v !== null) {
+      const p = el.dataset.all;
+      for (const j in O[p].jobLevels) O[p].jobLevels[j] = v;
+      box.querySelectorAll(`[data-o^="${p}.jobLevels."]`).forEach((x) => { x.value = v; });
+      return;
+    }
+    if (el.dataset.o && v !== null) {
+      set(el.dataset.o, v);
+      const p = el.dataset.o.split(".")[0];
+      if (el.dataset.o.includes(".jobLevels.")) box.querySelector(`[data-all="${p}"]`).value = all(p);
+    }
+  });
+  box.addEventListener("click", (e) => {
+    const q = e.target.closest("[data-oq]");
+    if (q) { O.quality = q.dataset.oq; draw(); return; }
+    const b = e.target.closest("[data-ob]");
+    if (!b) return;
+    if (b.dataset.ob === "default") {
+      const d = defaults();
+      S = { ...d, theme: S.theme, palette: S.palette, v: SETTINGS_VERSION };
+    } else S = O;
+    saveSettings();
+    box.remove();
+    renderSide();
+    render();
+  });
+  document.body.appendChild(box);
 }
 
 function frogRain() {
@@ -642,9 +747,18 @@ async function start() {
     document.getElementById("app").innerHTML = `<div class="boot">⚠ 데이터를 못 받아왔다 개굴. 조금 있다가 새로고침 해 봐라 개굴. (${esc(e.message)})</div>`;
     return;
   }
-  S = S || loadSettings();
+  let first = false;
+  if (!S) {
+    if (load("ffxivSettings", null) === null) {
+      const remote = await remoteSettings();
+      if (remote) save("ffxivSettings", remote);
+      else first = true;
+    }
+    S = loadSettings();
+  }
   applyTheme();
   renderSide();
+  if (first) onboard();
   await render();
   refreshPending();
 }

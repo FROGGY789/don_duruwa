@@ -47,7 +47,7 @@ def apply_theme(theme, palette):
 
 
 def sidebar_brand(sb):
-    sb.html('<div class="brand"><span class="brand-frog" title="개굴">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>')
+    sb.html('<div class="brand"><span class="brand-frog" title="개굴">🐸</span><span class="brand-name">에오르제아에서 장사꾼으로 살아남기</span></div>')
 
 
 def frog_rain(where=st, count=28):
@@ -137,7 +137,7 @@ def password_gate():
     apply_theme(theme if theme in THEMES else DEFAULT_THEME, palette if palette in PALETTES else DEFAULT_PALETTE)
     st.html("<style>" + _read("login.css") + "</style>")
     st.html('<div class="login-head"><div class="eyebrow">CRAFTING PROFIT REPORT</div>'
-            '<h1>파판14 제작 수익 분석</h1><p>비밀번호를 쳐야 화면을 열어준다 개굴.</p></div>')
+            '<h1>에오르제아에서 장사꾼으로 살아남기</h1><p>비밀번호를 쳐야 화면을 열어준다 개굴.</p></div>')
     frog_rain()
     with st.form("login", border=False):
         typed = st.text_input("비밀번호", type="password", placeholder="비밀번호")

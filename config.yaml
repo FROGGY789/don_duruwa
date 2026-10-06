@@ -52,7 +52,7 @@ outlier_ratio: 0.5
 # 판매 기록 중 중앙값보다 이 배수 넘게 비싸거나 1/이 배수보다 싼 거래는 이상 거래로 빼고 계산 (0 이면 안 거름)
 odd_sale_ratio: 3
 # HQ 가 있는 아이템을 어느 시세로 팔지: "NQ" / "HQ" / "통합"(NQ·HQ 섞어서). 사이드바 "판매 품질" 에서도 변경 가능
-sell_quality: "NQ"
+sell_quality: "통합"
 # 중간재료를 직접 만들 때 비전서가 필요한 레시피도 쓸지 (비전서가 있으면 true)
 allow_secret_recipe_intermediates: false
 

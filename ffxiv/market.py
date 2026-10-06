@@ -19,7 +19,6 @@ import requests
 from .config import CACHE_DIR, load_config
 
 BATCH = 100
-REFILL_BATCH = 10  # 판매 기록이 비어 온 템을 다시 받을 때 묶음 크기
 KEEP_LISTINGS = 30  # 서버·품질별로 싼 매물 몇 개까지 저장할지 (메모리 절약). 전체 개수는 따로 센다.
 
 
@@ -32,7 +31,7 @@ class Universalis:
         self._lock = threading.Lock()
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "ffxiv-craft-profit (personal analysis tool)"
-        self.stats = {"missing": 0, "recovered": 0, "empty": 0, "refilled": 0}  # 로그용
+        self.stats = {"missing": 0, "recovered": 0}  # 응답에서 빠진 아이템 수 (로그용)
 
     def _get(self, path, params=None):
         for attempt in range(5):
@@ -154,27 +153,6 @@ class Universalis:
         with ThreadPoolExecutor(self.workers) as pool:
             for part in pool.map(one, batches):
                 out.update(part)
-
-        # 매물은 있는데 판매 기록이 비어 온 템: 큰 묶음에선 판매 기록을 일부 템만 채워 주는 일이 있어서 작게 다시 받는다
-        empty = [i for i, e in out.items() if not e["sales"] and e["listings"]]
-        self.stats["empty"] = len(empty)
-        small = [empty[i:i + REFILL_BATCH] for i in range(0, len(empty), REFILL_BATCH)]
-
-        def refill(chunk):
-            hist = self._many(f"/api/v2/history/{target}", chunk,
-                              {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999})
-            return {iid: [[s["pricePerUnit"], s["quantity"], bool(s.get("hq")), s["timestamp"],
-                           s.get("worldID", default_world)] for s in hist.get(iid, {}).get("entries", [])]
-                    for iid in chunk}
-
-        if small and progress:
-            progress(0.99, f"판매 기록이 비어 온 {len(empty)}개 다시 받는 중이다 개굴")
-        with ThreadPoolExecutor(self.workers) as pool:
-            for part in pool.map(refill, small):
-                for iid, sales in part.items():
-                    if sales:
-                        out[iid]["sales"] = sales
-                        self.stats["refilled"] += 1
         if progress:
             progress(1.0, "다 됐다 개굴")
         return out

@@ -9,7 +9,7 @@ on:
     - cron: "17 * * * *"  # 매시간 17분 (정각은 GitHub 가 붐벼서 늦어진다)
   workflow_dispatch:
   push:
-    paths: ["ffxiv/**", "web/**", "config.yaml", ".github/workflows/site.yml"]
+    paths: ["ffxiv/**", "web/**", "functions/**", "config.yaml", ".github/workflows/site.yml"]
 
 concurrency:
   group: site

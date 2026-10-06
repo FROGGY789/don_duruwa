@@ -17,7 +17,10 @@
 1. Cloudflare 가입 → **API 토큰**(Account · Cloudflare Pages · Edit 권한)과 **Account ID** 준비
 2. GitHub 저장소 **Settings → Secrets and variables → Actions** 에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 추가
 3. **Actions → 사이트 갱신 → Run workflow** → 끝나면 https://don-duruwa.pages.dev
-4. 로그인 걸기: Cloudflare **Zero Trust → Access → Applications → Add (Self-hosted)** → 도메인 `don-duruwa.pages.dev` → 허용할 이메일 등록
+4. 로그인 걸기 (캐릭터명@서버 + 공용 비밀번호, `functions/_middleware.js`): Cloudflare **Workers & Pages → don-duruwa → Settings → Variables and Secrets** 에
+   - `SITE_PASSWORD` (Secret): 공용 비밀번호. 없으면 누구나 들어옴
+   - `ALLOWED_CHARACTERS` (선택): 들어올 캐릭터를 쉼표로 (예: `로살리아@초코보,친구@모그리`). 비워 두면 아무 캐릭터나
+   - 넣은 뒤 **Actions → 사이트 갱신 → Run workflow** 를 한 번 돌려야 적용됩니다. 한 번 들어오면 30일 동안 유지되고, 비밀번호를 바꾸면 모두 다시 로그인해야 합니다.
 
 ## 실행 방법 (Streamlit 판)
 

@@ -73,3 +73,22 @@ button,input,select{font:inherit}
   .side-toggle{display:block;position:fixed;top:10px;left:10px;z-index:60;border:1px solid var(--border-strong);background:var(--surface);
     color:var(--text);border-radius:var(--radius);padding:6px 12px;cursor:pointer;box-shadow:var(--shadow-sm)}
 }
+
+/* 로그인한 캐릭터 */
+.sb-who{font-size:var(--fs-sm);color:var(--text-muted)}
+.sb-who b{color:var(--primary-strong)}
+.sb-who a{margin-left:6px;font-size:var(--fs-xs);color:var(--text-faint)}
+.sb-who a:hover{color:var(--negative)}
+
+/* 로그인 화면 (functions/_middleware.js) */
+body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh var(--space-4) var(--space-10)}
+.login-box{width:100%;max-width:420px;text-align:center}
+.login-box h1{font-family:var(--font-display);font-weight:600;font-size:var(--fs-2xl);margin:0}
+.login-sub{color:var(--text-muted);font-size:var(--fs-sm);margin:var(--space-3) 0 var(--space-5)}
+.login-form{display:flex;flex-direction:column;gap:var(--space-3);text-align:left;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm)}
+.login-form .btn{margin-top:var(--space-2)}
+.login-error{margin-top:var(--space-3);padding:10px var(--space-4);border-radius:var(--radius);font-size:var(--fs-sm);color:var(--negative);
+  background:var(--negative-soft);border:1px solid color-mix(in oklab,var(--negative) 30%,transparent)}
+.login-contact{margin-top:var(--space-4);font-size:var(--fs-sm);color:var(--text-muted)}
+.login-contact b{color:var(--primary-strong);font-weight:600}

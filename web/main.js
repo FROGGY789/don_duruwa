@@ -49,6 +49,11 @@ function loadSettings() {
     gather: { ...d.gather, ...(s.gather || {}), jobLevels: { ...d.gather.jobLevels, ...((s.gather || {}).jobLevels || {}) } } };
 }
 
+// 로그인한 캐릭터 (Cloudflare 문지기가 넣어 준 쿠키, 없으면 빈칸)
+function who() {
+  const m = document.cookie.match(/(?:^|;\s*)ffx_who=([^;]*)/);
+  try { return m ? decodeURIComponent(m[1]) : ""; } catch { return ""; }
+}
 const page = () => (location.hash === "#gather" ? "gather" : "craft");
 const days = () => meta.hours / 24;
 const PERIOD = () => (meta.hours % 24 === 0 ? `${meta.hours / 24}일` : `${meta.hours}시간`);
@@ -268,6 +273,7 @@ function renderSide() {
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>
     </nav>
     <div class="brand"><span class="brand-frog">🐸</span><span class="brand-name">제작·채집 수익 분석</span></div>
+    ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
     <div class="palette">${Object.entries(PALETTES).map(([k, v]) => `<button type="button" class="dot dot-${v}${S.palette === k ? " on" : ""}" data-palette="${esc(k)}" title="${esc(k)}"></button>`).join("")}</div>
     <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>

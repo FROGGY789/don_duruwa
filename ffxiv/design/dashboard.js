@@ -49,7 +49,8 @@ function fmtDays(v) {
   const d = Math.ceil(v);
   return `<span class="days${d > 14 ? " slow" : ""}">~${d}일</span>`;
 }
-const CAT_ICON = { all: "✦", "가구": "🪑", "일반": "⚒" };
+const CAT_ICON = { all: "✦", "가구": "🪑", "장비": "⚔", "재료": "🧱", "소모품": "🍲", "기타": "✨", "일반": "⚒" };
+const SUB_ICON = { "무기": "🗡", "방어구": "🛡", "액세서리": "💍", "도구": "🔨" };
 // 채집 페이지는 재료비가 없어서 원가·수익률·장보기 칸을 뺀다
 const isGather = (d) => d.mode === "gather";
 function columns(d) {
@@ -64,7 +65,7 @@ function V(r) {
 }
 // 지금 고른 서버에서 필터 통과했고, 고른 분류(전체/가구/일반)에 해당하는 행만
 function catRows(d) {
-  return d.rows.filter((r) => V(r).passes && (state.cat === "all" || r.cat === state.cat));
+  return d.rows.filter((r) => V(r).passes && (state.cat === "all" || r.cat === state.cat) && (!state.sub || r.sub === state.sub));
 }
 
 function esc(v) {
@@ -122,7 +123,20 @@ function renderCats(d) {
   const btn = (key) =>
     `<button class="cat${state.cat === key ? " active" : ""}" data-cat="${esc(key)}">${(d.catIcons || CAT_ICON)[key] || ""} ${esc(d.cats[key])}` +
     `<span class="cnt">${d.stats[state.server][key].passed}</span></button>`;
-  return `<div class="cats">${Object.keys(d.cats).map(btn).join("")}</div>`;
+  return `<div class="cats">${Object.keys(d.cats).map(btn).join("")}</div>${renderSubs(d)}`;
+}
+
+// 장비처럼 세부 분류가 있으면 한 줄 더: [장비 전체 | 무기 | 방어구 | …]
+function renderSubs(d) {
+  const subs = (d.subs || {})[state.cat];
+  if (!subs || !subs.length) return "";
+  const pool = d.rows.filter((r) => V(r).passes && r.cat === state.cat);
+  const btn = (key, label) =>
+    `<button class="cat sub${(state.sub || "") === key ? " active" : ""}" data-sub="${esc(key)}">${label}` +
+    `<span class="cnt">${key ? pool.filter((r) => r.sub === key).length : pool.length}</span></button>`;
+  const hint = state.cat === "장비" && d.quality === "NQ"
+    ? `<span class="sub-hint">장비는 거의 HQ 로 팔린다 개굴. 사이드바 판매 품질을 HQ 나 통합으로 바꾸면 더 많이 보인다 개굴.</span>` : "";
+  return `<div class="subs-row"><div class="cats subs">${btn("", `${CAT_ICON[state.cat] || ""} ${esc(state.cat)} 전체`)}${subs.map((x) => btn(x, `${SUB_ICON[x] || ""} ${esc(x)}`)).join("")}</div>${hint}</div>`;
 }
 
 function renderTabs(d) {
@@ -620,6 +634,7 @@ export default function (component) {
   }
   if (state.tab !== "all" && !data.jobs.includes(state.tab)) state.tab = "all";
   if (!(state.cat in data.cats)) state.cat = "all";
+  if (state.sub && !((data.subs || {})[state.cat] || []).includes(state.sub)) state.sub = "";
   if (!data.servers.some((s) => s.key === state.server)) state.server = "dc";
 
   function render() {
@@ -765,6 +780,7 @@ export default function (component) {
     const go = e.target.closest("[data-goto]");
     if (go) {
       state.cat = "all";
+      state.sub = "";
       state.tab = "all";
       state.selected = Number(go.dataset.goto);
       // 지금 서버 순위에 없으믄 들어 있는 서버(통합 먼저)로 넘어간다
@@ -788,9 +804,17 @@ export default function (component) {
       if (fromDetail) root.querySelector(".detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       return;
     }
+    const sub = e.target.closest("[data-sub]");
+    if (sub) {
+      state.sub = sub.dataset.sub;
+      state.tab = "all";
+      state.selected = null;
+      return render();
+    }
     const cat = e.target.closest("[data-cat]");
     if (cat) {
       state.cat = cat.dataset.cat;
+      state.sub = "";
       state.tab = "all";
       state.selected = null;
       return render();

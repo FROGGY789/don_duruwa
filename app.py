@@ -318,7 +318,7 @@ def craft_page():
         stale_badge = ["⚠ 데이터 오래됨"] if stale else []
         return {
             "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
-            "level": r["레시피 레벨"], "cost": r["원가"], "cat": r["분류"],
+            "level": r["레시피 레벨"], "cost": r["원가"], "cat": r["분류"], "sub": r["세부"],
             "updated": r["업데이트"] or 0, "updatedText": ui.ago(r["업데이트"], now), "stale": stale,
             "badges": badges(stale_badge + r["기타"], r["뱃지 설명"]),
             "views": {key: view_data(r, key, passes(r, key)) for key in VIEWS},
@@ -383,7 +383,7 @@ def craft_page():
         return {"query": q, "items": found[:MAX_RESULTS], "total": total}
 
 
-    CATS = {"all": "전체", "가구": "가구", "일반": "일반 제작템"}
+    CATS = {"all": "전체", "가구": "가구", "장비": "장비", "재료": "재료", "소모품": "소모품", "기타": "기타"}
     passed = {x["recipe_id"]: {k for k in VIEWS if passes(x, k)} for x in rows}
 
     def cat_stats(cat, key):
@@ -413,6 +413,8 @@ def craft_page():
         "sort": sort_by,
         "taxNote": f"판매세 {seller_tax:.0%} 반영",
         "taxRate": seller_tax,
+        "subs": {"장비": list((cfg.get("item_groups") or {}).get("장비") or {})},
+        "quality": sell_quality,
         "rows": [row_data(x) for x in rows if passed[x["recipe_id"]]],
         "failed": {c: failed_data(c) for c in CATS},
     })

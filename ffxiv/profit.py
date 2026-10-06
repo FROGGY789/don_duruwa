@@ -167,6 +167,12 @@ class Calculator:
         self._clean = {}
         self.odd_ratio = cfg.get("odd_sale_ratio", 3)
         self.furniture = set(cfg["furniture_ui_categories"])
+        # ItemUICategory → (분류, 세부 분류)
+        self.groups = {}
+        for group, value in (cfg.get("item_groups") or {}).items():
+            for sub, cats in (value.items() if isinstance(value, dict) else [("", value)]):
+                for c in cats:
+                    self.groups[c] = (group, sub)
 
     def stats(self, item_id, hq=None, outlier_ratio=0.0, world=None):
         """market_stats 결과를 기억해 둔다 (같은 재료를 여러 레시피가 쓰니까)."""
@@ -285,7 +291,8 @@ class Calculator:
             "업데이트": dc.last_upload or None,
             "기타": extra,
             "뱃지 설명": tips,
-            "분류": "가구" if item.ui_category in self.furniture else "일반",
+            "분류": "가구" if item.ui_category in self.furniture else self.groups.get(item.ui_category, ("기타", ""))[0],
+            "세부": "" if item.ui_category in self.furniture else self.groups.get(item.ui_category, ("기타", ""))[1],
             "재료 여유 배수": self.material_ratio(tree),
             "결과물 개수": recipe.result_amount,
             "판매 품질": hq,

@@ -207,6 +207,10 @@ function renderTable(d, rows) {
 
 function renderDetail(d, row) {
   if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. ${isGather(d) ? "판매" : "재료"} 상세가 여기 뜬다 개굴.</div>`;
+  if (d.loadDetail && !row.loaded) {
+    return `<section class="detail"><div class="detail-card"><div class="detail-top"><div>
+      <h2>${itemName(row.name, row.stars)}</h2><div class="desc">🐸 상세 불러오는 중이다 개굴…</div></div></div></div></section>`;
+  }
   const body = (row.materials || []).map((m) => {
     const tree = m.depth ? `<span class="tree">${"　".repeat(m.depth - 1)}└</span>` : "";
     const src = `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`;
@@ -526,6 +530,14 @@ function cartText(d) {
 
 function renderCart(d) {
   if (!Object.keys(state.cart).length || !state.cartOpen) return "";
+  // 정적 사이트: 담은 아이템의 재료 목록을 아직 안 받았으면 받아 온다
+  const waiting = d.loadDetail ? Object.keys(state.cart).map(Number).map((id) => d.rows.find((r) => r.id === id)).filter((r) => r && !r.loaded) : [];
+  if (waiting.length) {
+    Promise.all(waiting.map((r) => d.loadDetail(r.id))).then(() => d.rerender && d.rerender(), () => {});
+    return `<aside class="cart drawer" id="cart"><div class="drawer-head"><h2>🛒 장보기 목록</h2>
+      <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button></div>
+      <div class="drawer-body"><div class="detail-top"><div class="desc">🐸 재료 목록 불러오는 중이다 개굴…</div></div></div></aside>`;
+  }
   const { rows, missing, list, cost, revenue } = cartPlan(d);
   const worlds = list.filter((g) => g.market).length;
   const all = list.flatMap((g) => g.items);
@@ -637,6 +649,7 @@ export default function (component) {
   if (state.sub && !((data.subs || {})[state.cat] || []).includes(state.sub)) state.sub = "";
   if (!data.servers.some((s) => s.key === state.server)) state.server = "dc";
 
+  data.rerender = () => render();
   function render() {
     const keepScroll = root.querySelector(".drawer-body")?.scrollTop;
     renderInner();
@@ -647,6 +660,8 @@ export default function (component) {
     const rows = sortedRows(data);
     if (!data.rows.some((r) => r.id === state.selected)) state.selected = rows.length ? rows[0].id : null;
     const selected = data.rows.find((r) => r.id === state.selected);
+    // 정적 사이트: 상세(근거·재료·추이)는 누를 때 받아온다
+    if (selected && data.loadDetail && !selected.loaded) data.loadDetail(selected.id).then(() => render(), () => {});
     const cartCount = Object.keys(state.cart).length;
     const notice = data.notice
       ? `<div class="notice ${esc(data.notice.kind)}"><span>${data.notice.kind === "error" ? "⚠" : "⏳"}</span><span>${esc(data.notice.text)}</span></div>`

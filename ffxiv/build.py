@@ -1,0 +1,237 @@
+"""정적 사이트(Cloudflare Pages)용 데이터 만들기. GitHub Actions 가 매시간 실행한다.
+
+    python -m ffxiv.build              시세 받고 → 계산하고 → site/ 폴더에 화면 + 데이터를 만든다
+    python -m ffxiv.build --no-fetch   저장해 둔 시세(cache/)로 계산만 (화면 고칠 때 빨리 확인용)
+
+화면에서 바꾸는 필터(레벨 범위·판매 건수·수익률 등)는 전부 브라우저에서 거른다.
+계산 자체가 달라지는 판매 품질(NQ/HQ/통합)만 세 벌 미리 계산해 둔다.
+판매세는 화면에서 도시를 바꾸면 브라우저가 다시 계산하도록 판매가·원가를 따로 보낸다.
+
+site/
+  index.html, main.js, web.css     화면 (web/ 폴더에서 복사)
+  dashboard.js, dashboard.css, tokens.css   순위 표·상세 (ffxiv/design/ 에서 복사)
+  data/meta.json                   서버·기본값·업데이트 내역
+  data/craft-nq.json …             순위 표에 필요한 값 (줄마다 서버별 보기)
+  data/craft-nq-d7.json …          재료 상세·근거·추이 (아이템ID % 32 로 나눠서, 누를 때만 받는다)
+"""
+import argparse
+import json
+import math
+import shutil
+import time
+from pathlib import Path
+
+from .badges import badge
+from .changelog import CHANGELOG
+from .config import JOB_NAMES, ROOT, TAX_CITIES, load_config
+from .gamedata import GATHER_JOBS, GameData, download_csvs, scope_recipes, target_recipes
+from .market import MarketCache, Universalis, refresh, resolve_server
+from .profit import analyze, analyze_gather, detail_rows, market_item_ids, seller_tax_rate, shopping_list
+
+QUALITIES = {"nq": False, "hq": True, "all": None}
+SHARDS = 32
+WEB = ROOT / "web"
+DESIGN = Path(__file__).resolve().parent / "design"
+
+
+def clean(v):
+    """JSON 에 못 넣는 값(무한대, NaN)은 None, 소수는 둘째 자리까지."""
+    if isinstance(v, float):
+        return None if math.isinf(v) or math.isnan(v) else round(v, 2)
+    if isinstance(v, dict):
+        return {k: clean(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [clean(x) for x in v]
+    return v
+
+
+def write(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(clean(data), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
+def compact_trend(t):
+    days = t["days"]
+    return {"d": [x["date"] for x in days], "m": [None if x["median"] is None else round(x["median"]) for x in days],
+            "u": [x["units"] for x in days], "c": [x["count"] for x in days], "change": t["change"]}
+
+
+# 순위 표 한 칸(서버 보기 하나)의 값 순서. 이름을 매번 적으면 파일이 세 배로 커져서 배열로 보낸다 (main.js 와 순서 같아야 함)
+VIEW_FIELDS = ["sell", "median", "minListing", "sales", "soldQty", "listings", "sellDays", "cap", "dropped", "badges"]
+
+
+class Badges:
+    """뱃지는 한 번만 적고 번호로 가리킨다 ("NQ 기준" 같은 게 수천 번 반복돼서)."""
+
+    def __init__(self):
+        self.items, self.index = [], {}
+
+    def ref(self, text, tip=None):
+        b = badge(text, tip)
+        key = json.dumps(b, ensure_ascii=False, sort_keys=True)
+        if key not in self.index:
+            self.index[key] = len(self.items)
+            self.items.append(b)
+        return self.index[key]
+
+
+def view_summary(v, badges):
+    """순위 표에 필요한 값만. 순수익·수익률·하루 이익은 브라우저가 판매세를 넣어 다시 계산한다."""
+    vals = dict(v, badges=[badges.ref(t, v["tips"].get(t)) for t in v["badges"]])
+    return [vals[f] for f in VIEW_FIELDS]
+
+
+def view_detail(v):
+    return {"trend": compact_trend(v["trend"]), "quality": v["quality"], "bundles": v.get("bundles")}
+
+
+def build_craft(gd, cache, cfg, server, tax, hq):
+    """제작: 레시피 레벨·직업 레벨은 화면에서 거르니까 레벨 100 까지 다 계산한다.
+    중간재료를 직접 만들 수 있는지는 config.yaml 의 job_levels 기준."""
+    every = {job: 100 for job in JOB_NAMES}
+    targets = list(target_recipes(gd, cfg, True, 1, 100, every))
+    rows, trees, calc = analyze(gd, cache.items, cfg, targets, tax, sell_hq=hq, batch_size=cfg["batch_size"],
+                                job_levels=cfg["job_levels"], world_names=server["world_names"],
+                                home_world=server["world_id"])
+    summary, details, badges = [], {}, Badges()
+    for r in rows:
+        recipe, tree = trees[r["recipe_id"]]
+        ratio = r["재료 여유 배수"]
+        summary.append({
+            "id": r["recipe_id"], "name": gd.name(recipe.result_id), "stars": recipe.stars, "job": r["직업"],
+            "level": r["레시피 레벨"], "cat": r["분류"], "sub": r["세부"], "cost": r["원가"],
+            "matRatio": None if math.isinf(ratio) else ratio, "resultAmount": r["결과물 개수"],
+            "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
+            "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
+            "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
+        })
+        materials = [{
+            "depth": d["depth"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
+            "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
+            "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
+            "world": d["비고(구매 서버)"] if d["구매처"] == "거래소" else "",
+        } for d in detail_rows(calc, tree)]
+        ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
+        details[r["recipe_id"]] = {
+            "evidence": r["근거"], "materials": materials,
+            "shopping": [{**s, "name": gd.name(s["id"])} for s in shopping_list(tree)],
+            "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
+                          f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",
+            "views": {k: view_detail(v) for k, v in r["보기"].items()},
+        }
+    return summary, details, badges.items
+
+
+def build_gather(gd, cache, cfg, server, tax, hq):
+    gathers = [g for g in gd.gather.values() if gd.items[g.item_id].marketable]
+    rows, _ = analyze_gather(gd, cache.items, cfg, gathers, tax, sell_hq=hq,
+                             world_names=server["world_names"], home_world=server["world_id"])
+    summary, details, badges = [], {}, Badges()
+    for r in rows:
+        g = gd.gather[r["item_id"]]
+        summary.append({
+            "id": r["item_id"], "name": gd.name(r["item_id"]), "stars": g.stars, "job": r["직업"],
+            "level": r["레벨"], "cat": r["분류"], "sub": "", "cost": 0, "matRatio": None, "resultAmount": 1,
+            "updated": r["업데이트"] or 0, "hq": r["판매 품질"], "reason": r["제외 사유"],
+            "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
+            "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
+        })
+        details[r["item_id"]] = {
+            "evidence": r["근거"],
+            "detailDesc": f"{g.job} Lv{g.level}{' · ' + '★' * g.stars if g.stars else ''}"
+                          f"{' · ⏰ 시간 한정 채집지' if g.timed else ''} · 재료비 없음, 판매세만 뺀다 개굴",
+            "views": {k: view_detail(v) for k, v in r["보기"].items()},
+        }
+    return summary, details, badges.items
+
+
+def write_page(out, name, summary, details, badges):
+    write(out / f"{name}.json", {"fields": VIEW_FIELDS, "badges": badges, "rows": summary})
+    shards = {}
+    for iid, d in details.items():
+        shards.setdefault(iid % SHARDS, {})[str(iid)] = d
+    for n in range(SHARDS):
+        write(out / f"{name}-d{n}.json", shards.get(n, {}))
+
+
+def copy_web(site):
+    """화면 파일: web/ 의 껍데기 + ffxiv/design 의 표·상세 코드와 색."""
+    for f in WEB.iterdir():
+        if f.is_file():
+            shutil.copy2(f, site / f.name)
+    for name in ("dashboard.js", "dashboard.css", "tokens.css"):
+        shutil.copy2(DESIGN / name, site / name)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-fetch", action="store_true", help="시세는 안 받고 저장해 둔 걸로 계산만")
+    ap.add_argument("--out", default=str(ROOT / "site"))
+    args = ap.parse_args()
+
+    started = time.time()
+    cfg = load_config()
+    download_csvs(cfg["datamining_base_url"])
+    gd = GameData()
+    api = Universalis(cfg["universalis_base_url"], cfg["request_interval_sec"], cfg.get("request_workers", 4))
+    server = resolve_server(api, cfg)
+    cache = MarketCache(server)
+    if not args.no_fetch:
+        ids = set(market_item_ids(gd, list(scope_recipes(gd, cfg, True))))
+        ids |= {iid for iid in gd.gather if gd.items[iid].marketable}
+        last = [0]
+
+        def progress(p, msg):
+            if p - last[0] >= 0.1 or p >= 1:
+                last[0] = p
+                print(f"  {msg}", flush=True)
+
+        print(f"시세 받는 중: 아이템 {len(ids)}개")
+        refresh(api, cache, server, sorted(ids), cfg["history_hours"], full=True, progress=progress)
+    print(f"시세 준비 끝 ({time.time() - started:.0f}초)")
+
+    site = Path(args.out)
+    if site.exists():
+        shutil.rmtree(site)
+    data = site / "data"
+    data.mkdir(parents=True)
+    copy_web(site)
+
+    default_city = cfg["tax_city"]
+    tax, _ = seller_tax_rate(cfg, cache.tax_rates, default_city)
+    for key, hq in QUALITIES.items():
+        t = time.time()
+        write_page(data, f"craft-{key}", *build_craft(gd, cache, cfg, server, tax, hq))
+        write_page(data, f"gather-{key}", *build_gather(gd, cache, cfg, server, tax, hq))
+        print(f"계산 끝: 판매 품질 {key} ({time.time() - t:.0f}초)")
+
+    home = server["world_id"]
+    worlds = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))
+    rates = {c: r for c, r in (cache.tax_rates or {}).items() if c in TAX_CITIES}
+    G = cfg.get("gather") or {}
+    write(data / "meta.json", {
+        "updatedAt": cache.updated_at, "builtAt": time.time(),
+        "world": server["world"], "dc": server["dc"], "home": str(home),
+        "servers": [{"key": "dc", "name": "통합", "home": False}]
+                   + [{"key": w, "name": server["world_names"][w], "home": w == str(home)} for w in worlds],
+        "hours": cfg["history_hours"], "taxCities": TAX_CITIES, "taxRates": rates,
+        "defaultTaxCity": default_city, "defaultTaxRate": cfg["default_tax_rate"],
+        "jobs": JOB_NAMES, "gatherJobs": GATHER_JOBS,
+        "subs": {"장비": list((cfg.get("item_groups") or {}).get("장비") or {})},
+        "defaults": {
+            "craft": {"levelMin": cfg["recipe_level_min"], "levelMax": cfg["recipe_level_max"],
+                      "jobLevels": cfg["job_levels"], "filters": cfg["filters"], "sort": cfg["sort_by"]},
+            "gather": {"levelMin": G.get("level_min", 1), "levelMax": G.get("level_max", 60),
+                       "jobLevels": G.get("job_levels") or {}, "filters": G.get("filters") or {},
+                       "sort": G.get("sort_by", "하루 잠재 이익")},
+            "quality": cfg.get("sell_quality", "NQ"),
+        },
+        "jobLevelsForIntermediates": cfg["job_levels"],
+        "changelog": CHANGELOG,
+    })
+    size = sum(f.stat().st_size for f in site.rglob("*") if f.is_file())
+    print(f"site/ 완성: {sum(1 for _ in site.rglob('*'))}개 파일, {size / 1e6:.1f}MB ({time.time() - started:.0f}초)")
+
+
+if __name__ == "__main__":
+    main()

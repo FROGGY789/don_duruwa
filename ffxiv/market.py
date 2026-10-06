@@ -9,7 +9,9 @@
 직접 실행하면 (python -m ffxiv.market) 분석에 필요한 아이템 시세를 전부 받아 저장합니다.
 """
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 import requests
@@ -21,19 +23,22 @@ KEEP_LISTINGS = 30  # 서버·품질별로 싼 매물 몇 개까지 저장할지
 
 
 class Universalis:
-    def __init__(self, base_url, interval=0.1):
+    def __init__(self, base_url, interval=0.1, workers=4):
         self.base = base_url.rstrip("/")
         self.interval = interval
+        self.workers = max(1, int(workers))  # 동시에 보내는 요청 수 (Universalis 허용: 초당 25회, 동시 8개)
         self._last = 0.0
+        self._lock = threading.Lock()
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "ffxiv-craft-profit (personal analysis tool)"
 
     def _get(self, path, params=None):
         for attempt in range(5):
-            wait = self.interval - (time.time() - self._last)
-            if wait > 0:
-                time.sleep(wait)
-            self._last = time.time()
+            with self._lock:  # 여러 스레드가 같이 보내도 요청 간격은 지킨다
+                wait = self.interval - (time.time() - self._last)
+                if wait > 0:
+                    time.sleep(wait)
+                self._last = time.time()
             try:
                 resp = self.session.get(f"{self.base}{path}", params=params, timeout=60)
             except requests.RequestException:
@@ -89,9 +94,9 @@ class Universalis:
         ids = sorted(set(item_ids))
         out = {}
         batches = [ids[i:i + BATCH] for i in range(0, len(ids), BATCH)]
-        for n, chunk in enumerate(batches):
-            if progress:
-                progress(n / len(batches), f"시세 받는 중이다 개굴 ({n + 1}/{len(batches)})")
+        done = [0]
+
+        def one(chunk):
             id_str = ",".join(map(str, chunk))
             now = time.time()
             current = self._items(self._get(f"/api/v2/{target}/{id_str}", {"entries": 0}))
@@ -99,11 +104,12 @@ class Universalis:
                 f"/api/v2/history/{target}/{id_str}",
                 {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999},
             ))
+            part = {}
             for iid in chunk:
                 cur = current.get(iid, {})
                 hist = history.get(iid, {})
                 listings, counts = _trim_listings(cur.get("listings", []), default_world)
-                out[iid] = {
+                part[iid] = {
                     # [단가(세금 제외), 수량, HQ여부, 월드ID] — 서버·품질별 싼 순 KEEP_LISTINGS 개
                     "listings": listings,
                     # {"월드ID:0 또는 1(HQ)": 전체 매물 수}
@@ -115,6 +121,15 @@ class Universalis:
                     "last_upload": max(cur.get("lastUploadTime", 0) or 0, hist.get("lastUploadTime", 0) or 0),
                     "fetched_at": now,
                 }
+            done[0] += 1
+            if progress:
+                progress(done[0] / len(batches), f"시세 받는 중이다 개굴 ({done[0]}/{len(batches)})")
+            return part
+
+        # 묶음 여러 개를 동시에 받는다 (하나씩 받으면 10분 넘게 걸린다)
+        with ThreadPoolExecutor(self.workers) as pool:
+            for part in pool.map(one, batches):
+                out.update(part)
         if progress:
             progress(1.0, "다 됐다 개굴")
         return out

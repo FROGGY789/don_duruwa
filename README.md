@@ -3,7 +3,23 @@
 거래소 시세(Universalis)와 게임 레시피 데이터를 조합해서, **지금 만들어 팔면 남는 제작품**을 순위별로 보여주는 웹페이지입니다.
 데이터를 조회하고 분석만 합니다. 게임에는 전혀 손대지 않아요.
 
-## 실행 방법
+## 새 사이트 (Cloudflare Pages) — 빠른 버전
+서버 없이 **미리 계산해 둔 결과를 보여주는** 사이트입니다. 클릭할 때 서버를 거치지 않아서 바로 반응하고, 잠들지도 않습니다.
+
+- **GitHub Actions** (`.github/workflows/site.yml`) 가 매시간 시세를 받아 계산하고 (`python -m ffxiv.build`), 결과를 **Cloudflare Pages** 에 올립니다.
+- 화면: `web/` (사이드바·필터·계산) + `ffxiv/design/dashboard.*` (표·상세, Streamlit 판과 같이 씀)
+- 필터·판매 도시(세율)·분류는 브라우저에서 바로 계산합니다. 판매 품질(NQ/HQ/통합)은 세 벌 미리 계산해 둡니다.
+- 중간재료 직접 제작 여부는 `config.yaml` 의 `job_levels` 기준으로 미리 계산됩니다 (사이트의 직업 레벨은 순위에서 거르는 데만 씀).
+- 지금 바로 갱신: GitHub 저장소 **Actions → 사이트 갱신 → Run workflow**
+- 내 PC 에서 확인: `python -m ffxiv.build` (시세 받기까지) 또는 `python -m ffxiv.build --no-fetch` (저장된 시세로 계산만) → `cd site && python -m http.server` → http://localhost:8000
+
+### 처음 한 번 설정
+1. Cloudflare 가입 → **API 토큰**(Account · Cloudflare Pages · Edit 권한)과 **Account ID** 준비
+2. GitHub 저장소 **Settings → Secrets and variables → Actions** 에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 추가
+3. **Actions → 사이트 갱신 → Run workflow** → 끝나면 https://don-duruwa.pages.dev
+4. 로그인 걸기: Cloudflare **Zero Trust → Access → Applications → Add (Self-hosted)** → 도메인 `don-duruwa.pages.dev` → 허용할 이메일 등록
+
+## 실행 방법 (Streamlit 판)
 
 ### 처음 한 번만
 1. **Python 3.10 이상** 설치: https://www.python.org/downloads/

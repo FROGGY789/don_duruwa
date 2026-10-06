@@ -13,6 +13,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from .badges import badge  # noqa: F401  (app.py 가 ui.badge 로 쓴다)
+
 DESIGN = Path(__file__).resolve().parent / "design"
 FONTS = ("@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600"
          "&family=Noto+Serif+KR:wght@600&display=swap');")
@@ -115,15 +117,6 @@ def ago(ts, now):
     if sec < 86400:
         return f"{int(sec // 3600)}시간 전"
     return f"{int(sec // 86400)}일 전"
-
-
-def badge(text, tip=None):
-    """기타 칸 뱃지. 비전서는 짧게 '비전서'만 보이고 누르면 팝오버, 나머지는 마우스 올리믄 설명(tip)."""
-    if text.startswith("비전서"):
-        return {"kind": "book", "text": "📖 비전서", "detail": text.split(":", 1)[-1].strip()}
-    kind = ("odd" if text.startswith("❗") else "stale" if text.startswith(("⚠", "🔥", "📉", "🔻"))
-            else "world" if text.startswith("🌐") else "nq")
-    return {"kind": kind, "text": text, "tip": tip}
 
 
 def _app_password():

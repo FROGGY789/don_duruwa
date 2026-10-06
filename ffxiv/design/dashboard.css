@@ -272,7 +272,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .worlds tr.selected td{box-shadow:inset 0 -2px 0 var(--primary)}
 
 /* 장보기: 오른쪽 아래 떠 있는 버튼 + 오른쪽 서랍 (열어둔 채로 표에서 계속 담을 수 있다) */
-.cart-fab{position:fixed;right:24px;bottom:24px;z-index:1000005;display:inline-flex;align-items:center;gap:8px;
+.cart-fab{position:fixed;right:24px;bottom:84px;z-index:1000005;display:inline-flex;align-items:center;gap:8px;
   padding:12px 18px;border:0;border-radius:var(--radius-pill);background:var(--primary);color:var(--on-primary);
   font-size:var(--fs-md);font-weight:600;cursor:pointer;box-shadow:var(--shadow)}
 .cart-fab b{min-width:22px;padding:1px 7px;border-radius:var(--radius-pill);background:var(--on-primary);color:var(--primary-strong);font-size:var(--fs-sm);text-align:center}
@@ -287,7 +287,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer-head h2{margin:0;font-size:var(--fs-lg)}
 .drawer-x{border:1px solid var(--border);background:var(--surface);color:var(--text-muted);border-radius:var(--radius-sm);width:30px;height:30px;cursor:pointer}
 .drawer-x:hover{color:var(--text);border-color:var(--border-strong)}
-.drawer-body{flex:1;overflow-y:auto}
+.drawer-body{flex:1;overflow-y:auto;padding-bottom:64px} /* 오른쪽 아래 Streamlit "Manage app" 버튼에 안 가리게 */
 .drawer .detail-top{flex-direction:column;align-items:stretch;gap:var(--space-3)}
 .drawer .kv{margin-left:0;justify-content:space-between}
 .drawer .kv div{align-items:flex-start}

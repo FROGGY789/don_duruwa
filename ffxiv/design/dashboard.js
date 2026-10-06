@@ -100,6 +100,11 @@ function signed(v) {
 // 파판 HQ 마크 (와이파이 같은 곡선 세 줄)
 const HQ_MARK = `<svg class="hq-mark" viewBox="0 0 16 16" aria-label="HQ"><title>HQ (고품질)</title>
   <path d="M3 13a1.6 1.6 0 1 0 .01 0Z"/><path d="M2 8.5a5.5 5.5 0 0 1 5.5 5.5" fill="none"/><path d="M2 4a10 10 0 0 1 10 10" fill="none"/></svg>`;
+// 언제든 캘 수 있는 채집물(시간 한정 아님): ⛏ 광부 / 🌿 원예가 — 직접 캐면 재료비가 안 들어서 처음 장사할 때 좋다
+function gatherMarks(jobs, lv) {
+  if (!jobs) return "";
+  return jobs.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${lv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님). 직접 캐면 재료비가 안 든다 개굴">${j === "광부" ? "⛏" : "🌿"}<small>${esc(j)}</small></span>`).join("");
+}
 function itemName(name, stars, hq) {
   return (stars ? `<span class="stars">${"★".repeat(stars)}</span>` : "") + `<span class="item">${esc(name)}</span>` + (hq ? HQ_MARK : "");
 }
@@ -253,7 +258,7 @@ function renderDetail(d, row) {
     const market = m.source === "거래소";
     return `
       <tr class="${m.depth ? "sub" : ""}">
-        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}</td>
+        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${gatherMarks(m.g, m.gl)}</td>
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -644,8 +649,7 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}${it.gather
-            ? it.gather.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} Lv${it.gatherLv} 로 언제든 캘 수 있다 개굴 (시간 한정 아님)">${j === "광부" ? "⛏" : "🌿"}<small>${esc(j)}</small></span>`).join("") : ""}
+          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}${gatherMarks(it.gather, it.gatherLv)}
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited

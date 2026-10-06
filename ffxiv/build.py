@@ -131,6 +131,7 @@ def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
         "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
         "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
         "world": d["비고(구매 서버)"] if d["구매처"] in ("거래소", "교환") else "",
+        **gather_tag(gd, d["id"]),
     } for d in detail_rows(calc, tree)]
     ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
     detail = {

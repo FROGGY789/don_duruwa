@@ -554,7 +554,7 @@ function seg(path, options, value) {
 }
 function sideHead(p) {
   return `
-    <div class="sb-top"><span class="brand-frog">🐸</span><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button></div>
+    <div class="sb-top"><span class="brand-frog">🐸</span><span class="sb-fold-hint">누르면 접힌다 개굴</span><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button></div>
     <nav class="nav">
       <a href="#craft" class="${p === "craft" ? "on" : ""}">⚒️ 제작</a>
       <a href="#gather" class="${p === "gather" ? "on" : ""}">⛏️ 채집</a>

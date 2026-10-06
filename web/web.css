@@ -23,6 +23,7 @@ button,input,select{font:inherit}
 .brand-name{font-family:var(--font-display);font-weight:600;font-size:var(--fs-lg);letter-spacing:.02em;line-height:1.35;word-break:keep-all}
 .brand .brand-frog{order:-1}
 .sb-top{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:calc(var(--space-2) * -1) 0 calc(var(--space-1) * -1)}
+.sb-fold-hint{font-size:var(--fs-xs);color:var(--text-faint)}
 .side-fold{flex:none;width:28px;height:28px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--surface);color:var(--text-muted);cursor:pointer;line-height:1;font-size:var(--fs-md)}
 .side-fold:hover{color:var(--primary-strong);border-color:var(--primary)}

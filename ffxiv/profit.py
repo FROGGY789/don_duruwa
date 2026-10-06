@@ -59,6 +59,7 @@ class Stats:
     bait: list = field(default_factory=list)  # 미끼로 본 매물
 
 
+GIL_MOVE_RATIO = 3000  # 딱 떨어지는 100만 길 넘는 판매가 원가의 몇 배 넘으면 길 옮기기 거래로 볼지
 DC_ODD_RATIO = 10  # 한국 전체 판매가 가운데 값의 몇 배 넘으면 서버랑 상관없이 이상 거래로 볼지
 
 
@@ -189,6 +190,7 @@ class Calculator:
         self.free = {}  # {아이템ID: 비고} — 교환으로 얻는 재료라 길은 안 드는 것 (⚒️ 교환 재료로 만들기)
         self._stats = {}
         self._clean = {}
+        self._floor = {}
         self.odd_ratio = cfg.get("odd_sale_ratio", 3)
         self.furniture = set(cfg["furniture_ui_categories"])
         # ItemUICategory → (분류, 세부 분류)
@@ -211,8 +213,29 @@ class Calculator:
         """서버별 이상 거래·미끼 가르기는 아이템·품질마다 한 번만 한다."""
         key = (item_id, hq, outlier_ratio)
         if key not in self._clean:
-            self._clean[key] = cleaned(self.market.get(item_id), hq, self.hours, outlier_ratio, self.odd_ratio)
+            kept, dropped, good, bait = cleaned(self.market.get(item_id), hq, self.hours, outlier_ratio, self.odd_ratio)
+            # 길 옮기기 거래: 100만 길 넘는 딱 떨어지는 값인데 만드는 원가(또는 NPC 값)의 수천 배면 판매 기록이 그것뿐이어도 뺀다
+            floor = self.cost_floor(item_id)
+            if floor and self.odd_ratio:
+                fake = [x for x in kept if x[0] >= 1_000_000 and x[0] % 100_000 == 0 and x[0] > floor * GIL_MOVE_RATIO]
+                if fake:
+                    kept = [x for x in kept if x not in fake]
+                    dropped = dropped + fake
+            self._clean[key] = kept, dropped, good, bait
         return self._clean[key]
+
+    def cost_floor(self, item_id):
+        """이 템을 구하는 데 드는 대충 최소 비용 (NPC 값 또는 직접 만드는 원가). 모르면 None."""
+        if item_id in self._floor:
+            return self._floor[item_id]
+        self._floor[item_id] = None  # 재귀 막기
+        costs = [self.gd.npc_prices[item_id]] if item_id in self.gd.npc_prices else []
+        for r in self.gd.recipes_by_result.get(item_id, []):
+            node = self.craft(r, 1, (item_id,))
+            if node.unit_cost:
+                costs.append(node.unit_cost)
+        self._floor[item_id] = min(costs) if costs else None
+        return self._floor[item_id]
 
     # ── 재료 구매 ──
     def market_buy_price(self, item_id, need):

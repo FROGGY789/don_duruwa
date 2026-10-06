@@ -441,3 +441,20 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .mat-copy{border:0;background:none;padding:0 3px;margin-left:2px;cursor:pointer;font-size:var(--fs-xs);opacity:.45;vertical-align:middle}
 .mat-copy:hover{opacity:1}
 .mat-copy.copied{opacity:1;color:var(--positive);font-weight:700}
+/* 장보기 표: 숫자 칸(수량·단가·금액)은 폭을 정해 두고, 재료 이름 칸만 줄바꿈해서 오른쪽이 안 잘리게 */
+.cart-group table{width:100%;table-layout:fixed}
+.cart-group table td{padding:6px 6px}
+.cart-group table td:first-child{white-space:normal;overflow-wrap:anywhere;padding-left:var(--space-3);line-height:1.5}
+.cart-group table td:nth-child(2){width:78px}
+.cart-group table td:nth-child(3){width:96px}
+.cart-group table td:nth-child(4){width:78px;padding-right:var(--space-3)}
+.cart-group table td:nth-child(3) small.short{display:block;margin:0}
+.cart-group .mat-for{max-width:100%;margin-left:24px}
+.cart-group .qty-in{width:4.2em}
+@media (max-width:480px){
+  .cart-group table td:nth-child(2){width:62px}
+  .cart-group table td:nth-child(3){width:74px}
+  .cart-group table td:nth-child(4){width:64px}
+  .cart-group .qty-in{width:3.4em}
+  .cart-group table td{font-size:var(--fs-xs)}
+}

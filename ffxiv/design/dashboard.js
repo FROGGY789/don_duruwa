@@ -651,7 +651,7 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          ${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${tierMark(it.tier)}${gatherMarks(it.gather, it.gatherLv)}
+          <span class="cart-mat">${tierMark(it.tier)}${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<span class="cart-mat-tail"><button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}</span></span>
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited

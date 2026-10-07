@@ -451,10 +451,14 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cart-group table td{padding:6px 6px}
 .cart-group table td:first-child{white-space:normal;overflow-wrap:anywhere;padding-left:var(--space-3);line-height:1.5}
 .cart-group table td:nth-child(2){width:78px}
-.cart-group table td:nth-child(3){width:96px}
+.cart-group table td:nth-child(3){width:84px}
 .cart-group table td:nth-child(4){width:78px;padding-right:var(--space-3)}
 .cart-group table td:nth-child(3) small.short{display:block;margin:0}
 .cart-group .mat-for{max-width:100%;margin-left:24px}
+/* 장보기 재료 줄: [1차] 이름 📋 ⛏ 가 한 줄에 붙는다 (차수 뱃지가 이름 앞) */
+.cart-group .cart-mat .tier-mark{margin:0 5px 0 0}
+.cart-group .cart-mat .gather-mark{margin-left:2px;padding:0 3px}
+.cart-group .cart-mat .mat-copy{padding:0 2px}
 .cart-group .qty-in{width:4.2em}
 @media (max-width:480px){
   .cart-group table td:nth-child(2){width:62px}

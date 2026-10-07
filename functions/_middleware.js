@@ -184,6 +184,7 @@ async function handleRequest(env, form) {
 }
 
 // 🏰 자유부대: "char:캐릭터".fc 에 부대 이름, "fc:부대" 에 부대원 목록, "ret:캐릭터" 에 리테이너 이름들
+const SELL_DAYS = 7;
 const fcList = async (env, fc) => (fc ? (await env.ACCESS.get(`fc:${fc}`, { type: "json" })) || [] : []);
 async function setFc(env, who, fc) {
   const key = `char:${who}`, rec = (await env.ACCESS.get(key, { type: "json" })) || null;
@@ -204,6 +205,14 @@ async function handleFc(env, request, me) {
   if (!env.ACCESS) return json({ fc: "", members: [{ who: me, retainers: [] }] });
   if (request.method === "PUT") {
     const body = await request.json().catch(() => null);
+    // 🔔 직접 표시한 판매 중: [{i: 아이템ID, q: 0|1|null(품질 상관없음), w: 월드ID, at: 표시 시각(초)}] — 7일 지나면 저절로 풀린다
+    if (Array.isArray(body?.sell)) {
+      const old = Date.now() / 1000 - SELL_DAYS * 86400;
+      const sell = body.sell.map((x) => ({ i: Math.floor(Number(x?.i)), q: x?.q == null ? null : x.q ? 1 : 0, w: String(x?.w || "").slice(0, 8), n: String(x?.n || "").slice(0, 40), at: Number(x?.at) || 0 }))
+        .filter((x) => x.i > 0 && x.w && x.at > old).slice(0, 300);
+      await env.ACCESS.put(`sell:${me}`, JSON.stringify(sell));
+      return json({ ok: true, sell });
+    }
     const names = [...new Set((Array.isArray(body?.retainers) ? body.retainers : [])
       .map((x) => String(x || "").replace(/\s+/g, "")).filter((x) => x && x.length <= 20))].slice(0, 10);
     await env.ACCESS.put(`ret:${me}`, JSON.stringify(names));
@@ -213,7 +222,10 @@ async function handleFc(env, request, me) {
   const fc = (await record(env, me, true))?.fc || "";
   const whos = fc ? await fcList(env, fc) : [];
   if (!whos.includes(me)) whos.unshift(me);
-  const members = await Promise.all(whos.map(async (w) => ({ who: w, retainers: (await env.ACCESS.get(`ret:${w}`, { type: "json" })) || [] })));
+  const old = Date.now() / 1000 - SELL_DAYS * 86400;
+  const members = await Promise.all(whos.map(async (w) => ({ who: w,
+    retainers: (await env.ACCESS.get(`ret:${w}`, { type: "json" })) || [],
+    sell: ((await env.ACCESS.get(`sell:${w}`, { type: "json" })) || []).filter((x) => x.at > old) })));
   return json({ fc, members });
 }
 

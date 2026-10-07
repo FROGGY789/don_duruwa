@@ -400,6 +400,8 @@ async function render() {
     loadLive,
     materialInfo,
     fcSelling,
+    fcMarked,
+    fcToggle,
     // 장보기 '📒 만들었다': 담은 걸 오늘 제작일지에 적는다 (HQ 줄은 ID 를 원래 레시피로)
     logCraft: async (list) => {
       await journalLoad();
@@ -884,6 +886,11 @@ async function fcSalesLoad(force = false) {
       if (f.n && f.n[id]) names[id] = f.n[id];
     }
   }
+  const old = Date.now() / 1000 - 7 * 86400;
+  for (const m of FC.members) for (const x of m.sell || []) {
+    if (x.n && !names[x.i]) names[x.i] = x.n;
+    if (x.at > old) fcAdd(sales, x.i, { who: m.who, by: "m", ret: "", w: String(x.w), hq: x.q == null ? null : !!x.q, price: null, qty: null, at: x.at });
+  }
   FCS = { sales, names };
   fcLoading = null;
   return FCS;
@@ -893,7 +900,7 @@ function fcLive(id, listings) {
   if (!FCS || !FC) return;
   const byRet = {}, byMaker = {};
   for (const m of FC.members) { for (const r of m.retainers || []) byRet[r] = m.who; byMaker[charName(m.who)] = m.who; }
-  if (listings.length < 100) FCS.sales.delete(id);
+  if (listings.length < 100) FCS.sales.set(id, (FCS.sales.get(id) || []).filter((x) => x.by === "m")); // 🔔 직접 표시는 남긴다
   for (const l of listings) {
     const w = byRet[l.retainerName] || byMaker[l.creatorName];
     if (w) fcAdd(FCS.sales, id, { who: w, by: byRet[l.retainerName] ? "r" : "c", ret: l.retainerName || "", w: String(l.worldID), hq: !!l.hq,
@@ -903,16 +910,39 @@ function fcLive(id, listings) {
 // 순위 줄: 부대원이 이 템(같은 품질)을 이 서버(통합이면 아무 서버)에 올려 뒀나
 function fcSelling(row, server) {
   const list = (FCS && FCS.sales.get(row.item)) || [];
-  const hit = list.filter((x) => (row.sellingHq == null || x.hq === row.sellingHq) && (server === "dc" || x.w === server));
+  const hit = list.filter((x) => (row.sellingHq == null || x.hq == null || x.hq === row.sellingHq) && (server === "dc" || x.w === server));
   if (!hit.length) return null;
   const names = Object.fromEntries(meta.servers.map((x) => [x.key, x.name]));
   const people = [...new Set(hit.map((x) => (x.who === who() ? "내가" : charName(x.who))))];
   return {
     text: `🏷 ${people[0]}${people.length > 1 ? ` 외 ${people.length - 1}명` : ""} 판매중`,
-    tip: hit.sort((a, b) => a.price - b.price).slice(0, 6).map((x) => `${x.who === who() ? "나" : charName(x.who)} · ${names[x.w] || x.w} ${x.hq ? "HQ " : ""}${Math.round(x.price).toLocaleString("ko-KR")}길 ×${x.qty} (${x.by === "r" ? x.ret : "제작 서명"} · ${ago(x.at)} 확인)`).join("\n")
+    tip: hit.sort((a, b) => (a.price ?? -1) - (b.price ?? -1)).slice(0, 6).map((x) => `${x.who === who() ? "나" : charName(x.who)} · ${names[x.w] || x.w} ${x.hq ? "HQ " : ""}`
+      + (x.by === "m" ? `🔔 직접 표시 (${ago(x.at)})` : `${Math.round(x.price).toLocaleString("ko-KR")}길 ×${x.qty} (${x.by === "r" ? x.ret : "제작 서명"} · ${ago(x.at)} 확인)`)).join("\n")
       + "\n부대원이 이미 올려 둔 템이다 개굴",
   };
 }
+// 🔔 직접 표시: 리테이너로 못 잡힐 때 내가 '판매 중' 이라고 찍어 둔다 (내 서버, 그 줄 품질, 7일 지나면 풀림)
+const homeWorld = () => (meta.servers.find((x) => x.key !== "dc" && x.name === String(who()).split("@")[1]) || {}).key || String(meta.home);
+const fcMe = () => FC && FC.members.find((m) => m.who === who());
+const fcMyMarks = () => [...((fcMe() || {}).sell || [])];
+const markQ = (row) => (row.sellingHq == null ? null : row.sellingHq ? 1 : 0);
+async function fcSaveMarks(sell) {
+  const res = await fetch("/__fc", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sell }) });
+  if (!res.ok) throw new Error(`저장 ${res.status}`);
+  FC = null; FCS = null;
+  await fcSalesLoad();
+}
+function fcMarked(row) {
+  return fcMyMarks().some((x) => x.i === row.item && x.q === markQ(row) && String(x.w) === homeWorld());
+}
+async function fcToggle(row) {
+  await fcLoad();
+  const on = fcMarked(row), w = homeWorld(), q = markQ(row);
+  const rest = fcMyMarks().filter((x) => !(x.i === row.item && x.q === q && String(x.w) === w));
+  await fcSaveMarks(on ? rest : [{ i: row.item, q, w, n: row.name, at: Math.floor(Date.now() / 1000) }, ...rest]);
+  render();
+}
+
 async function renderFc() {
   const app = document.getElementById("app");
   if (!app.querySelector(".fc-page")) app.innerHTML = `<div class="boot">🐸 부대 불러오는 중이다 개굴…</div>`;
@@ -925,7 +955,8 @@ async function renderFc() {
   const card = (m) => {
     const rows = (byWho[m.who] || []).sort((a, b) => b.at - a.at);
     const body = rows.map((x) => `<tr><td>${esc(FCS.names[x.id] || `아이템 ${x.id}`)}${x.hq ? ' <span class="fc-hq">HQ</span>' : ""}</td><td>${esc(names[x.w] || x.w)}</td>
-      <td class="num">${Math.round(x.price).toLocaleString("ko-KR")}</td><td class="num">${x.qty}</td><td>${esc(x.by === "r" ? x.ret : "제작 서명")}</td><td class="num faint">${esc(ago(x.at))}</td></tr>`).join("");
+      <td class="num">${x.price == null ? '<span class="dash">-</span>' : Math.round(x.price).toLocaleString("ko-KR")}</td><td class="num">${x.qty ?? '<span class="dash">-</span>'}</td>
+      <td>${x.by === "m" ? `🔔 직접 표시${m.who === who() ? ` <button type="button" class="chip-x" data-fc-unmark="${x.id}" data-q="${x.hq == null ? "" : x.hq ? 1 : 0}" data-w="${esc(x.w)}" title="표시 풀기">✕</button>` : ""}` : esc(x.by === "r" ? x.ret : "제작 서명")}</td><td class="num faint">${esc(ago(x.at))}</td></tr>`).join("");
     return `<div class="j-card fc-member"><div class="j-head"><h2>${m.who === who() ? "🐸 " : "🧑‍🌾 "}${esc(m.who)} <span class="cnt">${rows.length}</span></h2>
       <div class="fc-rets">${(m.retainers || []).map((r) => `<span class="fc-ret">${esc(r)}</span>`).join("") || '<span class="faint">리테이너를 아직 안 적었다 개굴</span>'}</div></div>
       ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>아이템</th><th>서버</th><th class="num">단가</th><th class="num">수량</th><th>리테이너</th><th class="num">확인</th></tr></thead><tbody>${body}</tbody></table></div>`
@@ -944,6 +975,13 @@ async function renderFc() {
   </section>`;
 }
 document.getElementById("app").addEventListener("click", async (e) => {
+  const un = e.target.closest("[data-fc-unmark]");
+  if (un && page() === "fc") {
+    const q = un.dataset.q === "" ? null : Number(un.dataset.q);
+    await fcSaveMarks(fcMyMarks().filter((x) => !(x.i === Number(un.dataset.fcUnmark) && x.q === q && String(x.w) === un.dataset.w)));
+    renderFc();
+    return;
+  }
   const b = e.target.closest("[data-fc-save]");
   if (!b || page() !== "fc") return;
   const retainers = document.getElementById("fc-rets").value.split(/[,，、\n]/).map((x) => x.replace(/\s+/g, "")).filter(Boolean);
@@ -1208,7 +1246,7 @@ const TOUR = [
   { sel: ".live", open: true, title: "⚡ 지금 시세", text: "방금 받은 서버별 최저 매물, 재료 지금 값, 지금 기준 순수익이다 개굴. 만들기 전에 여기서 재료값이 표보다 비싸졌는지 꼭 봐라 개굴." },
   { sel: ".mat-link", open: true, title: "재료 → 트래킹", text: "재료 이름을 누르면 📈 재료 트래킹에 담기고 그리로 간다 개굴. 서버별 최저가랑 살 때인지 알려준다 개굴." },
   { sel: ".rank-table .pick", title: "장보기", text: "+ 를 누르면 장보기에 담긴다 개굴. 오른쪽 아래 장바구니에서 서버별로 뭘 몇 개 살지 정리해 준다 개굴." },
-  { sel: ".rank-table th.col-log", to: ".rank-table .log-btn", title: "📒 제작일지에 바로 적기", text: "표 맨 오른쪽 📒 를 누르면 장보기 없이 그 템을 오늘 📒 나의 제작일지에 1회 적는다 개굴. 3개 만들었으면 3번 눌러라 개굴. 적은 기록은 📒 나의 제작일지 메뉴에서 보고 지울 수 있다 개굴." },
+  { sel: ".rank-table th.col-log", to: ".rank-table .log-btn", title: "📒 제작일지 · 🔔 판매 중 표시", text: "표 맨 오른쪽 📒 를 누르면 장보기 없이 그 템을 오늘 📒 나의 제작일지에 1회 적는다 개굴. 3개 만들었으면 3번 눌러라 개굴. 옆의 회색 🔔 는 '내가 이거 팔고 있다' 표시다 개굴. 누르면 부대원 화면에서 그 줄이 회색이 되고, 7일 지나면 저절로 풀린다 개굴." },
   { sel: ".side-fold", side: true, title: "사이드바 접기", text: "표를 넓게 보고 싶으면 « 를 눌러 접어라 개굴. 왼쪽 위 ☰ 설정으로 다시 편다 개굴. 사용법은 사이드바 맨 아래에서 다시 볼 수 있다 개굴." },
 ];
 function tour() {

@@ -17,7 +17,7 @@ const COLUMNS = [
   { key: "daily", label: "하루 잠재 이익", num: true, sortable: true },
   { key: "updated", label: "데이터 업데이트", sortable: true },
   { key: "etc", label: "기타" },
-  { key: "log", label: "📒", tip: "📒 를 누르면 장보기 없이 오늘 제작일지에 1회 적힌다 개굴. 여러 번 누르면 그만큼 적힌다 개굴" }, // 제작일지에 바로 적기 (제작 페이지만)
+  { key: "log", label: "📒 🔔", tip: "📒 를 누르면 장보기 없이 오늘 제작일지에 1회 적힌다 개굴. 여러 번 누르면 그만큼 적힌다 개굴.\n🔔 를 누르면 '내가 이거 팔고 있다' 표시가 켜진다 개굴. 부대원 순위에서 그 줄이 회색이 되고, 7일 지나면 저절로 풀린다 개굴" }, // 제작일지에 바로 적기 (제작 페이지만)
 ];
 
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather", "교환": "src-gather" };
@@ -245,7 +245,8 @@ function renderTable(d, rows) {
       daily: `<td class="num">${gil(v.daily)}</td>`,
       updated: `<td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>`,
       etc: `<td><div class="badges">${badges}</div></td>`,
-      log: `<td><button type="button" class="log-btn" data-log-row="${r.id}" aria-label="제작일지에 1회 적기">📒</button></td>`,
+      log: `<td><div class="log-cell"><button type="button" class="log-btn" data-log-row="${r.id}" aria-label="제작일지에 1회 적기">📒</button>${d.fcToggle
+        ? `<button type="button" class="bell-btn${d.fcMarked(r) ? " on" : ""}" data-bell-row="${r.id}" aria-label="${d.fcMarked(r) ? "판매 중 표시 끄기" : "판매 중 표시 켜기"}">🔔</button>` : ""}</div></td>`,
     };
     return `
       <tr class="clickable${state.selected === r.id ? " selected" : ""}${fc ? " fc-selling" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
@@ -301,8 +302,7 @@ function renderDetail(d, row) {
         </div>
         ${row.sources && row.sources.length ? `<div class="sources"><h3>📍 어디서 바꾸나</h3><ul>${row.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
         ${renderLive(d, row)}
-        ${renderInsights(d, row)}
-        ${row.materials ? `<div class="table-wrap"><table>
+        ${row.materials ? `<div class="mat-head"><h3>📦 재료 가격</h3></div><div class="table-wrap"><table>
           <thead><tr>
             <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">표 단가</th>
             <th class="num live-col" data-tip="품목을 누를 때 방금 받은 매물로, 필요 수량만큼 싼 것부터 샀을 때 개당 값 (구매세 포함) 개굴">⚡ 지금 단가</th><th class="num live-col">차이</th>
@@ -310,6 +310,7 @@ function renderDetail(d, row) {
           </tr></thead>
           <tbody>${body}</tbody>
         </table></div>` : ""}
+        ${renderInsights(d, row)}
       </div>
     </section>`;
 }
@@ -866,6 +867,13 @@ export default function (component) {
     if (mat && data.trackMaterial) hideMatPop();
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     // 📒 순위 표에서 바로 제작일지에 1회 적기
+    const bell = e.target.closest("[data-bell-row]");
+    if (bell && data.fcToggle) {
+      const row = data.rows.find((x) => String(x.id) === bell.dataset.bellRow);
+      bell.disabled = true;
+      if (row) data.fcToggle(row).catch(() => { bell.textContent = "⚠"; bell.disabled = false; });
+      return;
+    }
     const logBtn = e.target.closest("[data-log-row]");
     if (logBtn && data.logCraft) {
       logBtn.disabled = true;

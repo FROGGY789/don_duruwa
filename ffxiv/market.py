@@ -137,6 +137,8 @@ class Universalis:
                     "listings": listings,
                     # {"월드ID:0 또는 1(HQ)": 전체 매물 수}
                     "counts": counts,
+                    # 🏰 부대원 판매 찾기용: [리테이너, 제작자 서명, 월드ID, HQ여부, 단가, 수량, 확인 시각(초)] — 전부
+                    "sellers": _sellers(cur.get("listings", []), default_world),
                     # [단가, 수량, HQ여부, 판매 시각(초), 월드ID]
                     "sales": [[s["pricePerUnit"], s["quantity"], bool(s.get("hq")), s["timestamp"],
                                s.get("worldID", default_world)]
@@ -170,6 +172,12 @@ def _trim_listings(raw, default_world):
         listings.extend(group[:KEEP_LISTINGS])
         counts[f"{world}:{int(hq)}"] = len(group)
     return listings, counts
+
+
+def _sellers(raw, default_world):
+    return [[l.get("retainerName") or "", l.get("creatorName") or "", l.get("worldID", default_world), int(bool(l.get("hq"))),
+             l["pricePerUnit"], l["quantity"], int(l.get("lastReviewTime") or 0)]
+            for l in raw if l.get("retainerName") or l.get("creatorName")]
 
 
 class MarketCache:

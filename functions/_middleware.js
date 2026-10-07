@@ -183,6 +183,40 @@ async function handleRequest(env, form) {
   return loginPage({ mode: "sent", info: `${who.full} 신청했다 개굴. 로살리아@초코보가 허락하면 들어올 수 있다 개굴.` });
 }
 
+// 🏰 자유부대: "char:캐릭터".fc 에 부대 이름, "fc:부대" 에 부대원 목록, "ret:캐릭터" 에 리테이너 이름들
+const fcList = async (env, fc) => (fc ? (await env.ACCESS.get(`fc:${fc}`, { type: "json" })) || [] : []);
+async function setFc(env, who, fc) {
+  const key = `char:${who}`, rec = (await env.ACCESS.get(key, { type: "json" })) || null;
+  const old = rec?.fc || "";
+  if (old && old !== fc) {
+    const left = (await fcList(env, old)).filter((x) => x !== who);
+    if (left.length) await env.ACCESS.put(`fc:${old}`, JSON.stringify(left));
+    else await env.ACCESS.delete(`fc:${old}`);
+  }
+  if (fc) {
+    const members = await fcList(env, fc);
+    if (!members.includes(who)) await env.ACCESS.put(`fc:${fc}`, JSON.stringify([...members, who]));
+  }
+  return rec;
+}
+
+async function handleFc(env, request, me) {
+  if (!env.ACCESS) return json({ fc: "", members: [{ who: me, retainers: [] }] });
+  if (request.method === "PUT") {
+    const body = await request.json().catch(() => null);
+    const names = [...new Set((Array.isArray(body?.retainers) ? body.retainers : [])
+      .map((x) => String(x || "").replace(/\s+/g, "")).filter((x) => x && x.length <= 20))].slice(0, 10);
+    await env.ACCESS.put(`ret:${me}`, JSON.stringify(names));
+    return json({ ok: true, retainers: names });
+  }
+  if (request.method !== "GET") return json({ error: "없는 방법이다 개굴" }, 405);
+  const fc = (await record(env, me, true))?.fc || "";
+  const whos = fc ? await fcList(env, fc) : [];
+  if (!whos.includes(me)) whos.unshift(me);
+  const members = await Promise.all(whos.map(async (w) => ({ who: w, retainers: (await env.ACCESS.get(`ret:${w}`, { type: "json" })) || [] })));
+  return json({ fc, members });
+}
+
 // 🔑 권한 관리 (관리자만): 목록 보기, 허락·거절·내보내기
 async function handleAdmin(env, request, me, url) {
   if (!isAdmin(env, me)) return json({ error: "관리자만 된다 개굴" }, 403);
@@ -201,14 +235,24 @@ async function handleAdmin(env, request, me, url) {
     return json({ items, admins: admins(env), preset: list(env.ALLOWED_CHARACTERS) });
   }
   if (url.pathname === "/__admin/decide" && request.method === "POST") {
-    const { who, action } = await request.json();
+    const { who, action, fc: fcName } = await request.json();
     const ch = parseCharacter(who);
-    if (!ch || !["approve", "deny", "remove"].includes(action)) return json({ error: "잘못된 요청이다 개굴" }, 400);
+    if (!ch || !["approve", "deny", "remove", "fc"].includes(action)) return json({ error: "잘못된 요청이다 개굴" }, 400);
     const key = `char:${ch.full}`;
+    if (action === "fc") {
+      const fc = String(fcName || "").trim().replace(/\s+/g, " ").slice(0, 20);
+      const rec = await env.ACCESS.get(key, { type: "json" });
+      const ok = rec?.status === "approved" || isAdmin(env, ch.full) || list(env.ALLOWED_CHARACTERS).includes(ch.full);
+      if (!ok) return json({ error: "허락된 캐릭터만 부대에 넣을 수 있다 개굴" }, 400);
+      await setFc(env, ch.full, fc);
+      await env.ACCESS.put(key, JSON.stringify({ ...(rec || { note: "", requestedAt: Date.now(), decidedAt: Date.now() }), status: "approved", fc }));
+      return json({ ok: true });
+    }
+    if (action !== "approve") await setFc(env, ch.full, ""); // 내보내거나 거절하면 부대에서도 뺀다
     if (action === "remove") await env.ACCESS.delete(key);
     else {
       const rec = (await env.ACCESS.get(key, { type: "json" })) || { note: "", requestedAt: Date.now() };
-      await env.ACCESS.put(key, JSON.stringify({ ...rec, status: action === "approve" ? "approved" : "denied", decidedAt: Date.now() }));
+      await env.ACCESS.put(key, JSON.stringify({ ...rec, ...(action === "deny" ? { fc: "" } : {}), status: action === "approve" ? "approved" : "denied", decidedAt: Date.now() }));
     }
     return json({ ok: true });
   }
@@ -254,6 +298,7 @@ export async function onRequest(ctx) {
   if (url.pathname === "/__settings") return me ? handleSettings(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
   // 📒 제작일지: 캐릭터마다 따로 (한 줄 50바이트쯤, 최대 400KB)
   if (url.pathname === "/__journal") return me ? handleSettings(env, request, me, "log", "journal", 400000) : json({ error: "로그인이 필요하다 개굴" }, 401);
+  if (url.pathname === "/__fc") return me ? handleFc(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (url.pathname.startsWith("/__admin/")) return me ? handleAdmin(env, request, me, url) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (me) return next();
 

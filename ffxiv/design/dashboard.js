@@ -220,6 +220,8 @@ function renderTable(d, rows) {
   }
   const body = rows.map((r, i) => {
     const v = V(r);
+    const fc = d.fcSelling ? d.fcSelling(r, state.server) : null; // 🏰 부대원이 이미 올려 둔 템이면 옅은 회색 줄
+    const fcTag = fc ? `<span class="fc-tag" data-tip="${esc(fc.tip)}">${esc(fc.text)}</span>` : "";
     const badges = [...r.badges, ...v.badges].map((b) => b.detail
       ? `<button type="button" class="badge ${esc(b.kind)} has-pop" data-pop="${esc(b.detail)}">${esc(b.text)}</button>`
       : `<span class="badge ${esc(b.kind)}${b.tip ? " has-tip" : ""}"${b.tip ? ` data-tip="${esc(b.tip)}"` : ""}>${esc(b.text)}</span>`).join("");
@@ -227,7 +229,7 @@ function renderTable(d, rows) {
       pick: `<td><button type="button" class="pick${state.cart[r.id] ? " on" : ""}" data-pick="${r.id}"
           title="${state.cart[r.id] ? "장보기에서 빼기" : "장보기에 담기"}">${state.cart[r.id] ? "✓" : "+"}</button></td>`,
       rank: `<td><span class="rank${i < 3 ? " top" : ""}">${i + 1}</span></td>`,
-      name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}${tierMark(r.tier)}</td>`,
+      name: `<td>${itemName(r.name, r.stars, r.sellingHq === true)}${tierMark(r.tier)}${fcTag}</td>`,
       job: `<td><span class="job">${esc(r.job)}</span></td>`,
       mat: `<td>${esc(r.mat || "")}${r.matQty > 1 ? ` <small class="per">×${r.matQty}</small>` : ""}</td>`,
       spend: `<td class="num">${gil(r.spend)}</td>`,
@@ -246,7 +248,7 @@ function renderTable(d, rows) {
       log: `<td><button type="button" class="log-btn" data-log-row="${r.id}" aria-label="제작일지에 1회 적기">📒</button></td>`,
     };
     return `
-      <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
+      <tr class="clickable${state.selected === r.id ? " selected" : ""}${fc ? " fc-selling" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
       // 누른 줄 바로 아래에 상세를 펼친다 (다시 누르면 접힘)
       (state.selected === r.id ? `<tr class="detail-row"><td colspan="${cols.length}"><div class="detail-inline">
         <div class="detail-close"><button type="button" data-close-detail="1">▲ 접기</button></div>${renderDetail(d, r)}</div></td></tr>` : "");

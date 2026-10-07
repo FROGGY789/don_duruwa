@@ -91,7 +91,7 @@ function who() {
 }
 // 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
 const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
-const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#journal" ? "journal" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#journal" ? "journal" : location.hash === "#fc" ? "fc" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
   : location.hash === "#admin" && adminUI() ? "admin" : "craft");
 let adminPending = 0;
 const days = () => meta.hours / 24;
@@ -167,6 +167,7 @@ async function loadLive(row) {
     fetch(`${UNIVERSALIS}/${dc}/${id}?listings=100&entries=0`).then((r) => { if (!r.ok) throw new Error(`시세 ${r.status}`); return r.json(); }),
     fetch(`${UNIVERSALIS}/history/${dc}/${id}?entriesWithin=${meta.hours * 3600}&entriesToReturn=999`).then((r) => (r.ok ? r.json() : { entries: [] })),
   ]);
+  fcLive(id, cur.listings || []);
   const want = (x) => row.sellingHq == null || !!x.hq === row.sellingHq; // 판매 품질에 맞는 것만
   const names = Object.fromEntries(meta.servers.filter((s) => s.key !== "dc").map((s) => [s.key, s.name]));
   const listings = (cur.listings || []).filter(want), sales = (hist.entries || []).filter(want);
@@ -336,6 +337,7 @@ async function render() {
   if (page() === "admin") return renderAdmin();
   if (page() === "track") return renderTrack();
   if (page() === "journal") return renderJournal();
+  if (page() === "fc") return renderFc();
   const p = page(), name = p === "exchange" ? "exchange" : `${p}-${QUALITY_KEY[S.quality]}`;
   // 교환은 화폐마다 값어치가 달라서, 처음 들어오면 군표부터 보여준다
   if (p !== lastPage) {
@@ -350,6 +352,7 @@ async function render() {
     document.getElementById("app").innerHTML = `<div class="boot">⚠ 데이터를 못 받아왔다 개굴. 조금 있다가 새로고침 해 봐라 개굴. (${esc(e.message)})</div>`;
     return;
   }
+  if (!FCS && !fcLoading) fcLoading = fcSalesLoad().then(() => { if (!["admin", "track", "journal", "fc"].includes(page())) render(); }, () => {});
   const { rows, stats, failed, cats, tax } = compute(p, ds, name);
   const F = S[p];
   const app = document.getElementById("app");
@@ -396,6 +399,7 @@ async function render() {
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
     materialInfo,
+    fcSelling,
     // 장보기 '📒 만들었다': 담은 걸 오늘 제작일지에 적는다 (HQ 줄은 ID 를 원래 레시피로)
     logCraft: async (list) => {
       await journalLoad();
@@ -793,14 +797,19 @@ async function renderAdmin() {
   const items = d.items || [];
   adminPending = items.filter((x) => x.status === "pending").length;
   renderSide();
+  // 관리자 캐릭터는 신청 기록이 없어도 허락됨에 같이 보여서 부대를 정할 수 있게
+  for (const a of d.admins || []) if (!items.some((x) => x.who === a)) items.push({ who: a, status: "approved", note: "관리자", admin: true });
+  const fcs = [...new Set(items.map((x) => x.fc).filter(Boolean))].sort();
   const group = (status, title, empty, buttons) => {
     const rs = items.filter((x) => x.status === status).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
+    const withFc = status === "approved";
     const body = rs.length ? rs.map((x) => `<tr><td><b>${esc(x.who)}</b></td><td>${esc(x.note || "")}</td>
+        ${withFc ? `<td class="fc-cell"><input type="text" class="fc-in" list="fc-names" maxlength="20" placeholder="부대 이름" value="${esc(x.fc || "")}" data-fc-who="${esc(x.who)}"><button type="button" class="cart-btn" data-fc-set="${esc(x.who)}">저장</button></td>` : ""}
         <td class="num">${fmtMs(x.requestedAt)}</td><td class="num">${fmtMs(x.decidedAt)}</td>
-        <td class="admin-btns">${buttons.map(([act, label, cls]) => `<button type="button" class="cart-btn ${cls}" data-decide="${act}" data-who="${esc(x.who)}">${label}</button>`).join("")}</td></tr>`).join("")
-      : `<tr><td colspan="5" class="faint">${empty}</td></tr>`;
+        <td class="admin-btns">${((d.admins || []).includes(x.who) ? [] : buttons).map(([act, label, cls]) => `<button type="button" class="cart-btn ${cls}" data-decide="${act}" data-who="${esc(x.who)}">${label}</button>`).join("")}</td></tr>`).join("")
+      : `<tr><td colspan="${withFc ? 6 : 5}" class="faint">${empty}</td></tr>`;
     return `<div class="admin-group"><h2>${title} <span class="cnt">${rs.length}</span></h2>
-      <div class="table-wrap"><table><thead><tr><th>캐릭터</th><th>한마디</th><th class="num">신청</th><th class="num">처리</th><th></th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>캐릭터</th><th>한마디</th>${withFc ? '<th title="같은 부대 이름끼리 묶여서 서로 판매 중인 템이 보인다 개굴. 비우고 저장하면 부대에서 빠진다 개굴">🏰 부대</th>' : ""}<th class="num">신청</th><th class="num">처리</th><th></th></tr></thead>
       <tbody>${body}</tbody></table></div></div>`;
   };
   app.innerHTML = `<section class="admin">
@@ -810,10 +819,21 @@ async function renderAdmin() {
     ${group("pending", "⏳ 허락 대기", "기다리는 신청이 없다 개굴.", [["approve", "허락", "primary"], ["deny", "거절", ""]])}
     ${group("approved", "✅ 허락됨", "아직 허락한 캐릭터가 없다 개굴.", [["remove", "내보내기", ""]])}
     ${group("denied", "🚫 거절됨", "거절한 신청이 없다 개굴.", [["approve", "허락", ""], ["remove", "지우기", ""]])}
+    <datalist id="fc-names">${fcs.map((f) => `<option value="${esc(f)}">`).join("")}</datalist>
     <p class="faint">관리자: ${esc((d.admins || []).join(", ") || "-")}${(d.preset || []).length ? ` · 설정으로 바로 허락: ${esc(d.preset.join(", "))}` : ""}</p>
   </section>`;
 }
 document.getElementById("app").addEventListener("click", async (e) => {
+  const f = e.target.closest("[data-fc-set]");
+  if (f) {
+    const whoName = f.dataset.fcSet, input = [...document.querySelectorAll("[data-fc-who]")].find((x) => x.dataset.fcWho === whoName);
+    f.disabled = true;
+    const res = await fetch("/__admin/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ who: whoName, action: "fc", fc: input ? input.value.trim() : "" }) });
+    if (!res.ok) window.alert((await res.json().catch(() => ({}))).error || "처리 못 했다 개굴");
+    FC = null; FCS = null;
+    renderAdmin();
+    return;
+  }
   const b = e.target.closest("[data-decide]");
   if (!b) return;
   const action = b.dataset.decide, whoName = b.dataset.who;
@@ -822,6 +842,117 @@ document.getElementById("app").addEventListener("click", async (e) => {
   const res = await fetch("/__admin/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ who: whoName, action }) });
   if (!res.ok) window.alert((await res.json().catch(() => ({}))).error || "처리 못 했다 개굴");
   renderAdmin();
+});
+
+// ── 🏰 우리 부대 ──
+// 부대원(나 포함) 리테이너 이름·제작자 서명으로, 매시간 받아 둔 매물(data/sellers)에서 지금 올려 둔 걸 찾는다
+let FC = null, FCS = null, fcLoading = null;
+const SELLER_SHARDS = 64;
+const nameShard = (name) => { let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return h % SELLER_SHARDS; }; // build.py name_shard 랑 같게
+const charName = (w) => String(w).split("@")[0];
+async function fcLoad(force = false) {
+  if (FC && !force) return FC;
+  try { const res = await fetch("/__fc", { cache: "no-store" }); FC = res.ok ? await res.json() : null; } catch { FC = null; }
+  if (!FC || !Array.isArray(FC.members)) FC = { fc: "", members: who() ? [{ who: who(), retainers: [] }] : [] };
+  return FC;
+}
+function fcKeys() {
+  const keys = [];
+  for (const m of FC.members) {
+    for (const r of m.retainers || []) keys.push(["r", r, m.who]);
+    keys.push(["c", charName(m.who), m.who]);
+  }
+  return keys;
+}
+function fcAdd(sales, id, x) {
+  const list = sales.get(id) || [];
+  if (!list.some((y) => y.who === x.who && y.w === x.w && y.hq === x.hq && y.price === x.price && y.qty === x.qty)) list.push(x);
+  sales.set(id, list);
+}
+async function fcSalesLoad(force = false) {
+  if (FCS && !force) return FCS;
+  await fcLoad(force);
+  const keys = fcKeys(), files = {};
+  await Promise.all([...new Set(keys.map((k) => nameShard(k[1])))].map(async (n) => {
+    try { files[n] = await getJSON(`data/sellers/s${n}.json`); } catch { files[n] = null; }
+  }));
+  const sales = new Map(), names = {};
+  for (const [t, name, w] of keys) {
+    const f = files[nameShard(name)];
+    for (const [id, world, hq, price, qty, at] of ((f || {})[t] || {})[name] || []) {
+      fcAdd(sales, id, { who: w, by: t, ret: t === "r" ? name : "", w: String(world), hq: !!hq, price, qty, at });
+      if (f.n && f.n[id]) names[id] = f.n[id];
+    }
+  }
+  FCS = { sales, names };
+  fcLoading = null;
+  return FCS;
+}
+// ⚡ 품목을 누르면 받은 매물로 그 템만 바로 고친다 (매물 100개 다 오면 뒤쪽은 몰라서 더하기만)
+function fcLive(id, listings) {
+  if (!FCS || !FC) return;
+  const byRet = {}, byMaker = {};
+  for (const m of FC.members) { for (const r of m.retainers || []) byRet[r] = m.who; byMaker[charName(m.who)] = m.who; }
+  if (listings.length < 100) FCS.sales.delete(id);
+  for (const l of listings) {
+    const w = byRet[l.retainerName] || byMaker[l.creatorName];
+    if (w) fcAdd(FCS.sales, id, { who: w, by: byRet[l.retainerName] ? "r" : "c", ret: l.retainerName || "", w: String(l.worldID), hq: !!l.hq,
+      price: l.pricePerUnit, qty: l.quantity, at: l.lastReviewTime || Date.now() / 1000 });
+  }
+}
+// 순위 줄: 부대원이 이 템(같은 품질)을 이 서버(통합이면 아무 서버)에 올려 뒀나
+function fcSelling(row, server) {
+  const list = (FCS && FCS.sales.get(row.item)) || [];
+  const hit = list.filter((x) => (row.sellingHq == null || x.hq === row.sellingHq) && (server === "dc" || x.w === server));
+  if (!hit.length) return null;
+  const names = Object.fromEntries(meta.servers.map((x) => [x.key, x.name]));
+  const people = [...new Set(hit.map((x) => (x.who === who() ? "내가" : charName(x.who))))];
+  return {
+    text: `🏷 ${people[0]}${people.length > 1 ? ` 외 ${people.length - 1}명` : ""} 판매중`,
+    tip: hit.sort((a, b) => a.price - b.price).slice(0, 6).map((x) => `${x.who === who() ? "나" : charName(x.who)} · ${names[x.w] || x.w} ${x.hq ? "HQ " : ""}${Math.round(x.price).toLocaleString("ko-KR")}길 ×${x.qty} (${x.by === "r" ? x.ret : "제작 서명"} · ${ago(x.at)} 확인)`).join("\n")
+      + "\n부대원이 이미 올려 둔 템이다 개굴",
+  };
+}
+async function renderFc() {
+  const app = document.getElementById("app");
+  if (!app.querySelector(".fc-page")) app.innerHTML = `<div class="boot">🐸 부대 불러오는 중이다 개굴…</div>`;
+  await fcSalesLoad(true);
+  if (page() !== "fc") return;
+  const names = Object.fromEntries(meta.servers.map((x) => [x.key, x.name]));
+  const me = FC.members.find((m) => m.who === who()) || { retainers: [] };
+  const byWho = {};
+  for (const [id, list] of FCS.sales) for (const x of list) (byWho[x.who] = byWho[x.who] || []).push({ id, ...x });
+  const card = (m) => {
+    const rows = (byWho[m.who] || []).sort((a, b) => b.at - a.at);
+    const body = rows.map((x) => `<tr><td>${esc(FCS.names[x.id] || `아이템 ${x.id}`)}${x.hq ? ' <span class="fc-hq">HQ</span>' : ""}</td><td>${esc(names[x.w] || x.w)}</td>
+      <td class="num">${Math.round(x.price).toLocaleString("ko-KR")}</td><td class="num">${x.qty}</td><td>${esc(x.by === "r" ? x.ret : "제작 서명")}</td><td class="num faint">${esc(ago(x.at))}</td></tr>`).join("");
+    return `<div class="j-card fc-member"><div class="j-head"><h2>${m.who === who() ? "🐸 " : "🧑‍🌾 "}${esc(m.who)} <span class="cnt">${rows.length}</span></h2>
+      <div class="fc-rets">${(m.retainers || []).map((r) => `<span class="fc-ret">${esc(r)}</span>`).join("") || '<span class="faint">리테이너를 아직 안 적었다 개굴</span>'}</div></div>
+      ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>아이템</th><th>서버</th><th class="num">단가</th><th class="num">수량</th><th>리테이너</th><th class="num">확인</th></tr></thead><tbody>${body}</tbody></table></div>`
+        : `<div class="detail-hint">지금 장터에서 찾은 매물이 없다 개굴.</div>`}</div>`;
+  };
+  app.innerHTML = `<section class="journal fc-page">
+    <div class="eyebrow">FREE COMPANY</div><h1>🏰 우리 부대${FC.fc ? ` · ${esc(FC.fc)}` : ""}</h1>
+    <p class="tagline">부대원이 장터에 올려 둔 템은 순위 표에서 옅은 회색 줄로 바뀐다 개굴. 같은 템 겹쳐서 만들지 말자 개굴.</p>
+    ${FC.fc ? "" : `<div class="notice"><span>🏰</span><span>아직 부대에 안 들어가 있다 개굴. 로살리아@초코보 한테 부대 묶어 달라고 해라 개굴. 그래도 내 리테이너를 적어 두면 내가 올린 템은 회색으로 보인다 개굴.</span></div>`}
+    <div class="j-card fc-mine"><h2>🧾 내 리테이너 이름</h2>
+      <p class="faint">게임 속 리테이너 이름 그대로 적어라 개굴. 여러 명이면 쉼표로 (최대 10명).</p>
+      <div class="fc-form"><input id="fc-rets" type="text" maxlength="230" placeholder="예: 개굴이, 올챙이" value="${esc((me.retainers || []).join(", "))}">
+        <button type="button" class="btn" data-fc-save="1">💾 저장</button><span class="fc-msg faint"></span></div></div>
+    ${FC.members.map(card).join("")}
+    <p class="faint">매시간 받은 시세 기준이다 개굴. 누가 장터를 열어서 시세가 올라와야 잡히니까, 막 올린 건 늦게 뜰 수 있다 개굴. 순위에서 품목을 누르면 그 템은 바로 다시 확인한다 개굴.</p>
+  </section>`;
+}
+document.getElementById("app").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-fc-save]");
+  if (!b || page() !== "fc") return;
+  const retainers = document.getElementById("fc-rets").value.split(/[,，、\n]/).map((x) => x.replace(/\s+/g, "")).filter(Boolean);
+  b.disabled = true;
+  const res = await fetch("/__fc", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retainers }) }).catch(() => null);
+  b.disabled = false;
+  if (!res || !res.ok) { document.querySelector(".fc-msg").textContent = "⚠ 저장 못 했다 개굴. 다시 해 봐라 개굴."; return; }
+  FC = null; FCS = null;
+  renderFc();
 });
 
 // ── 사이드바 ──
@@ -846,6 +977,7 @@ function sideHead(p) {
       <a href="#exchange-craft" class="${p === "exchangeCraft" ? "on" : ""}">🧪 교환 재료로 만들기</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
       <a href="#journal" class="${p === "journal" ? "on" : ""}">📒 나의 제작일지</a>
+      <a href="#fc" class="${p === "fc" ? "on" : ""}">🏰 우리 부대</a>
     </nav>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
@@ -868,6 +1000,15 @@ function renderSide() {
       <p class="hint">만든 걸 적어 두면 최근 30일 동안 자주 쓴 재료를 모아서, 평소보다 싸게 올라왔을 때 미리 사 두라고 알려준다 개굴.</p>
       <p class="hint">장보기에서 '📒 만들었다' 를 누르면 담은 걸 한 번에 적는다 개굴. 기록은 이 캐릭터에만 저장되고 다른 기기에서도 따라온다 개굴 (최근 1년치).</p>
       <p class="hint">🟢 평소보다 10%↓ 쌀 때 · 🟡 보통 · 🔴 평소보다 15%↑ 비쌀 때 — 제일 싼 서버 지금 매물을 지난 14일 하루 최저 매물(평소 최저가)이랑 비교한다 개굴. 기록이 5일 안 되면 7일 평균 판매가랑 비교한다 개굴.</p>
+      ${adminLink(p)}`;
+    return;
+  }
+  if (p === "fc") {
+    side.innerHTML = sideHead(p) + `
+      <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
+      <p class="hint">리테이너 이름을 적어 두면, 매시간 시세 받을 때 장터 매물에서 그 이름을 찾아 부대원이 뭘 팔고 있는지 알아낸다 개굴.</p>
+      <p class="hint">부대원이 팔고 있는 템은 제작·채집 순위에서 옅은 회색 줄 + 🏷 표시로 바뀐다 개굴. 서버 탭이면 그 서버에서 파는 것만, 🌏 통합이면 어느 서버든 친다 개굴.</p>
+      <p class="hint">부대는 로살리아@초코보가 🔑 권한 관리에서 묶어 준다 개굴.</p>
       ${adminLink(p)}`;
     return;
   }
@@ -1057,7 +1198,7 @@ function onboard() {
 // ❓ 사용법 둘러보기: 화면을 어둡게 깔고 설명할 곳만 하얗게 빛나는 네모로 비춘다
 const TOUR_KEY = () => `ffxivTourDone:${who()}`; // 사용법 봤는지도 캐릭터마다
 const TOUR = [
-  { sel: ".nav", side: true, title: "메뉴", text: "⚒️ 제작 · ⛏️ 채집 순위, 🪙 교환템 팔기 · 🧪 교환 재료로 만들기, 📈 재료 트래킹으로 옮겨 다닌다 개굴." },
+  { sel: ".nav", side: true, title: "메뉴", text: "⚒️ 제작 · ⛏️ 채집 순위, 🪙 교환템 팔기 · 🧪 교환 재료로 만들기, 📈 재료 트래킹, 📒 제작일지, 🏰 우리 부대로 옮겨 다닌다 개굴." },
   { sel: "[data-seg=quality]", side: true, title: "판매 품질", text: "NQ 로 팔지, HQ 로 팔지, 둘 다 한 순위에 볼지(통합) 고른다 개굴. 통합에선 HQ 줄 이름 끝에 HQ 마크가 붙는다 개굴." },
   { sel: "[data-path$='.minSales']", up: ".field", side: true, title: "필터", text: "판매 건수, 수익률, 순수익, 매물 수, 판매 소요일로 순위를 거른다 개굴. 숫자 바꾸면 바로 다시 계산된다 개굴." },
   { sel: ".cats.servers", title: "서버 고르기", text: "🌏 통합은 한국 전체 시세, 서버 버튼은 그 서버에서 팔 때 순위다 개굴. 🏠 가 내 서버다 개굴." },

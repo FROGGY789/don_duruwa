@@ -302,6 +302,43 @@ def write_page(out, name, summary, details, badges):
         write(out / f"{name}-d{n}.json", shards.get(n, {}))
 
 
+SELLER_SHARDS = 64
+
+
+def name_shard(name):
+    """이름 → 조각 번호. 화면(main.js nameShard)이랑 똑같이 UTF-16 글자 단위로 h*31+c."""
+    h = 0
+    b = name.encode("utf-16-le")
+    for i in range(0, len(b), 2):
+        h = (h * 31 + int.from_bytes(b[i:i + 2], "little")) & 0xFFFFFFFF
+    return h % SELLER_SHARDS
+
+
+def build_sellers(gd, items, out):
+    """🏰 우리 부대: 리테이너 이름(r)·제작자 서명(c) → 지금 올라와 있는 매물. 이름 조각별 파일로 나눠서
+    화면은 부대원 이름이 든 조각만 받는다. [아이템ID, 월드ID, HQ, 단가, 수량, 확인 시각(초)]"""
+    shards = {}
+    n = 0
+    for iid, entry in items.items():
+        for ret, crafter, world, hq, price, qty, at in entry.get("sellers") or []:
+            row = [iid, world, hq, price, qty, at]
+            for kind, name in (("r", ret), ("c", crafter)):
+                if not name:
+                    continue
+                sh = shards.setdefault(name_shard(name), {"r": {}, "c": {}, "n": {}})
+                sh[kind].setdefault(name, []).append(row)
+                if iid in gd.items:
+                    sh["n"][str(iid)] = gd.items[iid].name
+            n += 1
+    folder = out / "sellers"
+    folder.mkdir(exist_ok=True)
+    for i in range(SELLER_SHARDS):
+        write(folder / f"s{i}.json", shards.get(i, {"r": {}, "c": {}, "n": {}}))
+    rets = sum(len(sh["r"]) for sh in shards.values())
+    size = sum(f.stat().st_size for f in folder.iterdir())
+    return n, rets, size
+
+
 def copy_web(site):
     """화면 파일: web/ 의 껍데기 + ffxiv/design 의 표·상세 코드와 색."""
     for f in WEB.iterdir():
@@ -418,6 +455,10 @@ def main():
     save_history(hist_path, hist)
     n = build_tracking(gd, cache.items, hist, cfg, write, data)
     print(f"트래킹: 아이템 {n}개, 기록 {len(hist['days'])}일치 ({time.time() - t:.0f}초)")
+
+    t = time.time()
+    n, rets, size = build_sellers(gd, cache.items, data)
+    print(f"부대 판매 찾기: 매물 {n}개 · 리테이너 {rets}명 · {size / 1e6:.1f}MB ({time.time() - t:.0f}초)")
 
     home = server["world_id"]
     worlds = sorted(server["world_names"], key=lambda w: (int(w) != home, server["world_names"][w]))

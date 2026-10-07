@@ -302,7 +302,7 @@ def write_page(out, name, summary, details, badges):
         write(out / f"{name}-d{n}.json", shards.get(n, {}))
 
 
-SELLER_SHARDS = 64
+SELLER_SHARDS = 512
 
 
 def name_shard(name):

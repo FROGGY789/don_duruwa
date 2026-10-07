@@ -847,7 +847,7 @@ document.getElementById("app").addEventListener("click", async (e) => {
 // ── 🏰 우리 부대 ──
 // 부대원(나 포함) 리테이너 이름·제작자 서명으로, 매시간 받아 둔 매물(data/sellers)에서 지금 올려 둔 걸 찾는다
 let FC = null, FCS = null, fcLoading = null;
-const SELLER_SHARDS = 64;
+const SELLER_SHARDS = 512;
 const nameShard = (name) => { let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return h % SELLER_SHARDS; }; // build.py name_shard 랑 같게
 const charName = (w) => String(w).split("@")[0];
 async function fcLoad(force = false) {

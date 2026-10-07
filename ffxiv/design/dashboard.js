@@ -17,7 +17,7 @@ const COLUMNS = [
   { key: "daily", label: "하루 잠재 이익", num: true, sortable: true },
   { key: "updated", label: "데이터 업데이트", sortable: true },
   { key: "etc", label: "기타" },
-  { key: "log", label: "📒" }, // 제작일지에 바로 적기 (제작 페이지만)
+  { key: "log", label: "📒", tip: "📒 를 누르면 장보기 없이 오늘 제작일지에 1회 적힌다 개굴. 여러 번 누르면 그만큼 적힌다 개굴" }, // 제작일지에 바로 적기 (제작 페이지만)
 ];
 
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather", "교환": "src-gather" };
@@ -212,7 +212,7 @@ function renderTable(d, rows) {
     const cls = [`col-${c.key}`, c.num ? "num" : "", c.sortable ? "sortable" : "", state.sort === c.key ? "sorted" : "", state.sort === c.key && state.dir > 0 ? "asc" : ""]
       .filter(Boolean)
       .join(" ");
-    return `<th class="${cls}" ${c.sortable ? `data-sort="${c.key}" data-asc="${c.asc ? 1 : 0}"` : ""}>${esc(c.label.replace("{period}", d.period))}</th>`;
+    return `<th class="${cls}"${c.tip ? ` data-tip="${esc(c.tip)}"` : ""} ${c.sortable ? `data-sort="${c.key}" data-asc="${c.asc ? 1 : 0}"` : ""}>${esc(c.label.replace("{period}", d.period))}</th>`;
   }).join("");
 
   if (!rows.length) {
@@ -243,7 +243,7 @@ function renderTable(d, rows) {
       daily: `<td class="num">${gil(v.daily)}</td>`,
       updated: `<td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>`,
       etc: `<td><div class="badges">${badges}</div></td>`,
-      log: `<td><button type="button" class="log-btn" data-log-row="${r.id}" data-tip="오늘 📒 제작일지에 1회 적는다 개굴. 여러 번 누르면 그만큼 적힌다 개굴">📒</button></td>`,
+      log: `<td><button type="button" class="log-btn" data-log-row="${r.id}" aria-label="제작일지에 1회 적기">📒</button></td>`,
     };
     return `
       <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
@@ -1150,9 +1150,12 @@ export default function (component) {
     let tip = root.querySelector(".tip");
     if (!hit) { tip?.remove(); return; }
     if (!tip) { tip = document.createElement("div"); tip.className = "tip"; root.appendChild(tip); }
-    tip.textContent = hit.dataset.tip;
-    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8) + "px";
-    tip.style.top = e.clientY - 34 + "px";
+    if (tip.textContent !== hit.dataset.tip) tip.textContent = hit.dataset.tip;
+    tip.style.left = "0px"; // 먼저 왼쪽 끝에서 원래 폭을 잰다 (오른쪽 끝에서 재면 잴 때마다 폭이 줄어든다)
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    const x = e.clientX + 12 + w > window.innerWidth - 8 ? e.clientX - 12 - w : e.clientX + 12; // 오른쪽이 모자라면 커서 왼쪽에
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = (e.clientY - 12 - h < 8 ? e.clientY + 20 : e.clientY - 12 - h) + "px"; // 위가 모자라면 커서 밑에
   };
   root.onmouseleave = () => root.querySelector(".tip")?.remove();
 

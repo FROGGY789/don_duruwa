@@ -1067,6 +1067,7 @@ const TOUR = [
   { sel: ".live", open: true, title: "⚡ 지금 시세", text: "방금 받은 서버별 최저 매물, 재료 지금 값, 지금 기준 순수익이다 개굴. 만들기 전에 여기서 재료값이 표보다 비싸졌는지 꼭 봐라 개굴." },
   { sel: ".mat-link", open: true, title: "재료 → 트래킹", text: "재료 이름을 누르면 📈 재료 트래킹에 담기고 그리로 간다 개굴. 서버별 최저가랑 살 때인지 알려준다 개굴." },
   { sel: ".rank-table .pick", title: "장보기", text: "+ 를 누르면 장보기에 담긴다 개굴. 오른쪽 아래 장바구니에서 서버별로 뭘 몇 개 살지 정리해 준다 개굴." },
+  { sel: ".rank-table th.col-log", to: ".rank-table .log-btn", title: "📒 제작일지에 바로 적기", text: "표 맨 오른쪽 📒 를 누르면 장보기 없이 그 템을 오늘 📒 나의 제작일지에 1회 적는다 개굴. 3개 만들었으면 3번 눌러라 개굴. 적은 기록은 📒 나의 제작일지 메뉴에서 보고 지울 수 있다 개굴." },
   { sel: ".side-fold", side: true, title: "사이드바 접기", text: "표를 넓게 보고 싶으면 « 를 눌러 접어라 개굴. 왼쪽 위 ☰ 설정으로 다시 편다 개굴. 사용법은 사이드바 맨 아래에서 다시 볼 수 있다 개굴." },
 ];
 function tour() {
@@ -1091,7 +1092,9 @@ function tour() {
   function place() {
     const st = steps[i], el = target(st);
     if (!el) return;
-    const r = el.getBoundingClientRect(), pad = 6;
+    const pad = 6, a = el.getBoundingClientRect(), b = st.to && document.querySelector(st.to)?.getBoundingClientRect();
+    const r = b ? { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) } : a; // to: 두 곳을 한 네모로
+    r.height = r.bottom - r.top;
     const x1 = Math.max(4, r.left - pad), x2 = Math.min(innerWidth - 4, r.right + pad); // 가로로 넘치는 표는 화면 안까지만
     Object.assign(spot.style, { left: x1 + "px", top: r.top - pad + "px", width: x2 - x1 + "px", height: r.height + pad * 2 + "px" });
     const cw = card.offsetWidth, ch = card.offsetHeight, vw = innerWidth, vh = innerHeight;

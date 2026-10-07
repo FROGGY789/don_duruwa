@@ -320,6 +320,11 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .rank-table > table > thead th.num{min-width:3.5em}
 .rank-table > table > tbody > tr > td{padding:10px 8px}
 .rank-table td[data-col="etc"]{min-width:150px}
+/* 📒 열은 표가 옆으로 넘쳐도 오른쪽 끝에 붙어 늘 보인다 */
+.rank-table > table > thead th.col-log{position:sticky;right:0;top:0;z-index:3;text-align:center;box-shadow:inset 1px 0 0 var(--border)}
+.rank-table > table > tbody > tr > td[data-col="log"]{position:sticky;right:0;z-index:1;background:var(--surface);text-align:center;padding:6px;box-shadow:inset 1px 0 0 var(--border)}
+.rank-table > table > tbody > tr.clickable:hover > td[data-col="log"]{background:var(--surface-hover)}
+.rank-table > table > tbody > tr.selected > td[data-col="log"]{background:var(--row-selected)}
 .rank-table td[data-col="etc"] .badges{max-width:200px}
 .rank-table td[data-col="name"]{white-space:normal;word-break:keep-all;min-width:140px;max-width:220px;line-height:1.35}
 

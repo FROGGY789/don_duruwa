@@ -303,7 +303,7 @@ function renderDetail(d, row) {
         ${row.materials ? `<div class="table-wrap"><table>
           <thead><tr>
             <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">표 단가</th>
-            <th class="num live-col" data-tip="품목을 누를 때 Universalis 에서 방금 받은 매물로, 필요 수량만큼 싼 것부터 샀을 때 개당 값 (구매세 포함) 개굴">⚡ 지금 단가</th><th class="num live-col">차이</th>
+            <th class="num live-col" data-tip="품목을 누를 때 방금 받은 매물로, 필요 수량만큼 싼 것부터 샀을 때 개당 값 (구매세 포함) 개굴">⚡ 지금 단가</th><th class="num live-col">차이</th>
             <th class="num">소계</th><th>구매처</th><th class="num">${esc(d.period)} 판매 수량</th><th class="num">현재 매물 수</th><th>구매 서버</th>
           </tr></thead>
           <tbody>${body}</tbody>
@@ -316,7 +316,7 @@ function renderDetail(d, row) {
 function renderLive(d, row) {
   if (!d.loadLive) return "";
   const L = row.live;
-  if (!L || L.loading) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">Universalis 에서 방금 시세 받는 중이다 개굴…</span></div></div>`;
+  if (!L || L.loading) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">방금 시세 받는 중이다 개굴…</span></div></div>`;
   if (L.error) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">못 받아왔다 개굴 (${esc(L.error)}). 표 숫자는 매시간 받아 둔 값이다 개굴.</span>
     <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div></div>`;
   const diff = L.net != null && V(row).net != null ? L.net - V(row).net : null;
@@ -327,7 +327,7 @@ function renderLive(d, row) {
     <td class="faint">${esc(w.uploaded)}</td></tr>`).join("");
   return `<div class="live">
     <div class="live-head"><h3>⚡ 지금 시세 · ${esc(L.time)} 받음</h3>
-      <span class="faint">표 숫자는 매시간 받아 둔 값이고, 이건 방금 Universalis 에서 다시 받은 값이다 개굴. 이상 거래·미끼는 안 뺐다 개굴.</span>
+      <span class="faint">표 숫자는 매시간 받아 둔 값이고, 이건 방금 다시 받은 값이다 개굴. 이상 거래·미끼는 안 뺐다 개굴.</span>
       <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div>
     <div class="live-kv">
       <div><span>지금 판매 예상가 (${esc(L.period)} 중앙값)</span><b>${gil(L.sell)}</b></div>
@@ -698,7 +698,7 @@ function renderCart(d) {
         <div class="cart-chips">${chips}<button type="button" class="cart-clear" data-clear="1">전부 비우기</button></div>
         <div class="cart-live">
           ${d.fetchListings ? `<button type="button" class="cart-btn primary" data-cart-live="1"${state.liveBusy ? " disabled" : ""}>${state.liveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>` : ""}
-          <span class="faint">${state.liveCart ? `⚡ ${esc(state.liveTime)} 에 Universalis 에서 다시 받은 값이다 개굴 (구매세 포함, 필요 수량만큼 싼 매물부터)`
+          <span class="faint">${state.liveCart ? `⚡ ${esc(state.liveTime)} 에 다시 받은 값이다 개굴 (구매세 포함, 필요 수량만큼 싼 매물부터)`
             : "지금은 매시간 받아 둔 값이다 개굴. 사러 가기 전에 눌러서 지금 값으로 다시 짜라 개굴"}${state.liveMsg ? ` · ⚠ ${esc(state.liveMsg)}` : ""}</span>
         </div>
         <div class="cart-groups">${tables}</div>

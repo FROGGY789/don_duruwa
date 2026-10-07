@@ -368,6 +368,7 @@ def main():
         ids = set(market_item_ids(gd, list(scope_recipes(gd, cfg, True))))
         ids |= {iid for iid in gd.gather if gd.items[iid].marketable}
         ids |= {o.item_id for o in offers}
+        ids |= {iid for iid, it in gd.items.items() if it.marketable}  # 🏰 부대원이 파는 건 순위에 없는 템일 수도 있다
         last = [0]
 
         def progress(p, msg):

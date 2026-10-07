@@ -471,3 +471,8 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .tip{white-space:normal;max-width:320px}
 .tier-mark,.gather-mark{cursor:default}
 .detail th.live-col,.detail td.live-col{background:color-mix(in oklab,var(--warning-soft) 45%,transparent)}
+
+/* 순위 표 📒 제작일지 바로 적기 */
+.log-btn{border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--radius-sm);padding:3px 7px;cursor:pointer;font-size:var(--fs-sm);line-height:1.2;min-width:2.6em}
+.log-btn:hover{border-color:var(--primary);background:var(--primary-soft)}
+.log-btn.done{border-color:var(--positive);background:var(--positive-soft);color:var(--positive);font-weight:700;font-size:var(--fs-xs)}

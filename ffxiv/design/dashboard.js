@@ -17,6 +17,7 @@ const COLUMNS = [
   { key: "daily", label: "하루 잠재 이익", num: true, sortable: true },
   { key: "updated", label: "데이터 업데이트", sortable: true },
   { key: "etc", label: "기타" },
+  { key: "log", label: "📒" }, // 제작일지에 바로 적기 (제작 페이지만)
 ];
 
 const SOURCE_CLASS = { "거래소": "src-market", "NPC": "src-npc", "직접 제작": "src-craft", "직접 채집": "src-gather", "교환": "src-gather" };
@@ -69,12 +70,12 @@ function columns(d) {
       pick("daily"), pick("updated"), pick("etc")];
   }
   if (isExchange(d)) {
-    return COLUMNS.filter((c) => !["pick", "cost"].includes(c.key)).map((c) => (
+    return COLUMNS.filter((c) => !["pick", "cost", "log"].includes(c.key)).map((c) => (
       c.key === "job" ? { ...c, label: "화폐" } : c.key === "level" ? { ...c, label: "교환가" }
         : c.key === "net" ? { ...c, label: "개당 순수익" } : c.key === "margin" ? { key: "perCur", label: "화폐 1개당", num: true, sortable: true } : c));
   }
-  if (!isGather(d)) return COLUMNS;
-  return COLUMNS.filter((c) => !["pick", "cost", "margin"].includes(c.key))
+  if (!isGather(d)) return d.logCraft ? COLUMNS : COLUMNS.filter((c) => c.key !== "log");
+  return COLUMNS.filter((c) => !["pick", "cost", "margin", "log"].includes(c.key))
     .map((c) => (c.key === "level" ? { ...c, label: "채집 레벨" } : c.key === "net" ? { ...c, label: "개당 순수익" } : c));
 }
 
@@ -242,6 +243,7 @@ function renderTable(d, rows) {
       daily: `<td class="num">${gil(v.daily)}</td>`,
       updated: `<td><span class="upd${r.stale ? " stale" : ""}">${esc(r.updatedText)}</span></td>`,
       etc: `<td><div class="badges">${badges}</div></td>`,
+      log: `<td><button type="button" class="log-btn" data-log-row="${r.id}" data-tip="오늘 📒 제작일지에 1회 적는다 개굴. 여러 번 누르면 그만큼 적힌다 개굴">📒</button></td>`,
     };
     return `
       <tr class="clickable${state.selected === r.id ? " selected" : ""}" data-id="${r.id}">${cols.map((c) => cell[c.key].replace("<td", `<td data-col="${c.key}"`)).join("")}</tr>` +
@@ -861,6 +863,16 @@ export default function (component) {
     const mat = e.target.closest("[data-track-mat]");
     if (mat && data.trackMaterial) hideMatPop();
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
+    // 📒 순위 표에서 바로 제작일지에 1회 적기
+    const logBtn = e.target.closest("[data-log-row]");
+    if (logBtn && data.logCraft) {
+      logBtn.disabled = true;
+      data.logCraft([{ id: Number(logBtn.dataset.logRow), n: 1 }]).then(() => {
+        logBtn.textContent = "✓+1"; logBtn.classList.add("done");
+        setTimeout(() => { logBtn.textContent = "📒"; logBtn.classList.remove("done"); logBtn.disabled = false; }, 1200);
+      }, () => { logBtn.textContent = "⚠"; logBtn.disabled = false; });
+      return;
+    }
     const pick = e.target.closest("[data-pick]");
     if (pick) {
       const id = Number(pick.dataset.pick);

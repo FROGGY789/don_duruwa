@@ -163,6 +163,7 @@ class CostNode:
     note: str = ""
     recipe: object = None
     children: list = field(default_factory=list)  # [(CostNode, 1회 제작당 수량)]
+    alt: object = None  # 안 고른 다른 방법 (직접 제작 ↔ 거래소·NPC) — 화면에서 바꿔 볼 수 있게
 
 
 class Calculator:
@@ -184,6 +185,8 @@ class Calculator:
         self.outlier_ratio = cfg["outlier_ratio"]
         self.sell_hq = sell_hq  # False = NQ 시세, True = HQ 시세, None = NQ·HQ 통합 시세
         self.batch = max(1, int(batch_size))
+        # 중간재료는 직접 만드는 게 사는 것보다 이만큼(비율) 이상 싸야 만든다 (시간·수고·시세 오차 몫)
+        self.craft_margin = float(cfg.get("craft_margin", 0.1))
         self.self_gathered = gd.ids_by_name(cfg.get("self_gathered_items"))
         self.npc_ignore = gd.ids_by_name(cfg.get("npc_ignore_items"))
         self._memo = {}
@@ -292,7 +295,15 @@ class Calculator:
                     if crafted.unit_cost is not None:
                         options.append(crafted)
 
-        node = min(options, key=lambda n: n.unit_cost) if options else CostNode(item_id, need)
+        buys = [n for n in options if n.source != "직접 제작"]
+        crafts = [n for n in options if n.source == "직접 제작"]
+        buy = min(buys, key=lambda n: n.unit_cost) if buys else None
+        made = min(crafts, key=lambda n: n.unit_cost) if crafts else None
+        if buy and made:
+            node, other = (made, buy) if made.unit_cost < buy.unit_cost * (1 - self.craft_margin) else (buy, made)
+            node = CostNode(**{**node.__dict__, "alt": other})  # 메모끼리 alt 가 엉키지 않게 새로
+        else:
+            node = buy or made or CostNode(item_id, need)
         self._memo[key] = node
         return node
 

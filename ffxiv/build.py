@@ -121,6 +121,28 @@ def gather_tag(gd, item_id):
     return out
 
 
+def mat_rows(gd, calc, tree):
+    """재료 상세 표 줄 (깊이 순서대로 펼침). 직접 만드는 줄엔 ra(1회 결과물 개수)."""
+    rows = []
+
+    def add(node, amt, depth):
+        st = calc.stats(node.item_id, world=calc.buy_world)
+        rows.append({
+            "depth": depth, "id": node.item_id, "name": gd.name(node.item_id), "amount": amt, "need": node.need,
+            "unit": node.unit_cost, "subtotal": node.unit_cost * amt if node.unit_cost is not None else None,
+            "source": node.source, "sold": st.sold_qty, "listings": st.listing_count,
+            "world": node.note if node.source in ("거래소", "교환") else "",
+            **({"ra": node.recipe.result_amount} if node.source == "직접 제작" and node.recipe else {}),
+            **gather_tag(gd, node.item_id),
+        })
+        for child, child_amt in node.children:
+            add(child, child_amt, depth + 1)
+
+    for child, amt in tree.children:
+        add(child, amt, 0)
+    return rows
+
+
 def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
     """제작 순위 한 줄(요약)과 상세."""
     ratio = r["재료 여유 배수"]
@@ -133,16 +155,25 @@ def craft_entry(gd, cfg, calc, r, recipe, tree, badges):
         "badges": [badges.ref(t, r["뱃지 설명"].get(t)) for t in r["기타"]],
         "v": {k: view_summary(v, badges) for k, v in r["보기"].items()},
     }
-    materials = [{
-        "depth": d["depth"], "id": d["id"], "name": d["name"], "amount": d["1회 제작당 수량"], "need": d["총 필요 수량"],
-        "unit": d["단가"], "subtotal": d["소계(1회 제작)"], "source": d["구매처"],
-        "sold": d["판매 수량(기간)"], "listings": d["현재 매물 수"],
-        "world": d["비고(구매 서버)"] if d["구매처"] in ("거래소", "교환") else "",
-        **gather_tag(gd, d["id"]),
-    } for d in detail_rows(calc, tree)]
+    materials = mat_rows(gd, calc, tree)
+    alts = {}  # 🔨↔🛒 바꿔 보기: 중간재료마다 안 고른 쪽 (사기: 단가·서버 / 만들기: 단가·하위 재료)
+
+    def collect(node):
+        for child, _ in node.children:
+            a = child.alt
+            if a is not None and a.unit_cost is not None and child.item_id not in alts:
+                if a.source == "직접 제작":
+                    alts[child.item_id] = {"src": a.source, "unit": a.unit_cost, "ra": a.recipe.result_amount, "kids": mat_rows(gd, calc, a)}
+                    collect(a)
+                else:
+                    st = calc.stats(a.item_id, world=calc.buy_world)
+                    alts[child.item_id] = {"src": a.source, "unit": a.unit_cost, "sold": st.sold_qty, "listings": st.listing_count,
+                                           "world": a.note if a.source in ("거래소", "교환") else ""}
+            collect(child)
+    collect(tree)
     ratio_text = "거래소 재료 없음" if math.isinf(ratio) else f"재료 여유 배수 {ratio:.1f}배"
     detail = {
-        "evidence": r["근거"], "materials": materials,
+        "evidence": r["근거"], "materials": materials, **({"alts": alts} if alts else {}),
         "shopping": [{**s, "name": gd.name(s["id"]), **gather_tag(gd, s["id"])} for s in shopping_list(tree)],
         "detailDesc": f"{recipe.job_name} Lv{recipe.job_level} · 결과물 {recipe.result_amount}개 · "
                       f"{cfg['batch_size']}회 제작 기준 · {ratio_text}",

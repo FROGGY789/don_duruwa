@@ -257,6 +257,16 @@ function renderTable(d, rows) {
   return `<div class="table-wrap rank-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+// 🔨 만들기 ↔ 🛒 사기 바꾸기 버튼 (중간재료만). 내가 바꾼 줄은 ✋, 다시 누르면 처음 추천으로
+function makeToggle(d, m) {
+  if (!d.setMake || !m.other || m.other.unit == null) return "";
+  const cheaper = m.unit != null && m.other.unit < m.unit;
+  const label = m.other.to === "buy" ? `🛒 사면 ${gil(m.other.unit)}` : `🔨 만들면 ${gil(m.other.unit)}`;
+  const tip = m.picked ? "내가 바꾼 거다 개굴. 누르면 처음 추천대로 돌아간다 개굴"
+    : m.other.to === "buy" ? "직접 만들지 말고 사는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴" : "사지 말고 직접 만드는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴";
+  return `${m.picked ? '<span class="make-picked" data-tip="내가 고른 방법이다 개굴">✋</span>' : ""}<button type="button" class="make-btn${cheaper ? " cheaper" : ""}" data-make="${m.id}" data-to="${m.picked ? "" : m.other.to}" data-tip="${esc(tip)}">${label}</button>`;
+}
+
 function renderDetail(d, row) {
   if (!row) return `<div class="detail-hint">🐸 표에서 아이템 하나 눌러 봐라 개굴. ${hasCart(d) ? "재료" : "판매"} 상세가 여기 뜬다 개굴.</div>`;
   if (d.loadDetail && !row.loaded) {
@@ -272,7 +282,7 @@ function renderDetail(d, row) {
     const market = m.source === "거래소";
     return `
       <tr class="${m.depth ? "sub" : ""}">
-        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${tierMark(m.t)}${gatherMarks(m.g, m.gl)}</td>
+        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${tierMark(m.t)}${gatherMarks(m.g, m.gl)}${makeToggle(d, m)}</td>
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -302,7 +312,7 @@ function renderDetail(d, row) {
         </div>
         ${row.sources && row.sources.length ? `<div class="sources"><h3>📍 어디서 바꾸나</h3><ul>${row.sources.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
         ${renderLive(d, row)}
-        ${row.materials ? `<div class="mat-head"><h3>📦 재료 가격</h3></div><div class="table-wrap"><table>
+        ${row.materials ? `<div class="mat-head"><h3>📦 재료 가격</h3>${(row.materials || []).some((m) => m.other) ? '<span class="faint">중간재료는 🔨 만들면 / 🛒 사면 을 눌러서 바꿀 수 있다 개굴. 만드는 게 10% 넘게 싸야 만들기로 추천한다 개굴</span>' : ""}</div><div class="table-wrap"><table>
           <thead><tr>
             <th>재료</th><th class="num">1회 제작당 수량</th><th class="num">총 필요 수량</th><th class="num">표 단가</th>
             <th class="num live-col" data-tip="품목을 누를 때 방금 받은 매물로, 필요 수량만큼 싼 것부터 샀을 때 개당 값 (구매세 포함) 개굴">⚡ 지금 단가</th><th class="num live-col">차이</th>
@@ -580,19 +590,26 @@ function cartPlan(d) {
   const ids = Object.keys(state.cart).map(Number);
   const rows = ids.map((id) => d.rows.find((r) => r.id === id)).filter(Boolean);
   const missing = ids.length - rows.length;
-  const groups = {};
+  const groups = {}, makes = {};
   let cost = 0, revenue = 0;
   for (const r of rows) {
     const n = state.cart[r.id];
     revenue += (V(r).sell || 0) * (1 - d.taxRate) * n * r.resultAmount;
+    for (const m of r.makes || []) { // 🔨 직접 만들 중간재료
+      const mk = makes[m.id] || (makes[m.id] = { id: m.id, name: m.name, tier: m.t, qty: 0, ra: m.ra, for: [] });
+      mk.qty += m.qty * n;
+      const label = [...m.via, r.name].join(" → ");
+      if (!mk.for.includes(label)) mk.for.push(label);
+    }
     for (const s of r.shopping) {
       // ⚡ 지금 시세로 다시 받았으면 그 값·서버로 (거래소 재료만)
       const live = s.source === "거래소" && state.liveCart ? state.liveCart[s.id] : null;
       const g = live ? live.world : s.source === "거래소" ? s.world || "서버 미정" : s.source === "NPC" ? "🏪 NPC 상점" : s.source === "직접 채집" ? "⛏ 직접 채집" : "❓ 시세 없음";
       const key = s.name;
       groups[g] = groups[g] || { name: g, market: s.source === "거래소", items: {} };
-      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, tier: s.t, qty: 0, spend: 0, for: [] });
-      if (!it.for.includes(r.name)) it.for.push(r.name); // 어느 완성품에 들어가는 재료인지
+      const it = (groups[g].items[key] = groups[g].items[key] || { id: s.id, name: s.name, gather: s.g, gatherLv: s.gl, tier: s.t, qty: 0, spend: 0, for: [], canCraft: s.canCraft });
+      // 어느 완성품에 들어가는 재료인지 (중간재료를 거치면 "내화벽돌 → 별궁의 난로")
+      for (const label of (s.via && s.via.length ? s.via.map((v) => [...v, r.name].join(" → ")) : [r.name])) if (!it.for.includes(label)) it.for.push(label);
       it.qty += s.qty * n;
       it.spend += s.qty * n * ((live ? live.unit : s.unit) || 0);
       if (live) { it.live = true; it.short = live.short; }
@@ -610,13 +627,15 @@ function cartPlan(d) {
     cost += total;
     return { ...g, items, total };
   }).sort((a, b) => (b.market - a.market) || (b.total - a.total));
-  return { ids, rows, missing, list, cost, revenue };
+  const make = Object.values(makes).map((m) => ({ ...m, crafts: Math.ceil(m.qty / m.ra - 1e-9) }));
+  return { ids, rows, missing, list, cost, revenue, make };
 }
 
 // 텍스트 파일·복사용 장보기 목록
 function cartText(d) {
-  const { rows, list, cost, revenue } = cartPlan(d);
+  const { rows, list, cost, revenue, make } = cartPlan(d);
   const out = [`🛒 장보기 목록 (${nowText()})`, ""];
+  if (make.length) out.push("🔨 직접 만들 것", ...make.map((m) => `- ${m.name} ${m.crafts}회 (${m.crafts * m.ra}개) [${m.for.join(", ")}]`), "");
   rows.forEach((r) => out.push(`- ${"★".repeat(r.stars || 0)}${r.name}${r.sellingHq === true ? " (HQ)" : ""} ×${state.cart[r.id]}회 (${state.cart[r.id] * r.resultAmount}개)`));
   out.push("", `재료비 ${Math.round(cost).toLocaleString("ko-KR")}길 · 판매액(세후) ${Math.round(revenue).toLocaleString("ko-KR")}길 · 예상 순이익 ${Math.round(revenue - cost).toLocaleString("ko-KR")}길`);
   list.forEach((g, i) => {
@@ -636,7 +655,11 @@ function renderCart(d) {
       <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button></div>
       <div class="drawer-body"><div class="detail-top"><div class="desc">🐸 재료 목록 불러오는 중이다 개굴…</div></div></div></aside>`;
   }
-  const { rows, missing, list, cost, revenue } = cartPlan(d);
+  const { rows, missing, list, cost, revenue, make } = cartPlan(d);
+  const makeBox = make.length ? `<div class="cart-make"><div class="cart-group-head"><b>🔨 직접 만들 것</b><span class="faint">재료 사서 먼저 만들어 둘 중간재료 개굴</span></div>
+    <ul>${make.map((m) => `<li><div>${tierMark(m.tier)}<b>${esc(m.name)}</b> <span class="faint">${m.crafts}회 (${(m.crafts * m.ra).toLocaleString("ko-KR")}개)</span>
+      <div class="mat-for" title="${esc(m.for.join(", "))}">↳ ${esc(m.for.join(" · "))}</div></div>
+      ${d.setMake ? `<button type="button" class="make-btn" data-make="${m.id}" data-to="buy" data-tip="이 중간재료는 만들지 말고 거래소에서 사는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴">🛒 사는 걸로</button>` : ""}</li>`).join("")}</ul></div>` : "";
   const worlds = list.filter((g) => g.market).length;
   const all = list.flatMap((g) => g.items);
   const bought = all.filter((it) => state.done[it.key]).length;
@@ -654,7 +677,8 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          <span class="cart-mat">${tierMark(it.tier)}${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<span class="cart-mat-tail"><button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}</span></span>
+          <span class="cart-mat">${tierMark(it.tier)}${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<span class="cart-mat-tail"><button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}${it.canCraft && d.setMake
+            ? `<button type="button" class="make-mini" data-make="${it.id}" data-to="craft" data-tip="사지 말고 직접 만드는 걸로 바꾼다 개굴. 그 재료가 장보기에 대신 들어간다 개굴">🔨</button>` : ""}</span></span>
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited
@@ -704,7 +728,7 @@ function renderCart(d) {
           <span class="faint">${state.liveCart ? `⚡ ${esc(state.liveTime)} 에 다시 받은 값이다 개굴 (구매세 포함, 필요 수량만큼 싼 매물부터)`
             : "지금은 매시간 받아 둔 값이다 개굴. 사러 가기 전에 눌러서 지금 값으로 다시 짜라 개굴"}${state.liveMsg ? ` · ⚠ ${esc(state.liveMsg)}` : ""}</span>
         </div>
-        <div class="cart-groups">${tables}</div>
+        <div class="cart-groups">${makeBox}${tables}</div>
         ${save}
       </div>
     </aside>`;
@@ -874,6 +898,8 @@ export default function (component) {
     if (mat && data.trackMaterial) hideMatPop();
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     // 📒 순위 표에서 바로 제작일지에 1회 적기
+    const mk = e.target.closest("[data-make]");
+    if (mk && data.setMake) { data.setMake(Number(mk.dataset.make), mk.dataset.to || null); return; }
     const bell = e.target.closest("[data-bell-row]");
     if (bell && data.fcToggle) {
       const row = data.rows.find((x) => String(x.id) === bell.dataset.bellRow);

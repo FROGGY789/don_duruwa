@@ -147,6 +147,81 @@ function loadDetail(name, id) {
   }
   return ds.shards[n];
 }
+// ── 🔨 만들기 ↔ 🛒 사기: 중간재료마다 내가 고른 방법 (아이템ID → "craft" | "buy", 모든 레시피에 같이 적용) ──
+let MAKE = load("ffxivMake", {});
+function setMake(id, to) {
+  if (to) MAKE[id] = to; else delete MAKE[id];
+  save("ffxivMake", MAKE);
+  render();
+}
+// 상세 재료(깊이 순 펼침)에 내 선택을 반영해서 재료 표·장보기·원가를 다시 만든다
+function applyMakes(d, resultAmount) {
+  const alts = d.alts || {};
+  const tree = (rows) => {
+    const top = [], stack = [];
+    for (const r of rows) {
+      const n = { ...r, kids: [] };
+      while (stack.length && stack[stack.length - 1].depth >= r.depth) stack.pop();
+      (stack.length ? stack[stack.length - 1].kids : top).push(n);
+      stack.push(n);
+    }
+    return top;
+  };
+  let changed = false;
+  const choose = (n, seen) => {
+    const alt = alts[n.id], want = MAKE[n.id], made = n.source === "직접 제작";
+    // 바꿔 볼 수 있는 쪽 (상세 표 버튼용)
+    if (alt) n.other = { to: made ? "buy" : "craft", unit: alt.unit, src: alt.src };
+    if (alt && want && (want === "craft") !== made && !seen.has(n.id)) {
+      changed = true;
+      const back = { to: made ? "craft" : "buy", unit: n.unit, src: n.source };
+      if (want === "buy") Object.assign(n, { source: alt.src, unit: alt.unit, world: alt.world || "", sold: alt.sold, listings: alt.listings, ra: undefined, kids: [] });
+      else Object.assign(n, { source: "직접 제작", unit: alt.unit, world: "", ra: alt.ra, kids: tree(alt.kids || []) });
+      n.other = back;
+      n.picked = true;
+    }
+    const next = new Set(seen).add(n.id);
+    n.kids.forEach((k) => choose(k, next));
+  };
+  const top = tree(d.materials);
+  top.forEach((n) => choose(n, new Set()));
+  // 필요 수량은 위에서 아래로, 직접 만드는 단가는 아래에서 위로 다시
+  const needs = (n) => {
+    if (!n.kids.length) return;
+    const crafts = Math.ceil(n.need / (n.ra || 1) - 1e-9);
+    n.kids.forEach((k) => { k.need = k.amount * crafts; needs(k); });
+  };
+  const units = (n) => {
+    if (!n.kids.length) return n.unit;
+    let sum = 0;
+    for (const k of n.kids) { const u = units(k); if (u == null) { sum = null; break; } sum += u * k.amount; }
+    if (changed) n.unit = sum == null ? null : sum / (n.ra || 1);
+    return n.unit;
+  };
+  top.forEach((n) => { needs(n); units(n); });
+  const materials = [], shop = {}, makes = {};
+  const flat = (n, depth, qty, via) => {
+    n.subtotal = n.unit != null ? n.unit * n.amount : null;
+    const { kids, ...row } = n;
+    materials.push({ ...row, depth });
+    if (n.source === "직접 제작" && kids.length) {
+      const mk = makes[n.id] || (makes[n.id] = { id: n.id, name: n.name, t: n.t, qty: 0, ra: n.ra || 1, via: via.slice() });
+      mk.qty += qty;
+      kids.forEach((k) => flat(k, depth + 1, (qty * k.amount) / (n.ra || 1), [n.name, ...via]));
+      return;
+    }
+    const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
+    const key = `${n.id}|${n.source}|${world}`;
+    const s = shop[key] || (shop[key] = { id: n.id, name: n.name, qty: 0, unit: n.unit, source: n.source, world, g: n.g, gl: n.gl, t: n.t, via: [],
+      canCraft: !!(alts[n.id] && alts[n.id].src === "직접 제작") });
+    s.qty += qty;
+    if (via.length && !s.via.some((v) => v.join() === via.join())) s.via.push(via.slice());
+  };
+  top.forEach((n) => flat(n, 0, n.amount, []));
+  const cost = top.every((n) => n.unit != null) ? top.reduce((a, n) => a + n.unit * n.amount, 0) / resultAmount : null;
+  return { materials, shopping: Object.values(shop), makes: Object.values(makes), cost, changed };
+}
+
 // 상세(근거·재료·추이)를 받으면 그 줄에 붙인다
 function mergeDetail(ds, id) {
   const row = ds.cache[id], d = ds.details[id];
@@ -154,7 +229,11 @@ function mergeDetail(ds, id) {
   row.evidence = d.evidence;
   row.detailDesc = d.detailDesc;
   if (d.sources) row.sources = d.sources;
-  if (d.materials) { row.materials = d.materials; row.shopping = d.shopping; }
+  if (d.materials) {
+    const m = applyMakes(d, row.resultAmount || 1);
+    Object.assign(row, { materials: m.materials, shopping: m.shopping, makes: m.makes, madeChanged: m.changed });
+    if (m.changed && m.cost != null) row.cost = m.cost;
+  }
   for (const [k, v] of Object.entries(d.views || {})) Object.assign(row.views[k] || (row.views[k] = {}), v);
   row.loaded = true;
 }
@@ -269,12 +348,13 @@ function compute(p, ds, name) {
       badges: (stale ? [{ kind: "stale", text: "⚠ 데이터 오래됨", tip: staleTip }] : []).concat(r.badges),
       scope, raw: r,
     });
+    if (ds.details[r.id]) mergeDetail(ds, r.id); // 🔨↔🛒 내 선택이 있으면 원가가 바뀐다
     for (const k of keys) {
       const s = r.v[k];
       const v = row.views[k] || (row.views[k] = {});
-      const net = s.sell != null && r.cost != null ? s.sell * (1 - tax) - r.cost : null;
+      const net = s.sell != null && row.cost != null ? s.sell * (1 - tax) - row.cost : null;
       Object.assign(v, s, {
-        net, margin: net != null && r.cost > 0 ? (net / r.cost) * 100 : null,
+        net, margin: net != null && row.cost > 0 ? (net / row.cost) * 100 : null,
         daily: net != null ? (net * s.soldQty) / days() : null,
         // 화폐 1개당 이익: 교환템 팔기 = 개당 순수익 × 받는 개수 ÷ 교환가, 교환 재료로 만들기 = 1회 제작 순수익 ÷ 드는 화폐
         perCur: net == null ? null : p === "exchange" ? (net * r.resultAmount) / r.level : p === "exchangeCraft" ? (net * r.resultAmount) / r.spend : null,
@@ -400,6 +480,8 @@ async function render() {
     loadDetail: (id) => loadDetail(name, id),
     loadLive,
     materialInfo,
+    setMake: (id, to) => { const sel = ds.cache[window.__ffxivDash?.selected]; if (sel) sel.live = null; setMake(id, to); },
+    makeChoice: (id) => MAKE[id] || null,
     fcSelling,
     fcMarked,
     fcToggle,

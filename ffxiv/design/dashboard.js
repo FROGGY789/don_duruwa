@@ -796,12 +796,19 @@ export default function (component) {
       renderFailed(data) +
       (hasCart(data) ? renderCart(data) + renderCartFab() : "") +
       `<footer class="frog-foot"><span class="frog-sit">🐸</span> 개구리 좋아하는 <b>로살리아@초코보</b> 가 만들었다 개굴 · 문의도 여기로 해라 개굴</footer>`;
-    // 펼친 상세는 가로로 긴 표 안에서도 화면 폭에 맞게
-    const wrap = root.querySelector(".rank-table");
-    if (wrap) wrap.style.setProperty("--wrap-w", wrap.clientWidth + "px");
     state.cartAnim = false;
     state.fabBump = false;
     root.classList.toggle("with-drawer", !!(state.cartOpen && cartCount && hasCart(data)));
+    // 펼친 상세는 가로로 긴 표 안에서도 화면 폭에 맞게 (장보기를 열고 닫거나 창 크기가 바뀌면 다시 잰다)
+    const wrap = root.querySelector(".rank-table");
+    if (wrap) {
+      wrap.style.setProperty("--wrap-w", wrap.clientWidth + "px");
+      if (window.ResizeObserver) {
+        root.__wrapRO?.disconnect();
+        root.__wrapRO = new ResizeObserver(() => wrap.style.setProperty("--wrap-w", wrap.clientWidth + "px"));
+        root.__wrapRO.observe(wrap);
+      }
+    }
   }
 
   // 🐸 제목 옆 개구리를 누르믄 개구리 비가 한 번 더 온다

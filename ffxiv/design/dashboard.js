@@ -130,7 +130,7 @@ function renderHeader(d) {
   return `
     <header class="page-head">
       <div class="eyebrow">${isExchange(d) || isExCraft(d) ? "EXCHANGE" : isGather(d) ? "GATHERING" : "CRAFTING"} PROFIT REPORT</div>
-      <h1>${esc(d.title || "파판14 제작 수익 분석")}<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
+      <h1>${d.titleHtml || esc(d.title || "파판14 제작 수익 분석")}<button type="button" class="frog-peek" data-frogs="1" title="눌러 봐라 개굴">🐸</button></h1>
       ${d.tagline ? `<p class="tagline">${esc(d.tagline)}</p>` : ""}
       <div class="subtitle">${sub}</div>
     </header>

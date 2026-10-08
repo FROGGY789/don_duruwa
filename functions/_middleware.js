@@ -113,9 +113,9 @@ function loginPage({ error = "", info = "", who = "", mode = "login", status = 2
   </form>`;
   return new Response(`<!doctype html>
 <html lang="ko" data-theme="light" data-palette="jade"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>에오르제아 거상되기</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>에장살</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐸</text></svg>">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600;900&display=swap">
 <link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/web.css">
 <script>try{const s=JSON.parse(localStorage.getItem("ffxivSettings")||"{}");const T={"다크":"dark","화이트":"light"},P={"초록":"jade","골드":"gold","크리스탈":"crystal","에테르":"aether","로즈":"rose","실버":"silver"};
 if(T[s.theme])document.documentElement.dataset.theme=T[s.theme];if(P[s.palette])document.documentElement.dataset.palette=P[s.palette];}catch(e){}</script>
@@ -123,7 +123,7 @@ if(T[s.theme])document.documentElement.dataset.theme=T[s.theme];if(P[s.palette])
 <div class="frog-rain" aria-hidden="true">${frogs}</div>
 <main class="login-box">
   <div class="eyebrow">FFXIV CRAFTING · GATHERING PROFIT</div>
-  <h1>에오르제아에서<br>장사꾼으로 살아남기 🐸</h1>
+  <h1><b class="initial">에</b>오르제아에서<br><b class="initial">장</b>사꾼으로 <b class="initial">살</b>아남기 🐸</h1>
   <p class="login-sub">${mode === "request" ? "신청하면 로살리아@초코보가 보고 허락해 준다 개굴." : "캐릭터명@서버랑 비밀번호를 쳐야 화면을 열어준다 개굴."}</p>
   ${form}
   ${error ? `<div class="login-error">🐸 ${esc(error)}</div>` : ""}

@@ -368,6 +368,7 @@ async function render() {
   const data = {
     mode: p,
     title: SITE_NAME,
+    titleHtml: `<b class="initial">에</b>오르제아에서 <b class="initial">장</b>사꾼으로 <b class="initial">살</b>아남기`, // 줄임말 에·장·살 을 굵게
     tagline: TAGLINE[p],
     statLabels: { gather: [["분석한 채집템", "레벨 조건에 맞는 채집템"], ["시세 있는 템", "최근 팔린 기록이 있는 템"], ["필터 통과", "현재 필터 기준 추천 대상"]],
       exchangeCraft: [["교환 재료 레시피", "교환 재료가 들어가는 레시피 × 화폐"], ["계산 가능", "시세 데이터가 모두 있는 레시피"], ["필터 통과", "현재 필터 기준 추천 대상"]],

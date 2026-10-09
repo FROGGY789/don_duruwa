@@ -418,7 +418,8 @@ def main():
         print(f"  Universalis 마지막 업로드: 하루 안 {recent(24)} · 3일 안 {recent(72)} · 7일 안 {recent(168)} · "
               f"30일 안 {recent(720)} / {len(ids)}")
         print(f"  판매 기록 있는 템 {with_sales}/{len(ids)} · 매물 있는 템 {with_listings}/{len(ids)} · "
-              f"응답에서 빠진 템 {api.stats['missing']} (다시 받아서 채움 {api.stats['recovered']})")
+              f"응답에서 빠진 템 {api.stats['missing']} (다시 받아서 채움 {api.stats['recovered']}) · "
+              f"서버 오류로 건너뛴 템 {api.stats.get('skipped', 0)} (지난번 값 사용)")
     print(f"시세 준비 끝 ({time.time() - started:.0f}초)")
 
     site = Path(args.out)

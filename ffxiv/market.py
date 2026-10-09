@@ -92,7 +92,19 @@ class Universalis:
         try:
             data = self._get(f"{path}/{','.join(map(str, chunk))}", params)
         except requests.HTTPError as e:  # 다시 받을 때 하나짜리 요청은 모르는 아이템이면 404 가 온다
-            if depth and e.response is not None and e.response.status_code == 404:
+            code = e.response.status_code if e.response is not None else 0
+            if depth and code == 404:
+                return {}
+            # Universalis 가 바빠서 504 같은 걸 계속 주면: 작게 쪼개서 다시, 그래도 안 되면 그 템들만 건너뛴다
+            # (건너뛴 템은 지난번에 받아 둔 값을 그대로 쓴다 — MarketCache.update)
+            if code >= 500:
+                if len(chunk) > 1 and depth < 3:
+                    got, step = {}, max(1, len(chunk) // 4)
+                    for i in range(0, len(chunk), step):
+                        got.update(self._many(path, chunk[i:i + step], params, depth + 1))
+                    return got
+                with self._lock:
+                    self.stats["skipped"] = self.stats.get("skipped", 0) + len(chunk)
                 return {}
             raise
         got = self._items(data)
@@ -129,6 +141,8 @@ class Universalis:
                                  {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999})
             part = {}
             for iid in chunk:
+                if iid not in current and iid not in history:
+                    continue  # 둘 다 못 받았으면 (서버 오류로 건너뜀) 지난번 값을 그대로 둔다
                 cur = current.get(iid, {})
                 hist = history.get(iid, {})
                 listings, counts = _trim_listings(cur.get("listings", []), default_world)
@@ -210,7 +224,9 @@ class MarketCache:
 
     def update(self, items, tax_rates=None, full=False):
         # 새 dict 를 다 만든 뒤 한 번에 바꿔 끼운다 → 뒤에서 갱신하는 동안 화면이 읽어도 안전
-        new = {} if full else dict(self.data["items"])
+        # 전부 새로 받을 때도 이번에 못 받은 템(서버 오류로 건너뜀)은 지난번 값을 남긴다
+        fresh = {str(i) for i in items}
+        new = {k: v for k, v in self.data["items"].items() if k not in fresh} if full else dict(self.data["items"])
         for iid, entry in items.items():
             new[str(iid)] = entry
         self.data["items"] = new

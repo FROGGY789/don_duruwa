@@ -635,7 +635,7 @@ async function renderJournal() {
       <div class="j-detail-foot"><button type="button" class="cart-btn" data-j-track="${m.id}" data-need="${need}">📈 재료 트래킹에 담기</button></div></td></tr>`;
   }).join("");
   const top = Object.entries(freq).filter(([id]) => byId.has(Number(id))).sort((a, b) => b[1] - a[1]).slice(0, 10)
-    .map(([id, n]) => `<li><span>${esc(byId.get(Number(id)).name)}</span><b>×${n}</b></li>`).join("");
+    .map(([id, n]) => `<li><span>${esc(byId.get(Number(id)).name)}</span><b>×${n}</b><button type="button" class="j-cart" data-j-cart="${id}" data-n="1" title="장바구니에 1회 담는다 개굴">🛒 담기</button></li>`).join("");
   // 날짜별 기록 (최근 것부터)
   const days = {};
   J.e.forEach((x, i) => (days[x[0]] = days[x[0]] || []).push([x, i]));
@@ -643,6 +643,7 @@ async function renderJournal() {
   const shownDays = jAllDays ? dayKeys.slice(0, 60) : dayKeys.slice(0, 5);
   const log = shownDays.map((d) => `<div class="j-day"><div class="j-date">${esc(d)} <span class="faint">· ${days[d].reduce((a, [x]) => a + x[2], 0)}회</span></div><ul>${days[d].map(([x, i]) =>
     `<li><span>${esc((byId.get(x[1]) || { name: `레시피 ${x[1]}` }).name)}</span>
+      ${byId.has(x[1]) ? `<button type="button" class="j-cart" data-j-cart="${x[1]}" data-n="${x[2]}" title="이 횟수만큼 장바구니에 담는다 개굴">🛒</button>` : ""}
       <label class="j-n">×<input type="number" min="1" max="999" value="${x[2]}" data-j-n="${i}" aria-label="횟수 고치기"></label>
       <button type="button" class="chip-x" data-j-del="${i}" title="지우기">✕</button></li>`).join("")}</ul></div>`).join("")
     + (dayKeys.length > 5 ? `<button type="button" class="link-btn" data-j-alldays="1">${jAllDays ? "▲ 최근 5일만 보기" : `▼ 전체 보기 (${dayKeys.length}일)`}</button>` : "");
@@ -688,6 +689,19 @@ document.getElementById("app").addEventListener("input", (e) => {
 });
 document.getElementById("app").addEventListener("click", (e) => {
   if (page() !== "journal") return;
+  // 🛒 장바구니에 담기 (지금 판매 품질 기준 줄로: HQ 면 레시피ID + 10,000,000)
+  const jc = e.target.closest("[data-j-cart]");
+  if (jc) {
+    const st = window.__ffxivDash, rid = Number(jc.dataset.jCart), n = Number(jc.dataset.n) || 1;
+    const id = S.quality === "HQ" ? rid + 10_000_000 : rid;
+    st.cart[id] = (st.cart[id] || 0) + n;
+    try { localStorage.setItem("ffxivCart", JSON.stringify(st.cart)); } catch { /* 저장 못 해도 이번엔 담긴다 */ }
+    window.dispatchEvent(new Event("ffxiv-cart"));
+    const label = jc.textContent;
+    jc.textContent = "✓ 담음"; jc.disabled = true;
+    setTimeout(() => { jc.textContent = label; jc.disabled = false; }, 1200);
+    return;
+  }
   const sh = e.target.closest("[data-j-show]");
   if (sh) { JSHOW[sh.dataset.jShow] = sh.checked; save("ffxivJournalShow", JSHOW); renderJournal(); return; }
   if (e.target.closest("[data-j-alldays]")) { jAllDays = !jAllDays; renderJournal(); return; }

@@ -298,3 +298,6 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .j-log > .link-btn{grid-column:1/-1;justify-self:start}
 .j-n{display:inline-flex;align-items:center;gap:2px;color:var(--primary-strong);font-weight:700}
 .j-n input{width:3.4em;padding:2px 4px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;text-align:right}
+.j-cart{border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--radius-pill);padding:0 8px;font-size:var(--fs-xs);line-height:1.8;cursor:pointer;color:var(--text-muted);white-space:nowrap}
+.j-cart:hover{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong)}
+.j-cart:disabled{border-color:var(--positive);color:var(--positive);background:var(--positive-soft)}

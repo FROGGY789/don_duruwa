@@ -766,7 +766,7 @@ function cartBody(d) {
 
 // 🛒 장바구니 화면: 왼쪽은 완성품마다 재료 펼침, 오른쪽은 장보기 목록
 function renderCartPage(d) {
-  const head = `<header class="cartpage-head"><div class="eyebrow">SHOPPING CART</div><h1>🛒 장바구니</h1>
+  const head = `<header class="cartpage-head"><div class="eyebrow">SHOPPING CART</div><h1>🛒 장바구니${Object.keys(state.cart).length ? ' <button type="button" class="cart-btn cart-empty" data-clear="ask">🗑 전부 비우기</button>' : ""}</h1>
     <p class="tagline">담은 완성품마다 재료가 어떻게 들어가는지, 1차·2차 중간재료는 뭘로 만드는지까지 펼쳐 본다 개굴.</p></header>`;
   if (!Object.keys(state.cart).length) return head + `<div class="detail-hint">🐸 아직 담은 게 없다 개굴. <a href="#craft">⚒️ 제작</a> 순위에서 + 를 눌러 담아라 개굴.</div>`;
   if (cartWaiting(d)) return head + `<div class="detail-hint">🐸 재료 목록 불러오는 중이다 개굴…</div>`;
@@ -908,7 +908,7 @@ export default function (component) {
       `<div class="section-head"><h2>순위 · ${esc(serverName(data))}</h2><span class="desc">${!hasCart(data)
         ? `줄 누르면 바로 밑에 판매 상세${isExchange(data) ? "랑 어디서 바꾸는지" : ""}가 펼쳐진다 개굴 · 다시 누르면 접힌다 개굴`
         : "줄 누르면 바로 밑에 재료 상세가 펼쳐진다 개굴 · 다시 누르면 접힌다 개굴 · <b>+</b> 누르면 장보기에 담긴다 개굴"}</span>
-         <span class="right">${cartCount && hasCart(data) ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
+         <span class="right">${cartCount && hasCart(data) ? `<button type="button" class="cart-jump" data-jump="1">🛒 장보기 ${cartCount}개 열기</button> <button type="button" class="cart-jump cart-empty" data-clear="ask" data-tip="장바구니에 담은 걸 전부 뺀다 개굴">🗑 비우기</button> · ` : ""}${esc(data.taxNote)} · 단위: 길</span></div>` +
       renderTable(data, rows) +
       renderFailed(data) +
       (hasCart(data) ? renderCart(data) + renderCartFab() : "") +
@@ -1043,7 +1043,9 @@ export default function (component) {
       });
       return;
     }
-    if (e.target.closest("[data-clear]")) { state.liveCart = null; state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
+    const clr = e.target.closest("[data-clear]");
+    if (clr && clr.dataset.clear === "ask" && !window.confirm("장바구니를 전부 비울까 개굴?")) return;
+    if (clr) { state.liveCart = null; state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }
     const reset = e.target.closest("[data-qty-reset]");
     if (reset) { delete state.qty[reset.dataset.qtyReset]; saveCart(); return render(); }
     if (e.target.closest("[data-save]")) return saveList();

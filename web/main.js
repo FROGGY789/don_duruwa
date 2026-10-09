@@ -805,7 +805,7 @@ function trackCard(t, name, d) {
     <div class="track-head">
       <h2>${esc(name)}</h2>
       <span class="signal ${a.signal.kind}">${a.signal.icon} ${a.signal.label}</span>
-      <span class="faint">데이터 ${ago(d.upd)}</span>
+      <span class="faint">${d.live ? "⚡ 방금 받은 매물" : `데이터 ${ago(d.upd)}`}</span>
       <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>
     </div>
     ${trackBody(a, t, true)}
@@ -839,6 +839,44 @@ function trackBody(a, t, editable) {
       <tbody>${rows}</tbody></table></div>`;
 }
 
+// ⚡ 트래킹 재료 매물을 지금 시세로 다시 받는다 (매시간 받아 둔 매물 대신 이걸로 판단·구매 계획)
+let trackLive = {}, trackLiveBusy = false, trackLiveMsg = "";
+async function refreshTrackLive(ids) {
+  if (trackLiveBusy || !ids.length) return;
+  trackLiveBusy = true; trackLiveMsg = ""; renderTrack();
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const res = await fetch(`${UNIVERSALIS}/${encodeURIComponent(meta.dc)}/${chunk.join(",")}?listings=100&entries=0`);
+      if (!res.ok) throw new Error(`시세 ${res.status}`);
+      const data = await res.json();
+      const items = chunk.length === 1 ? { [chunk[0]]: data } : data.items || {};
+      for (const id of chunk) {
+        const w = {};
+        for (const l of ((items[id] || {}).listings || []).slice().sort((a, b) => a.pricePerUnit - b.pricePerUnit)) {
+          const x = w[String(l.worldID)] || (w[String(l.worldID)] = { lst: [], cnt: 0 });
+          x.cnt += 1;
+          if (x.lst.length < 10) x.lst.push([l.pricePerUnit, l.quantity, l.hq ? 1 : 0, 0]);
+        }
+        trackLive[id] = { w, at: Date.now() };
+      }
+    }
+  } catch (e) { trackLiveMsg = e.message || "오류"; }
+  trackLiveBusy = false;
+  renderTrack();
+}
+// 받아 둔 기록에 방금 받은 매물을 덮는다. 미끼(그 서버 최근 판매 중앙값의 절반도 안 되는 값)는 다시 표시
+function withLive(id, d) {
+  const L = trackLive[id];
+  if (!d || !L) return d;
+  const w = {};
+  for (const [wid, x] of Object.entries(L.w)) {
+    const mid = median(d.h.slice(-14).map((h) => (h[1][wid] || [])[0]).filter((v) => v != null));
+    w[wid] = { cnt: x.cnt, lst: x.lst.map((l) => [l[0], l[1], l[2], mid && l[0] < mid * 0.5 ? 1 : 0]) };
+  }
+  return { ...d, w, upd: L.at / 1000, live: true };
+}
+
 async function renderTrack() {
   const app = document.getElementById("app");
   if (!trackNames) {
@@ -848,7 +886,8 @@ async function renderTrack() {
     }
   }
   const list = tracked();
-  const datas = await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)));
+  const datas = (await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)))).map((d, i) => withLive(list[i].id, d));
+  const liveAt = list.map((t) => trackLive[t.id]?.at).filter(Boolean);
   const q = trackQuery.replace(/\s/g, "");
   const sugg = q ? [...trackNames].filter(([, n]) => n.replace(/\s/g, "").includes(q)).slice(0, 12) : [];
   const keep = app.querySelector("#track-search");
@@ -860,6 +899,10 @@ async function renderTrack() {
       ${sugg.length ? `<div class="track-sugg">${sugg.map(([id, n]) => `<button type="button" data-track-add="${id}"${list.some((t) => t.id === id) ? " disabled" : ""}>${esc(n)}${list.some((t) => t.id === id) ? " ✓" : ""}</button>`).join("")}</div>`
         : q ? `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>` : ""}
     </div>
+    ${list.length ? `<div class="cart-live track-live">
+      <button type="button" class="cart-btn primary" data-track-live="1"${trackLiveBusy ? " disabled" : ""}>${trackLiveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>
+      <span class="faint">${liveAt.length ? `⚡ ${esc(fmtTime(Math.min(...liveAt) / 1000).slice(11))} 에 다시 받은 매물이다 개굴. 판단·구매 계획도 이걸로 다시 했다 개굴`
+        : "지금은 매시간 받아 둔 매물이다 개굴. 사러 돌아다니기 전에 눌러서 지금 값으로 봐라 개굴"}${trackLiveMsg ? ` · ⚠ 못 받아왔다 개굴 (${esc(trackLiveMsg)})` : ""}</span></div>` : ""}
     ${list.length ? list.map((t, i) => trackCard(t, trackNames.get(t.id), datas[i])).join("") : `<div class="detail-hint">🐸 위에서 재료를 검색해서 추가해라 개굴.</div>`}
   </section>`;
   if (caret != null) { const el = app.querySelector("#track-search"); el.focus(); el.setSelectionRange(caret, caret); }
@@ -884,6 +927,7 @@ document.getElementById("app").addEventListener("click", (e) => {
     if (!list.some((t) => t.id === id)) list.unshift({ id, qty: 99 });
     saveTracked(list); trackQuery = ""; renderTrack(); return;
   }
+  if (e.target.closest("[data-track-live]")) { refreshTrackLive(tracked().map((t) => t.id)); return; }
   const rm = e.target.closest("[data-untrack]");
   if (rm) { saveTracked(tracked().filter((t) => t.id !== Number(rm.dataset.untrack))); renderTrack(); }
 });

@@ -213,7 +213,7 @@ function applyMakes(d, resultAmount) {
     }
     const al = alts[n.id];
     if (al && al.src === "직접 제작") { // 사는 중간재료도 뭘로 만드는지 (장바구니 화면용)
-      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm })) };
+      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ id: k.id, name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm })) };
     }
     const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
     const key = `${n.id}|${n.source}|${world}`;
@@ -518,11 +518,8 @@ async function render() {
       return out;
     },
     // 재료 이름을 누르면 📈 재료 트래킹에 담고 그리로 간다
-    trackMaterial: (id, need) => {
-      const list = tracked();
-      if (!list.some((t) => t.id === id)) { list.unshift({ id, qty: need }); saveTracked(list); }
-      location.hash = "#track";
-    },
+    // 재료 이름을 누르면 왼쪽 아래 📈 재료 창에 그 재료를 띄운다 (화면 안 옮기고)
+    trackMaterial: (id, need) => openMatPanel(id, need),
   };
   dashboard({ data, parentElement: host });
 }
@@ -916,7 +913,7 @@ document.addEventListener("mousemove", (e) => {
 let trackLive = {}, trackLiveBusy = false, trackLiveMsg = "";
 async function refreshTrackLive(ids) {
   if (trackLiveBusy || !ids.length) return;
-  trackLiveBusy = true; trackLiveMsg = ""; renderTrack();
+  trackLiveBusy = true; trackLiveMsg = ""; trackRedraw();
   try {
     for (let i = 0; i < ids.length; i += 100) {
       const chunk = ids.slice(i, i + 100);
@@ -936,7 +933,7 @@ async function refreshTrackLive(ids) {
     }
   } catch (e) { trackLiveMsg = e.message || "오류"; }
   trackLiveBusy = false;
-  renderTrack();
+  trackRedraw();
 }
 // 받아 둔 기록에 방금 받은 매물을 덮는다. 미끼(그 서버 최근 판매 중앙값의 절반도 안 되는 값)는 다시 표시
 function withLive(id, d) {
@@ -949,6 +946,63 @@ function withLive(id, d) {
   }
   return { ...d, w, upd: L.at / 1000, live: true };
 }
+
+// 지금 시세를 받은 뒤 다시 그리기: 트래킹 화면이면 그 화면, 왼쪽 아래 재료 창이 떠 있으면 그것도
+function trackRedraw() {
+  if (page() === "track") renderTrack();
+  renderMatPanel();
+}
+
+// ── 📈 왼쪽 아래 재료 창: 재료 하나를 어느 화면에서든 띄워 둔다 ──
+let MP = load("ffxivMatPanel", null); // {id, need, min}
+function openMatPanel(id, need) {
+  MP = { id, need: Math.max(1, Math.ceil(need || 1)), min: false };
+  save("ffxivMatPanel", MP);
+  renderMatPanel();
+  refreshTrackLive([id]); // 띄우자마자 지금 시세로
+}
+async function renderMatPanel() {
+  let el = document.getElementById("mat-panel");
+  if (!MP) { document.querySelectorAll("#mat-panel").forEach((x) => x.remove()); return; }
+  if (!trackNames) { try { trackNames = new Map(await getJSON("data/track/items.json")); } catch { trackNames = new Map(); } }
+  const d = withLive(MP.id, await trackShard(MP.id).then((sh) => sh[MP.id]).catch(() => null));
+  if (!MP) return;
+  el = document.getElementById("mat-panel"); // 기다리는 동안 다른 호출이 이미 만들었을 수 있다
+  if (!el) { el = document.createElement("aside"); el.id = "mat-panel"; el.className = "mat-panel"; document.body.appendChild(el); }
+  const name = trackNames.get(MP.id) || `#${MP.id}`, on = tracked().some((t) => t.id === MP.id);
+  const a = d ? analyzeTrack(MP.id, d, MP.need) : null;
+  el.classList.toggle("min", !!MP.min);
+  el.innerHTML = `<div class="mpn-head">
+      <b class="mpn-name" data-mpn-min="1" title="접기·펴기">📈 ${esc(name)}</b>
+      ${a ? `<span class="signal ${a.signal.kind}">${a.signal.icon} ${esc(a.signal.label)}</span>` : ""}
+      <span class="faint">${d && d.live ? "⚡ 방금" : d ? `데이터 ${ago(d.upd)}` : ""}</span>
+      <span class="mpn-btns">
+        <button type="button" class="cart-btn" data-mpn-live="1"${trackLiveBusy ? " disabled" : ""} title="지금 시세로 다시 받기">${trackLiveBusy ? "⚡…" : "⚡"}</button>
+        ${on ? `<a class="cart-btn" href="#track" title="트래킹 화면에서 보기">✓ 트래킹 중</a>` : `<button type="button" class="cart-btn primary" data-mpn-add="1">+ 트래킹</button>`}
+        <button type="button" class="chip-x" data-mpn-min="1" title="${MP.min ? "펴기" : "접기"}">${MP.min ? "▴" : "▾"}</button>
+        <button type="button" class="chip-x" data-mpn-close="1" title="닫기">✕</button>
+      </span></div>
+    ${MP.min ? "" : `<div class="mpn-body">${a ? trackBody(a, { id: MP.id, qty: MP.need, label: `${MP.need.toLocaleString("ko-KR")}개 살 때` }, false) : '<p class="faint">시세 기록이 없다 개굴.</p>'}</div>`}`;
+  placeMatPanel();
+}
+function placeMatPanel() {
+  const el = document.getElementById("mat-panel");
+  if (!el) return;
+  const side = !document.body.classList.contains("side-folded") && innerWidth > 900 ? document.getElementById("side").offsetWidth : 0;
+  el.style.left = `${side + 12}px`;
+}
+window.addEventListener("resize", placeMatPanel);
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#mat-panel")) return;
+  if (e.target.closest("[data-mpn-close]")) { MP = null; save("ffxivMatPanel", null); renderMatPanel(); return; }
+  if (e.target.closest("[data-mpn-min]")) { MP.min = !MP.min; save("ffxivMatPanel", MP); renderMatPanel(); return; }
+  if (e.target.closest("[data-mpn-live]")) { refreshTrackLive([MP.id]); return; }
+  if (e.target.closest("[data-mpn-add]")) {
+    const list = tracked();
+    if (!list.some((t) => t.id === MP.id)) { list.unshift({ id: MP.id, qty: MP.need }); saveTracked(list); }
+    trackRedraw();
+  }
+});
 
 async function renderTrack() {
   const app = document.getElementById("app");
@@ -1454,7 +1508,7 @@ function setFold(folded) {
   if (!wide()) { document.body.classList.remove("side-open"); return; }
   document.body.classList.toggle("side-folded", folded);
   save("ffxivSideFolded", folded);
-  setTimeout(placeTrackFloat, 250); // 사이드바 접고 펴는 움직임이 끝난 뒤 자리 다시 잡기
+  setTimeout(() => { placeTrackFloat(); placeMatPanel(); }, 250); // 사이드바 접고 펴는 움직임이 끝난 뒤 자리 다시 잡기
 }
 
 // ⚙ 처음 설정: 권한 받고 처음 들어온 캐릭터(이 기기·서버 둘 다 설정이 없을 때)한테 한 번 보여준다
@@ -1653,6 +1707,7 @@ async function start() {
   }
   applyTheme();
   renderSide();
+  renderMatPanel(); // 지난번에 띄워 둔 재료 창
   if (first) onboard();
   await render();
   refreshPending();

@@ -286,7 +286,7 @@ function renderDetail(d, row) {
     const market = m.source === "거래소";
     return `
       <tr class="${m.depth ? "sub" : ""}">
-        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 재료 트래킹에 담고 보러 간다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${makeToggle(d, m)}</td>
+        <td>${tree}${m.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${m.id}" data-need="${m.need}" title="눌러서 왼쪽 아래 📈 재료 창에 띄운다 개굴">${esc(m.name)}<span class="mat-go">📈</span></button>` : esc(m.name)}${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${makeToggle(d, m)}</td>
         <td class="num">${m.amount}</td>
         <td class="num">${m.need}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -774,6 +774,9 @@ function renderCartPage(d) {
   // 왼쪽 재료 줄 ↔ 오른쪽 장보기 칸 (같은 체크 상태를 같이 쓴다)
   const doneKey = {};
   for (const g of list) for (const it of g.items) if (!(it.id in doneKey)) doneKey[it.id] = it.key;
+  // 재료 이름: 마우스 올리면 서버별 최저가·평균 판매가 창, 누르면 📈 재료 트래킹 (오른쪽 장보기랑 같다)
+  const matName = (id, name, need) => (id && d.trackMaterial
+    ? `<button type="button" class="mat-link" data-track-mat="${id}" data-need="${need}">${esc(name)}</button>` : esc(name));
   const cards = rows.map((r) => {
     const n = state.cart[r.id], v = V(r), out = n * r.resultAmount;
     const craftsAt = []; // 깊이별로 위 재료를 몇 회 만드는지 (재료 수량 = 1회에 들어가는 수 × 그 횟수)
@@ -792,12 +795,12 @@ function renderCartPage(d) {
       // 사는 중간재료도 뭘로 만드는지 └ 로 (만들 때 필요한 수량, 흐리게)
       const rawCrafts = !made && m.raw ? Math.ceil(need / (m.raw.ra || 1) - 1e-9) : 0;
       const rawRows = !made && m.raw && m.raw.kids.length ? m.raw.kids.map((k) => `<tr class="cp-ref sub">
-        <td style="padding-left:${10 + (m.depth + 1) * 22}px"><span class="tree">└</span>${esc(k.name)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}</td>
+        <td style="padding-left:${10 + (m.depth + 1) * 22}px"><span class="tree">└</span>${matName(k.id, k.name, k.amount * rawCrafts)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}</td>
         <td class="num">${(k.amount * rawCrafts).toLocaleString("ko-KR")}<div class="cp-per">1회 ${k.amount}개 × ${rawCrafts}회</div></td><td colspan="4" class="faint">만들 때 필요한 재료 (지금은 안 산다)</td></tr>`).join("") : "";
       const key = !made ? doneKey[m.id] : null, got = key && state.done[key];
       const box = key ? `<label class="buy cp-buy" data-tip="샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"><input type="checkbox" data-done="${esc(key)}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
       return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}${got ? " cp-got" : ""}">
-        <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}${box}<b>${esc(m.name)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
+        <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}${box}<b>${matName(m.id, m.name, need)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
         <td class="num">${need.toLocaleString("ko-KR")}${per}</td>
         <td>${made ? `<span class="badge src-craft">🔨 직접 제작</span> <span class="faint">${crafts}회</span>` : `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`}</td>
         <td class="num">${gil(m.unit)}</td>
@@ -1189,7 +1192,7 @@ export default function (component) {
           <table><tbody>${info.worlds.map((w, i) => `<tr class="${i ? "" : "best"}"><td>${esc(w.name)}</td><td class="num">${gil(w.min)}</td>
             <td class="num faint">매물 ${w.cnt}</td></tr>`).join("")}</tbody></table>`) +
         `<div class="mp-avg">한국 전체 최근 7일 평균 판매가 <b>${info && info.avg != null ? gil(info.avg) + "길" : "-"}</b>${info && info.sold ? ` <small>(${info.sold.toLocaleString("ko-KR")}개 팔림)</small>` : ""}</div>
-        <div class="faint">${info && info.live ? `⚡ ${esc(state.liveTime)} 에 방금 받은 매물이다 개굴` : "매시간 받아 둔 값이다 개굴"} · 누르면 📈 재료 트래킹으로 간다 개굴</div>`;
+        <div class="faint">${info && info.live ? `⚡ ${esc(state.liveTime)} 에 방금 받은 매물이다 개굴` : "매시간 받아 둔 값이다 개굴"} · 누르면 왼쪽 아래 📈 재료 창에 띄운다 개굴</div>`;
       placeMatPop(pop, el);
     }, () => { if (root.__popFor === el) pop.innerHTML = `<div class="faint">시세를 못 받아왔다 개굴.</div>`; });
   };

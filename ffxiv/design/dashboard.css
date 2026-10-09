@@ -570,3 +570,5 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cp-per{font-size:10px;font-weight:400;color:var(--text-faint);white-space:nowrap;line-height:1.3}
 .cart-jump.cart-empty{color:var(--negative)}
 .cartpage-head h1 .cart-empty{margin-left:var(--space-3);vertical-align:middle;font-family:inherit;font-size:var(--fs-sm);color:var(--negative)}
+.cp-card .mat-link{font-weight:inherit;color:inherit}
+.cp-card tr.cp-got .mat-link{text-decoration:line-through}

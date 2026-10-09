@@ -280,7 +280,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .cart-fab:hover{filter:brightness(1.06)}
 .cart-fab.bump{animation:fab-bump .35s ease}
 @keyframes fab-bump{40%{transform:scale(1.12)}}
-.drawer{position:fixed;top:0;right:0;bottom:0;z-index:1000006;width:min(420px,100vw);display:flex;flex-direction:column;
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:1000006;width:min(520px,100vw);display:flex;flex-direction:column;
   background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow)}
 .drawer.anim{animation:drawer-in .22s ease-out}
 @keyframes drawer-in{from{transform:translateX(100%)}}
@@ -294,7 +294,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer .kv div{align-items:flex-start}
 .drawer .cart-groups{grid-template-columns:1fr}
 /* 넓은 화면에선 서랍 열면 표를 왼쪽으로 좁혀서 안 가리게 */
-@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(420px - var(--space-10) - var(--space-4))}
+@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(520px - var(--space-10) - var(--space-4))}
   /* 서랍 열린 동안은 표 칸 여백을 조금 줄여서 숨 쉴 자리를 만든다 */
   .ffx.with-drawer .rank-table > table > thead th,.ffx.with-drawer .rank-table > table > tbody > tr > td{padding-left:6px;padding-right:6px}}
 
@@ -530,3 +530,28 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .make-opt.on{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong);font-weight:700;cursor:default}
 .make-opt.off{opacity:.5;cursor:default}
 .cart-make li.crafting{background:var(--primary-soft)}
+
+/* 서랍: 자세히 보기 */
+.drawer-tools{display:flex;align-items:center;gap:var(--space-2)}
+.drawer-tools .cart-btn{text-decoration:none}
+/* 🛒 장바구니 화면 */
+.cartpage-head h1{margin:var(--space-1) 0}
+.cartpage-head .tagline{margin:0 0 var(--space-5)}
+.cartpage{display:grid;grid-template-columns:minmax(0,1fr) 520px;gap:var(--space-5);align-items:start}
+.cartpage-side{position:sticky;top:var(--space-4);max-height:calc(100vh - 2 * var(--space-4));overflow-y:auto;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding-bottom:var(--space-4)}
+.cartpage-side .detail-top{flex-direction:column;align-items:stretch;gap:var(--space-3)}
+.cartpage-side .kv{margin-left:0;justify-content:space-between}
+.cartpage-side .cart-groups{grid-template-columns:1fr}
+.cp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)}
+.cp-top{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.cp-top h2{margin:0;font-size:var(--fs-lg)}
+.cp-count{font-weight:700;color:var(--primary-strong)}
+.cp-top .chip-x{margin-left:auto}
+.cp-kv{margin:var(--space-3) 0;justify-content:flex-start;gap:var(--space-6)}
+.cp-card table td{vertical-align:top}
+.cp-card tr.cp-made > td{background:var(--primary-soft)}
+.cp-card tr.sub > td{font-size:var(--fs-sm)}
+.cp-card .tree{color:var(--text-faint);margin-right:4px}
+.cp-raw{margin-top:3px;font-size:var(--fs-xs);color:var(--text-muted);font-weight:400}
+@media (max-width:1300px){.cartpage{grid-template-columns:1fr}.cartpage-side{position:static;max-height:none}}

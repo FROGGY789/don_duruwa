@@ -91,7 +91,7 @@ function who() {
 }
 // 관리자 메뉴를 보여줄지 (화면 표시용일 뿐, 진짜 확인은 Cloudflare 문지기가 한다)
 const adminUI = () => /(?:^|;\s*)ffx_admin=1/.test(document.cookie);
-const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#journal" ? "journal" : location.hash === "#fc" ? "fc" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
+const page = () => (location.hash === "#gather" ? "gather" : location.hash === "#track" ? "track" : location.hash === "#journal" ? "journal" : location.hash === "#fc" ? "fc" : location.hash === "#cart" ? "cart" : location.hash === "#exchange" ? "exchange" : location.hash === "#exchange-craft" ? "exchangeCraft"
   : location.hash === "#admin" && adminUI() ? "admin" : "craft");
 let adminPending = 0;
 const days = () => meta.hours / 24;
@@ -210,6 +210,10 @@ function applyMakes(d, resultAmount) {
       mk.qty += qty;
       kids.forEach((k) => flat(k, depth + 1, (qty * k.amount) / (n.ra || 1), [n.name, ...via]));
       return;
+    }
+    const al = alts[n.id];
+    if (al && al.src === "직접 제작") { // 사는 중간재료도 뭘로 만드는지 (장바구니 화면용)
+      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ name: k.name, amount: k.amount, t: k.t })) };
     }
     const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
     const key = `${n.id}|${n.source}|${world}`;
@@ -421,7 +425,8 @@ async function render() {
   if (page() === "track") return renderTrack();
   if (page() === "journal") return renderJournal();
   if (page() === "fc") return renderFc();
-  const p = page(), name = p === "exchange" ? "exchange" : `${p}-${QUALITY_KEY[S.quality]}`;
+  // 🛒 장바구니 화면은 제작 데이터로 같은 대시보드를 장바구니 모양으로 그린다
+  const cartPage = page() === "cart", p = cartPage ? "craft" : page(), name = p === "exchange" ? "exchange" : `${p}-${QUALITY_KEY[S.quality]}`;
   // 교환은 화폐마다 값어치가 달라서, 처음 들어오면 군표부터 보여준다
   if (p !== lastPage) {
     const st = window.__ffxivDash;
@@ -440,6 +445,7 @@ async function render() {
   const F = S[p];
   const app = document.getElementById("app");
   let host = app.querySelector(".dash-host");
+  if (!host && cartPage) { app.innerHTML = `<div class="dash-host"></div>`; host = app.querySelector(".dash-host"); }
   if (!host) {
     app.innerHTML = `<div class="search-wrap"><input id="search" type="search" placeholder="${{ craft: "🔍 아이템 이름으로 찾기 (예: 모그루 모그, 루비)", gather: "🔍 채집템 이름으로 찾기 (예: 구리 광석, 라벤더)", exchange: "🔍 교환템 이름으로 찾기 (예: 마테리쟈, 암흑물질)", exchangeCraft: "🔍 만들 템 이름으로 찾기" }[p]}" autocomplete="off"></div><div class="dash-host"></div>`;
     host = app.querySelector(".dash-host");
@@ -450,6 +456,7 @@ async function render() {
   }
   const data = {
     mode: p,
+    cartPage,
     title: SITE_NAME,
     titleHtml: `<b class="initial">에</b>오르제아에서 <b class="initial">장</b>사꾼으로 <b class="initial">살</b>아남기`, // 줄임말 에·장·살 을 굵게
     tagline: TAGLINE[p],
@@ -1236,6 +1243,8 @@ function seg(path, options, value) {
 const QUAL_SEG = () => `<div class="sb-title">필터</div>
     <label class="field"><span>판매 품질</span></label>
     ${seg("quality", Object.keys(QUALITY_KEY), S.quality)}`;
+const cartNavCount = () => { const n = Object.keys((window.__ffxivDash || {}).cart || {}).length; return n ? ` <span class="nav-cnt">${n}</span>` : ""; };
+window.addEventListener("ffxiv-cart", () => { const a = document.querySelector("[data-nav-cart]"); if (a) a.innerHTML = `🛒 장바구니${cartNavCount()}`; });
 function sideHead(p) {
   return `
     <div class="sb-top"><span class="brand-frog">🐸</span><span class="sb-fold-hint">누르면 접힌다 개굴</span><button type="button" class="side-fold" data-fold="1" title="사이드바 접기" aria-label="사이드바 접기">«</button></div>
@@ -1245,6 +1254,7 @@ function sideHead(p) {
       <a href="#exchange" class="${p === "exchange" ? "on" : ""}">🪙 교환템 팔기</a>
       <a href="#exchange-craft" class="${p === "exchangeCraft" ? "on" : ""}">🧪 교환 재료로 만들기</a>
       <a href="#track" class="${p === "track" ? "on" : ""}">📈 재료 트래킹</a>
+      <a href="#cart" class="${p === "cart" ? "on" : ""}" data-nav-cart="1">🛒 장바구니${cartNavCount()}</a>
       <a href="#journal" class="${p === "journal" ? "on" : ""}">📒 나의 제작일지</a>
       <a href="#fc" class="${p === "fc" ? "on" : ""}">🏰 우리 부대</a>
     </nav>
@@ -1279,6 +1289,14 @@ function renderSide() {
       <p class="hint">리테이너 이름을 적어 두면, 매시간 시세 받을 때 장터 매물에서 그 이름을 찾아 부대원이 뭘 팔고 있는지 알아낸다 개굴.</p>
       <p class="hint">부대원이 팔고 있는 템은 제작·채집 순위에서 옅은 회색 줄 + 🏷 표시로 바뀐다 개굴. 서버 탭이면 그 서버에서 파는 것만, 🌏 통합이면 어느 서버든 친다 개굴.</p>
       <p class="hint">부대는 로살리아@초코보가 🔑 권한 관리에서 묶어 준다 개굴.</p>
+      ${adminLink(p)}`;
+    return;
+  }
+  if (p === "cart") {
+    side.innerHTML = sideHead(p) + `
+      <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
+      <p class="hint">⚒️ 제작 순위에서 + 로 담은 걸 크게 펼쳐 본다 개굴. 완성품마다 재료가 어떻게 들어가는지, 1차·2차 중간재료는 뭘로 만드는지까지 보여준다 개굴.</p>
+      <p class="hint">오른쪽 장보기 목록은 서랍이랑 같다 개굴. 사기·만들기를 바꾸거나 수량을 고치면 여기도 바로 바뀐다 개굴.</p>
       ${adminLink(p)}`;
     return;
   }

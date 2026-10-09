@@ -41,6 +41,7 @@ function saveCart() {
   saveJSON("ffxivCart", state.cart);
   saveJSON("ffxivCartDone", state.done);
   saveJSON("ffxivCartQty", state.qty);
+  window.dispatchEvent(new Event("ffxiv-cart")); // 사이드바 🛒 장바구니 숫자 갱신용
 }
 function nowText() {
   const t = new Date(), p = (n) => String(n).padStart(2, "0");
@@ -659,16 +660,33 @@ function cartText(d) {
   return out.join("\n");
 }
 
-function renderCart(d) {
-  if (!Object.keys(state.cart).length || !state.cartOpen) return "";
-  // 정적 사이트: 담은 아이템의 재료 목록을 아직 안 받았으면 받아 온다
+// 정적 사이트: 담은 아이템의 재료 목록을 아직 안 받았으면 받아 온다 (받는 중이면 true)
+function cartWaiting(d) {
   const waiting = d.loadDetail ? Object.keys(state.cart).map(Number).map((id) => d.rows.find((r) => r.id === id)).filter((r) => r && !r.loaded) : [];
-  if (waiting.length) {
-    Promise.all(waiting.map((r) => d.loadDetail(r.id))).then(() => d.rerender && d.rerender(), () => {});
+  if (waiting.length) Promise.all(waiting.map((r) => d.loadDetail(r.id))).then(() => d.rerender && d.rerender(), () => {});
+  return waiting.length > 0;
+}
+
+function renderCart(d) {
+  if (!Object.keys(state.cart).length || !state.cartOpen || d.cartPage) return "";
+  if (cartWaiting(d)) {
     return `<aside class="cart drawer" id="cart"><div class="drawer-head"><h2>🛒 장보기 목록</h2>
       <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button></div>
       <div class="drawer-body"><div class="detail-top"><div class="desc">🐸 재료 목록 불러오는 중이다 개굴…</div></div></div></aside>`;
   }
+  return `
+    <aside class="cart drawer${state.cartAnim ? " anim" : ""}" id="cart" aria-label="장보기 목록">
+      <div class="drawer-head">
+        <h2>🛒 장보기 목록</h2>
+        <span class="drawer-tools"><a class="cart-btn" href="#cart" data-tip="장바구니 화면에서 완성품마다 재료를 크게 펼쳐 본다 개굴">📋 자세히 보기</a>
+        <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button></span>
+      </div>
+      <div class="drawer-body">${cartBody(d)}</div>
+    </aside>`;
+}
+
+// 장보기 목록 본문 (서랍 · 장바구니 화면 오른쪽에서 같이 쓴다)
+function cartBody(d) {
   const { rows, missing, list, cost, revenue, choices } = cartPlan(d);
   const opt = (c, to, unit) => {
     const on = c.now === to, label = `${to === "buy" ? "🛒 사기" : "🔨 만들기"} ${unit == null ? "-" : gil(unit)}`;
@@ -725,12 +743,6 @@ function renderCart(d) {
       ${saved ? `<div class="ev-cap">저장한 목록 (이 브라우저에만 저장된다 개굴)</div><ul class="cart-saved">${saved}</ul>` : ""}
     </div>`;
   return `
-    <aside class="cart drawer${state.cartAnim ? " anim" : ""}" id="cart" aria-label="장보기 목록">
-      <div class="drawer-head">
-        <h2>🛒 장보기 목록</h2>
-        <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button>
-      </div>
-      <div class="drawer-body">
         <div class="detail-top">
           <div>
             <div class="desc">담은 거 ${rows.length}개${all.length ? ` · 산 거 ${bought}/${all.length}` : ""} · ${esc(serverName(d))} 판매가 기준 · 거래소 ${worlds}곳 돌면 된다 개굴 (재료비 큰 서버부터)${missing ? ` · 지금은 어느 순위에도 없어서 빠진 거 ${missing}개` : ""}</div>
@@ -748,9 +760,48 @@ function renderCart(d) {
             : "지금은 매시간 받아 둔 값이다 개굴. 사러 가기 전에 눌러서 지금 값으로 다시 짜라 개굴"}${state.liveMsg ? ` · ⚠ ${esc(state.liveMsg)}` : ""}</span>
         </div>
         <div class="cart-groups">${makeBox}${tables}</div>
-        ${save}
+        ${save}`;
+}
+
+// 🛒 장바구니 화면: 왼쪽은 완성품마다 재료 펼침, 오른쪽은 장보기 목록
+function renderCartPage(d) {
+  const head = `<header class="cartpage-head"><div class="eyebrow">SHOPPING CART</div><h1>🛒 장바구니</h1>
+    <p class="tagline">담은 완성품마다 재료가 어떻게 들어가는지, 1차·2차 중간재료는 뭘로 만드는지까지 펼쳐 본다 개굴.</p></header>`;
+  if (!Object.keys(state.cart).length) return head + `<div class="detail-hint">🐸 아직 담은 게 없다 개굴. <a href="#craft">⚒️ 제작</a> 순위에서 + 를 눌러 담아라 개굴.</div>`;
+  if (cartWaiting(d)) return head + `<div class="detail-hint">🐸 재료 목록 불러오는 중이다 개굴…</div>`;
+  const { rows } = cartPlan(d);
+  const cards = rows.map((r) => {
+    const n = state.cart[r.id], v = V(r), out = n * r.resultAmount;
+    const mats = (r.materials || []).map((m) => {
+      const made = m.source === "직접 제작";
+      const need = m.need * n;
+      const crafts = made ? Math.ceil(need / (m.ra || 1) - 1e-9) : 0;
+      const raw = !made && m.raw && m.raw.kids.length
+        ? `<div class="cp-raw">🔨 만들려면 (1회 ${m.raw.ra}개): ${m.raw.kids.map((k) => `${esc(k.name)} ×${k.amount}`).join(" · ")} <span class="faint">· 만들면 개당 ${gil(m.raw.unit)}</span></div>` : "";
+      return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}">
+        <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}<b>${esc(m.name)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl)}${raw}</td>
+        <td class="num">${need.toLocaleString("ko-KR")}</td>
+        <td>${made ? `<span class="badge src-craft">🔨 직접 제작</span> <span class="faint">${crafts}회</span>` : `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`}</td>
+        <td class="num">${gil(m.unit)}</td>
+        <td class="num">${made ? '<span class="faint">↓ 재료값</span>' : gil(m.unit != null ? m.unit * need : null)}</td>
+        <td>${!made && m.world ? esc(String(m.world).split(" (")[0]) : '<span class="dash">-</span>'}</td></tr>`;
+    }).join("");
+    return `<section class="cp-card">
+      <div class="cp-top"><h2>${itemName(r.name, r.stars, r.sellingHq === true)}${tierMark(r.tier)}</h2>
+        <span class="cp-count">×${n}회 <span class="faint">(${out.toLocaleString("ko-KR")}개)</span></span>
+        <button type="button" class="chip-x" data-unpick="${r.id}" title="장바구니에서 빼기">✕</button></div>
+      <div class="kv cp-kv">
+        <div><span>판매 예상가 (개당)</span><b>${gil(v.sell)}</b></div>
+        <div><span>원가 (개당)</span><b>${gil(r.cost)}</b></div>
+        <div><span>순수익 (개당)</span><b>${v.net == null ? '<span class="dash">-</span>' : signed(v.net)}</b></div>
+        <div><span>순수익 ×${out}개</span><b>${v.net == null ? '<span class="dash">-</span>' : signed(v.net * out)}</b></div>
       </div>
-    </aside>`;
+      <div class="table-wrap"><table>
+        <thead><tr><th>재료</th><th class="num">필요 수량</th><th>구하는 법</th><th class="num">개당</th><th class="num">금액</th><th>살 서버</th></tr></thead>
+        <tbody>${mats}</tbody></table></div>
+    </section>`;
+  }).join("");
+  return head + `<div class="cartpage"><div class="cartpage-main">${cards}</div><aside class="cartpage-side cart">${cartBody(d)}</aside></div>`;
 }
 
 // 화면 오른쪽 아래에 떠 있는 장보기 버튼
@@ -826,6 +877,11 @@ export default function (component) {
     const notice = data.notice
       ? `<div class="notice ${esc(data.notice.kind)}"><span>${data.notice.kind === "error" ? "⚠" : "⏳"}</span><span>${esc(data.notice.text)}</span></div>`
       : "";
+    if (data.cartPage) {
+      root.innerHTML = notice + renderCartPage(data);
+      root.classList.remove("with-drawer");
+      return;
+    }
     root.innerHTML =
       notice +
       renderSearch(data) +

@@ -205,7 +205,8 @@ function applyMakes(d, resultAmount) {
     const { kids, ...row } = n;
     materials.push({ ...row, depth });
     if (n.source === "직접 제작" && kids.length) {
-      const mk = makes[n.id] || (makes[n.id] = { id: n.id, name: n.name, t: n.t, qty: 0, ra: n.ra || 1, via: via.slice() });
+      const mk = makes[n.id] || (makes[n.id] = { id: n.id, name: n.name, t: n.t, qty: 0, ra: n.ra || 1, via: via.slice(), unit: n.unit,
+        buyUnit: n.other && n.other.to === "buy" ? n.other.unit : null });
       mk.qty += qty;
       kids.forEach((k) => flat(k, depth + 1, (qty * k.amount) / (n.ra || 1), [n.name, ...via]));
       return;
@@ -213,7 +214,8 @@ function applyMakes(d, resultAmount) {
     const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
     const key = `${n.id}|${n.source}|${world}`;
     const s = shop[key] || (shop[key] = { id: n.id, name: n.name, qty: 0, unit: n.unit, source: n.source, world, g: n.g, gl: n.gl, t: n.t, via: [],
-      canCraft: !!(alts[n.id] && alts[n.id].src === "직접 제작") });
+      craftUnit: n.other && n.other.to === "craft" ? n.other.unit : null });
+    s.canCraft = s.craftUnit != null;
     s.qty += qty;
     if (via.length && !s.via.some((v) => v.join() === via.join())) s.via.push(via.slice());
   };

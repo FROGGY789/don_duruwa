@@ -523,3 +523,10 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cart-make .tier-mark{margin:0 5px 0 0}
 .make-now{margin-left:6px;padding:0 8px;border-radius:var(--radius-pill);border:1px solid var(--primary);background:var(--primary-soft);color:var(--primary-strong);font-size:var(--fs-xs);font-weight:600;line-height:1.7;white-space:nowrap;vertical-align:middle;cursor:help}
 .make-now + .make-btn{margin-left:4px}
+.make-seg{display:flex;flex-direction:column;gap:3px;flex:none}
+.make-opt{border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);border-radius:var(--radius-pill);padding:0 9px;
+  font-size:var(--fs-xs);line-height:1.8;white-space:nowrap;cursor:pointer;text-align:left}
+.make-opt:hover{border-color:var(--primary);color:var(--primary-strong);background:var(--primary-soft)}
+.make-opt.on{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong);font-weight:700;cursor:default}
+.make-opt.off{opacity:.5;cursor:default}
+.cart-make li.crafting{background:var(--primary-soft)}

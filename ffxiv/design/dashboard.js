@@ -592,13 +592,13 @@ function cartPlan(d) {
   const ids = Object.keys(state.cart).map(Number);
   const rows = ids.map((id) => d.rows.find((r) => r.id === id)).filter(Boolean);
   const missing = ids.length - rows.length;
-  const groups = {}, makes = {};
+  const groups = {}, makes = {}, buyable = {};
   let cost = 0, revenue = 0;
   for (const r of rows) {
     const n = state.cart[r.id];
     revenue += (V(r).sell || 0) * (1 - d.taxRate) * n * r.resultAmount;
     for (const m of r.makes || []) { // 🔨 직접 만들 중간재료
-      const mk = makes[m.id] || (makes[m.id] = { id: m.id, name: m.name, tier: m.t, qty: 0, ra: m.ra, for: [] });
+      const mk = makes[m.id] || (makes[m.id] = { id: m.id, name: m.name, tier: m.t, qty: 0, ra: m.ra, for: [], unit: m.unit, buyUnit: m.buyUnit });
       mk.qty += m.qty * n;
       const label = [...m.via, r.name].join(" → ");
       if (!mk.for.includes(label)) mk.for.push(label);
@@ -615,6 +615,10 @@ function cartPlan(d) {
       it.qty += s.qty * n;
       it.spend += s.qty * n * ((live ? live.unit : s.unit) || 0);
       if (live) { it.live = true; it.short = live.short; }
+      if (s.canCraft) { // 사는 중이지만 직접 만들 수도 있는 재료
+        const c = buyable[s.id] || (buyable[s.id] = { id: s.id, name: s.name, tier: s.t, unit: s.unit, craftUnit: s.craftUnit, for: [] });
+        for (const label of it.for) if (!c.for.includes(label)) c.for.push(label);
+      }
     }
   }
   const list = Object.values(groups).map((g) => {
@@ -630,7 +634,9 @@ function cartPlan(d) {
     return { ...g, items, total };
   }).sort((a, b) => (b.market - a.market) || (b.total - a.total));
   const make = Object.values(makes).map((m) => ({ ...m, crafts: Math.ceil(m.qty / m.ra - 1e-9) }));
-  return { ids, rows, missing, list, cost, revenue, make };
+  // 🔨 직접 제작 가능한 재료: 지금 만드는 것 + 사는데 만들 수도 있는 것
+  const choices = [...make.map((m) => ({ ...m, now: "craft", craftUnit: m.unit })), ...Object.values(buyable).filter((c) => !makes[c.id]).map((c) => ({ ...c, now: "buy", buyUnit: c.unit }))];
+  return { ids, rows, missing, list, cost, revenue, make, choices };
 }
 
 // 텍스트 파일·복사용 장보기 목록
@@ -657,11 +663,17 @@ function renderCart(d) {
       <button type="button" class="drawer-x" data-close-cart="1" title="닫기 (Esc)">✕</button></div>
       <div class="drawer-body"><div class="detail-top"><div class="desc">🐸 재료 목록 불러오는 중이다 개굴…</div></div></div></aside>`;
   }
-  const { rows, missing, list, cost, revenue, make } = cartPlan(d);
-  const makeBox = make.length ? `<div class="cart-make"><div class="cart-group-head"><b>🔨 직접 만들 것</b><span class="faint">재료 사서 먼저 만들어 둘 중간재료 개굴</span></div>
-    <ul>${make.map((m) => `<li><div>${tierMark(m.tier)}<b>${esc(m.name)}</b> <span class="faint">${m.crafts}회 (${(m.crafts * m.ra).toLocaleString("ko-KR")}개)</span>
-      <div class="mat-for" title="${esc(m.for.join(", "))}">↳ ${esc(m.for.join(" · "))}</div></div>
-      ${d.setMake ? `<button type="button" class="make-btn" data-make="${m.id}" data-to="buy" data-tip="이 중간재료는 만들지 말고 거래소에서 사는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴">🛒 사는 걸로</button>` : ""}</li>`).join("")}</ul></div>` : "";
+  const { rows, missing, list, cost, revenue, choices } = cartPlan(d);
+  const opt = (c, to, unit) => {
+    const on = c.now === to, label = `${to === "buy" ? "🛒 사기" : "🔨 만들기"} ${unit == null ? "-" : gil(unit)}`;
+    return on ? `<span class="make-opt on">${label} ✓</span>`
+      : unit == null ? `<span class="make-opt off">${label}</span>`
+      : `<button type="button" class="make-opt" data-make="${c.id}" data-to="${to}" data-tip="${to === "buy" ? "만들지 말고 사는 걸로 바꾼다 개굴" : "사지 말고 직접 만드는 걸로 바꾼다 개굴"}. 모든 레시피에 같이 적용된다 개굴">${label}</button>`;
+  };
+  const makeBox = choices.length ? `<div class="cart-make"><div class="cart-group-head"><b>🔨 직접 제작 가능한 재료</b><span class="faint">사기·만들기 골라라 개굴 (개당 값)</span></div>
+    <ul>${choices.map((c) => `<li class="${c.now === "craft" ? "crafting" : ""}"><div>${tierMark(c.tier)}<b>${esc(c.name)}</b>${c.now === "craft" ? ` <span class="faint">${c.crafts}회 만들기 (${(c.crafts * c.ra).toLocaleString("ko-KR")}개)</span>` : ""}
+      <div class="mat-for" title="${esc(c.for.join(", "))}">↳ ${esc(c.for.join(" · "))}</div></div>
+      ${d.setMake ? `<div class="make-seg">${opt(c, "buy", c.buyUnit)}${opt(c, "craft", c.craftUnit)}</div>` : ""}</li>`).join("")}</ul></div>` : "";
   const worlds = list.filter((g) => g.market).length;
   const all = list.flatMap((g) => g.items);
   const bought = all.filter((it) => state.done[it.key]).length;
@@ -679,8 +691,7 @@ function renderCart(d) {
         <span>${n ? `<em class="cart-count">${complete ? "✓ 다 샀다 개굴" : `✓ ${n}/${g.items.length}`}</em> · ` : ""}${gil(g.total)}길</span></div>
       <table><tbody>${g.items.map((it) => `<tr class="${state.done[it.key] ? "done" : ""}">
         <td><label class="buy"><input type="checkbox" data-done="${esc(it.key)}"${state.done[it.key] ? " checked" : ""} aria-label="${esc(it.name)} 샀다"/></label>
-          <span class="cart-mat">${tierMark(it.tier)}${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<span class="cart-mat-tail"><button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}${it.canCraft && d.setMake
-            ? `<button type="button" class="make-mini" data-make="${it.id}" data-to="craft" data-tip="사지 말고 직접 만드는 걸로 바꾼다 개굴. 그 재료가 장보기에 대신 들어간다 개굴">🔨</button>` : ""}</span></span>
+          <span class="cart-mat">${tierMark(it.tier)}${it.id && d.trackMaterial ? `<button type="button" class="mat-link" data-track-mat="${it.id}" data-need="${it.qty}">${esc(it.name)}</button>` : esc(it.name)}<span class="cart-mat-tail"><button type="button" class="mat-copy" data-copy-name="${esc(it.name)}" title="이름 복사 (장터 검색창에 붙여 넣기)" aria-label="${esc(it.name)} 이름 복사">📋</button>${gatherMarks(it.gather, it.gatherLv)}</span></span>
           ${it.for.length ? `<div class="mat-for" title="${esc(it.for.join(", "))}">↳ ${esc(it.for.join(" · "))}</div>` : ""}</td>
         <td class="num qty-cell${it.edited ? " edited" : ""}">×<input type="number" class="qty-in" min="0" max="99999" value="${it.qty}" data-qty="${esc(it.key)}"
           title="가진 거 빼고 살 만큼만 적어라 개굴 (필요 ${it.need.toLocaleString("ko-KR")}개)" aria-label="${esc(it.name)} 살 수량">${it.edited

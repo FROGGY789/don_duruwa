@@ -280,7 +280,7 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .cart-fab:hover{filter:brightness(1.06)}
 .cart-fab.bump{animation:fab-bump .35s ease}
 @keyframes fab-bump{40%{transform:scale(1.12)}}
-.drawer{position:fixed;top:0;right:0;bottom:0;z-index:1000006;width:min(460px,100vw);display:flex;flex-direction:column;
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:1000006;width:min(420px,100vw);display:flex;flex-direction:column;
   background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow)}
 .drawer.anim{animation:drawer-in .22s ease-out}
 @keyframes drawer-in{from{transform:translateX(100%)}}
@@ -294,7 +294,9 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .drawer .kv div{align-items:flex-start}
 .drawer .cart-groups{grid-template-columns:1fr}
 /* 넓은 화면에선 서랍 열면 표를 왼쪽으로 좁혀서 안 가리게 */
-@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(460px - var(--space-10) - var(--space-4))}}
+@media (min-width:1300px){.ffx.with-drawer{padding-right:calc(420px - var(--space-10) - var(--space-4))}
+  /* 서랍 열린 동안은 표 칸 여백을 조금 줄여서 숨 쉴 자리를 만든다 */
+  .ffx.with-drawer .rank-table > table > thead th,.ffx.with-drawer .rank-table > table > tbody > tr > td{padding-left:6px;padding-right:6px}}
 
 /* 🐸 개구리들 */
 .frog-peek{border:0;background:none;padding:0 0 0 .35em;font-size:.8em;cursor:pointer;vertical-align:.08em;display:inline-block}
@@ -450,11 +452,11 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cart-group table{width:100%;table-layout:fixed}
 .cart-group table td{padding:6px 6px}
 .cart-group table td:first-child{white-space:normal;overflow-wrap:anywhere;padding-left:var(--space-3);line-height:1.5}
-.cart-group table td:nth-child(2){width:78px}
-.cart-group table td:nth-child(3){width:84px}
-.cart-group table td:nth-child(4){width:78px;padding-right:var(--space-3)}
+.cart-group table td:nth-child(2){width:72px}
+.cart-group table td:nth-child(3){width:74px}
+.cart-group table td:nth-child(4){width:72px;padding-right:var(--space-3)}
 .cart-group table td:nth-child(3) small.short{display:block;margin:0}
-.cart-group .mat-for{max-width:100%;margin-left:24px}
+.cart-group .mat-for{max-width:100%;margin-left:24px;white-space:normal;overflow:visible}
 /* 장보기 재료 줄: [1차] 이름 📋 ⛏ 가 한 줄에 붙는다 (차수 뱃지가 이름 앞) */
 .cart-group .cart-mat .tier-mark{margin:0 5px 0 0}
 .cart-group .cart-mat .gather-mark{margin-left:2px;padding:0 3px}
@@ -519,3 +521,5 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cart-make li > div{min-width:0}
 .cart-make .mat-for{margin-left:0;max-width:100%;white-space:normal}
 .cart-make .tier-mark{margin:0 5px 0 0}
+.make-now{margin-left:6px;padding:0 8px;border-radius:var(--radius-pill);border:1px solid var(--primary);background:var(--primary-soft);color:var(--primary-strong);font-size:var(--fs-xs);font-weight:600;line-height:1.7;white-space:nowrap;vertical-align:middle;cursor:help}
+.make-now + .make-btn{margin-left:4px}

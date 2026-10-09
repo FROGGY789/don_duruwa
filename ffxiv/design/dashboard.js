@@ -262,9 +262,11 @@ function makeToggle(d, m) {
   if (!d.setMake || !m.other || m.other.unit == null) return "";
   const cheaper = m.unit != null && m.other.unit < m.unit;
   const label = m.other.to === "buy" ? `🛒 사면 ${gil(m.other.unit)}` : `🔨 만들면 ${gil(m.other.unit)}`;
+  // 지금 고른 쪽도 같이 (비교하기 쉽게): [🔨 만들면 1,500 ✓] [🛒 사면 1,925]
+  const now = `<span class="make-now" data-tip="지금 이걸로 계산 중이다 개굴">${m.other.to === "buy" ? "🔨 만들면" : "🛒 사면"} ${gil(m.unit)} ✓</span>`;
   const tip = m.picked ? "내가 바꾼 거다 개굴. 누르면 처음 추천대로 돌아간다 개굴"
     : m.other.to === "buy" ? "직접 만들지 말고 사는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴" : "사지 말고 직접 만드는 걸로 바꾼다 개굴. 모든 레시피에 같이 적용된다 개굴";
-  return `${m.picked ? '<span class="make-picked" data-tip="내가 고른 방법이다 개굴">✋</span>' : ""}<button type="button" class="make-btn${cheaper ? " cheaper" : ""}" data-make="${m.id}" data-to="${m.picked ? "" : m.other.to}" data-tip="${esc(tip)}">${label}</button>`;
+  return `${m.picked ? '<span class="make-picked" data-tip="내가 고른 방법이다 개굴">✋</span>' : ""}${now}<button type="button" class="make-btn${cheaper ? " cheaper" : ""}" data-make="${m.id}" data-to="${m.picked ? "" : m.other.to}" data-tip="${esc(tip)}">${label}</button>`;
 }
 
 function renderDetail(d, row) {

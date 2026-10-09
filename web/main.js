@@ -520,6 +520,18 @@ async function render() {
 // ── 📒 나의 제작일지 ──
 // 기록: {e: [[날짜 "YYYY-MM-DD", 레시피ID, 제작 횟수], ...], at: 고친 시각} — 캐릭터마다 서버(KV)에 저장, 이 브라우저에도 복사
 let J = null, jQuery = "", jPick = null, jTimer = 0;
+const jOpen = new Set(); // 단골 재료 중 펼쳐 본 것
+// 최근 판매: 7일에 기록이 없으면 14일까지 넓혀서 (한국 전체, 하루 중앙값을 팔린 개수로 가중 평균)
+function saleStats(d) {
+  for (const n of [7, 14]) {
+    const hs = d.h.slice(-n).map((h) => h[1].dc).filter((x) => x && x[0] != null);
+    const units = hs.reduce((a, x) => a + (x[1] || 0), 0);
+    if (!hs.length || !units) continue;
+    return { days: n, units, count: hs.reduce((a, x) => a + (x[2] || 0), 0), med: median(hs.map((x) => x[0])),
+      avg: hs.reduce((a, x) => a + x[0] * (x[1] || 0), 0) / units };
+  }
+  return null;
+}
 const JOURNAL_DAYS = 365, JOURNAL_MAX = 5000;
 const ymd = (t) => { const p2 = (n) => String(n).padStart(2, "0"); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
 const daysAgo = (n) => ymd(new Date(Date.now() - n * 86400000));
@@ -582,18 +594,24 @@ async function renderJournal() {
     }
   }
   const matList = Object.values(mats).filter((m) => m.market).sort((a, b) => b.qty - a.qty).slice(0, 40);
-  const infos = await Promise.all(matList.map((m) => materialInfo(m.id).catch(() => null)));
+  // 판단은 📈 재료 트래킹이랑 같은 방법 (있는 기록만큼 써서, 근거를 같이 보여준다)
+  const tds = await Promise.all(matList.map((m) => trackShard(m.id).then((sh) => sh[m.id] || null).catch(() => null)));
+  const SIG = { buy: "good", wait: "bad" };
   const matRows = matList.map((m, i) => {
-    const info = infos[i], best = info && info.worlds[0], avg = info && info.avg;
-    // 지난날 최저 매물이랑 비교 (기록이 5일 안 되면 7일 평균 판매가랑)
-    const ref = info && (info.lowMed || avg), r = best && ref ? best.min / ref : null;
-    const sig = r == null ? ["-", ""] : r <= 0.9 ? ["🟢 쌀 때", "good"] : r >= 1.15 ? ["🔴 비쌈", "bad"] : ["🟡 보통", ""];
-    return `<tr class="${sig[1]}"><td><button type="button" class="mat-link" data-j-track="${m.id}" data-need="${Math.ceil(m.qty)}">${esc(m.name)}</button>${jTier(m.t)}${jGather(m.g)}
+    const d = tds[i], need = Math.ceil(m.qty), open = jOpen.has(m.id);
+    const a = d ? analyzeTrack(m.id, d, need) : null, s = d ? saleStats(d) : null;
+    const head = `<tr class="${a ? SIG[a.signal.kind] || "" : ""}${open ? " j-on" : ""}">
+      <td><button type="button" class="mat-link" data-j-open="${m.id}" title="눌러서 그래프·서버별 매물 보기">${open ? "▾" : "▸"} ${esc(m.name)}</button>${jTier(m.t)}${jGather(m.g)}
         <div class="mat-for">↳ ${esc(m.for.slice(0, 3).join(" · "))}${m.for.length > 3 ? " …" : ""}</div></td>
-      <td class="num">${Math.ceil(m.qty).toLocaleString("ko-KR")}</td>
-      <td>${best ? `${esc(best.name)} <b>${gil(best.min)}</b>` : '<span class="faint">매물 없음</span>'}</td>
-      <td class="num">${info && info.lowMed ? gil(info.lowMed) : '<span class="faint">-</span>'}</td>
-      <td class="num">${avg ? gil(avg) : "-"}</td><td class="sig">${sig[0]}</td></tr>`;
+      <td class="num">${need.toLocaleString("ko-KR")}</td>
+      <td>${a && a.best ? `${esc(a.best.name)} <b>${gil(a.cur)}</b>` : '<span class="faint">매물 없음</span>'}</td>
+      <td class="num">${a && a.refDays ? `<b>${gil(a.ref)}</b><div class="j-basis">${esc(a.basis)}${a.basis.includes("중앙값") ? "" : "의 중앙값"}</div>` : '<span class="faint">기록 없음</span>'}</td>
+      <td class="num">${s ? `평균 <b>${gil(s.avg)}</b> · 중앙값 ${gil(s.med)}<div class="j-basis">최근 ${s.days}일 · ${s.count.toLocaleString("ko-KR")}건 · ${s.units.toLocaleString("ko-KR")}개</div>`
+        : '<span class="faint">최근 14일 판매 없음</span>'}</td>
+      <td class="sig">${a ? `${a.signal.icon} ${esc(a.signal.label)}` : "-"}</td></tr>`;
+    if (!open) return head;
+    return head + `<tr class="j-detail"><td colspan="6">${a ? `<div class="track-card j-track">${trackBody(a, { id: m.id, qty: need }, false)}</div>` : '<p class="faint">시세 기록이 없다 개굴.</p>'}
+      <div class="j-detail-foot"><button type="button" class="cart-btn" data-j-track="${m.id}" data-need="${need}">📈 재료 트래킹에 담기</button></div></td></tr>`;
   }).join("");
   const top = Object.entries(freq).filter(([id]) => byId.has(Number(id))).sort((a, b) => b[1] - a[1]).slice(0, 10)
     .map(([id, n]) => `<li><span>${esc(byId.get(Number(id)).name)}</span><b>×${n}</b></li>`).join("");
@@ -620,7 +638,7 @@ async function renderJournal() {
     <div class="j-grid">
       <div class="j-card"><div class="j-head"><h2>🧺 단골 재료 · 최근 30일</h2>
         ${matList.length ? `<button type="button" class="cart-btn" data-j-trackall="1">📈 전부 트래킹에 담기</button>` : ""}</div>
-        ${matList.length ? `<div class="table-wrap"><table><thead><tr><th>재료</th><th class="num">30일 사용</th><th>제일 싼 곳 (지금 매물)</th><th class="num" data-tip="지난 14일 동안 하루 최저 매물의 가운데 값 개굴">평소 최저가</th><th class="num">7일 평균 판매가</th><th>상태</th></tr></thead>
+        ${matList.length ? `<div class="table-wrap"><table><thead><tr><th>재료</th><th class="num">30일 사용</th><th>제일 싼 곳 (지금 매물)</th><th class="num" title="상태(🟢🟡🔴)를 정할 때 비교한 값 개굴">평소 가격 (판단 기준)</th><th class="num">최근 판매가</th><th>상태</th></tr></thead>
           <tbody>${matRows}</tbody></table></div>` : `<div class="detail-hint">🐸 아직 기록이 없다 개굴. 위에서 만든 걸 적거나, 장보기에서 '📒 만들었다' 를 눌러라 개굴.</div>`}</div>
       <div class="j-card"><h2>🏆 자주 만드는 것 · 최근 30일</h2>${top ? `<ul class="j-top">${top}</ul>` : `<div class="faint">아직 없다 개굴.</div>`}</div>
     </div>
@@ -636,6 +654,8 @@ document.getElementById("app").addEventListener("input", (e) => {
 });
 document.getElementById("app").addEventListener("click", (e) => {
   if (page() !== "journal") return;
+  const op = e.target.closest("[data-j-open]");
+  if (op) { const id = Number(op.dataset.jOpen); if (jOpen.has(id)) jOpen.delete(id); else jOpen.add(id); renderJournal(); return; }
   const pick = e.target.closest("[data-j-pick]");
   if (pick) { jPick = Number(pick.dataset.jPick); jQuery = ""; renderJournal(); return; }
   if (e.target.closest("[data-j-add]")) {
@@ -751,7 +771,8 @@ function analyzeTrack(id, d, qty) {
   }
   // 그래프: 판단에 쓴 서버의 하루 판매 중앙값도 같이 (보통 가격대 띠랑 같은 기준)
   if (bestW && pastMins.length < 5) d.h.forEach((h, i) => (days[i].wmed = (h[1][bestW.key] || [])[0] ?? null));
-  return { worlds, cur, ref, p25, p75, days, signal, plan, got, spend, bestName: bestW && pastMins.length < 5 ? bestW.name : null };
+  return { worlds, cur, ref, p25, p75, days, signal, plan, got, spend, bestName: bestW && pastMins.length < 5 ? bestW.name : null,
+    basis, refDays: refs.length, best: bestW || null };
 }
 
 function trackChart(a) {
@@ -777,13 +798,6 @@ function trackCard(t, name, d) {
   if (!d) return `<section class="track-card"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
     <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button></div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
   const a = analyzeTrack(t.id, d, t.qty);
-  const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
-  const rows = a.worlds.map((w) => `<tr class="${best && w.key === best.key ? "best" : ""}">
-      <td>${best && w.key === best.key ? "👑 " : ""}${esc(w.name)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
-      <td class="num">${w.min == null ? '<span class="dash">-</span>' : `${gil(w.min)} <small class="faint">×${w.minQty}</small>`}</td>
-      <td class="num">${w.cnt}</td><td class="num">${gil(w.med7)}</td><td class="num">${w.sold7.toLocaleString("ko-KR")}</td>
-      <td class="lots">${w.lst.slice(0, 5).map((l) => `<span class="lot${l[3] ? " bait" : ""}${l[2] ? " hq" : ""}" title="${l[3] ? "미끼 매물 (그 서버 보통 가격의 절반도 안 된다)" : ""}">${gil(l[0])}×${l[1]}${l[2] ? " HQ" : ""}</span>`).join("")}</td></tr>`).join("");
-  const plan = Object.entries(a.plan).sort((x, y) => y[1].qty - x[1].qty).map(([w, p]) => `<li><b>${esc(w)}</b> ${p.qty.toLocaleString("ko-KR")}개 <span class="faint">(평균 ${gil(p.spend / p.qty)}길 · 매물 ${p.lots}개)</span></li>`).join("");
   return `<section class="track-card">
     <div class="track-head">
       <h2>${esc(name)}</h2>
@@ -791,7 +805,19 @@ function trackCard(t, name, d) {
       <span class="faint">데이터 ${ago(d.upd)}</span>
       <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>
     </div>
-    <p class="signal-text">${esc(a.signal.text)}${a.signal.trend ? ` ${esc(a.signal.trend)}` : ""}</p>
+    ${trackBody(a, t, true)}
+  </section>`;
+}
+// 트래킹 카드 본문 (판단 멘트 · 그래프 · 구매 계획 · 서버별 매물). 제작일지 펼침에서도 같이 쓴다
+function trackBody(a, t, editable) {
+  const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
+  const rows = a.worlds.map((w) => `<tr class="${best && w.key === best.key ? "best" : ""}">
+      <td>${best && w.key === best.key ? "👑 " : ""}${esc(w.name)}${w.home ? ' <span class="badge nq">내 서버</span>' : ""}</td>
+      <td class="num">${w.min == null ? '<span class="dash">-</span>' : `${gil(w.min)} <small class="faint">×${w.minQty}</small>`}</td>
+      <td class="num">${w.cnt}</td><td class="num">${gil(w.med7)}</td><td class="num">${w.sold7.toLocaleString("ko-KR")}</td>
+      <td class="lots">${w.lst.slice(0, 5).map((l) => `<span class="lot${l[3] ? " bait" : ""}${l[2] ? " hq" : ""}" title="${l[3] ? "미끼 매물 (그 서버 보통 가격의 절반도 안 된다)" : ""}">${gil(l[0])}×${l[1]}${l[2] ? " HQ" : ""}</span>`).join("")}</td></tr>`).join("");
+  const plan = Object.entries(a.plan).sort((x, y) => y[1].qty - x[1].qty).map(([w, p]) => `<li><b>${esc(w)}</b> ${p.qty.toLocaleString("ko-KR")}개 <span class="faint">(평균 ${gil(p.spend / p.qty)}길 · 매물 ${p.lots}개)</span></li>`).join("");
+  return `<p class="signal-text">${esc(a.signal.text)}${a.signal.trend ? ` ${esc(a.signal.trend)}` : ""}</p>
     <div class="track-grid">
       <div>
         <div class="ev-cap">가격 추이 (${a.days.length}일)</div>
@@ -799,15 +825,15 @@ function trackCard(t, name, d) {
       </div>
       <div class="buy-plan">
         <div class="ev-cap">🛒 구매 계획</div>
-        <label class="field"><span>필요 수량</span><input type="number" min="1" max="99999" value="${t.qty}" data-track-qty="${t.id}"></label>
+        ${editable ? `<label class="field"><span>필요 수량</span><input type="number" min="1" max="99999" value="${t.qty}" data-track-qty="${t.id}"></label>`
+          : `<p class="faint">최근 30일 쓴 만큼 (${t.qty.toLocaleString("ko-KR")}개) 살 때</p>`}
         ${a.got ? `<div class="plan-total"><b>${gil(a.spend)}</b>길 <span class="faint">(개당 평균 ${gil(a.spend / a.got)}길${a.got < t.qty ? ` · 지금 매물로는 ${a.got}개까지만` : ""})</span></div>
           <ul class="plan-list">${plan}</ul>` : `<p class="faint">살 수 있는 매물이 없다 개굴.</p>`}
       </div>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>서버</th><th class="num">최저 매물</th><th class="num">매물 수</th><th class="num">7일 판매 중앙값</th><th class="num">7일 판매량</th><th>싼 매물 (가격×수량)</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-  </section>`;
+      <tbody>${rows}</tbody></table></div>`;
 }
 
 async function renderTrack() {
@@ -1120,7 +1146,8 @@ function renderSide() {
       <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
       <p class="hint">만든 걸 적어 두면 최근 30일 동안 자주 쓴 재료를 모아서, 평소보다 싸게 올라왔을 때 미리 사 두라고 알려준다 개굴.</p>
       <p class="hint">장보기에서 '📒 만들었다' 를 누르면 담은 걸 한 번에 적는다 개굴. 기록은 이 캐릭터에만 저장되고 다른 기기에서도 따라온다 개굴 (최근 1년치).</p>
-      <p class="hint">🟢 평소보다 10%↓ 쌀 때 · 🟡 보통 · 🔴 평소보다 15%↑ 비쌀 때 — 제일 싼 서버 지금 매물을 지난 14일 하루 최저 매물(평소 최저가)이랑 비교한다 개굴. 기록이 5일 안 되면 7일 평균 판매가랑 비교한다 개굴.</p>
+      <p class="hint">🟢 쌀 때 · 🟡 보통 · 🔴 비쌈 — 📈 재료 트래킹이랑 같은 기준이다 개굴. 제일 싼 서버 지금 매물을 지난날 그날 최저 매물(5일 넘게 쌓였으면)이나 그 서버 최근 판매 중앙값이랑 비교한다 개굴. 표에 비교한 값이랑 며칠치인지 같이 나온다 개굴.</p>
+      <p class="hint">재료 이름을 누르면 바로 밑에 가격 그래프·서버별 매물·구매 계획이 펼쳐진다 개굴.</p>
       ${adminLink(p)}`;
     return;
   }

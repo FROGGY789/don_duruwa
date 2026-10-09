@@ -805,10 +805,10 @@ function trackChart(a) {
 }
 
 function trackCard(t, name, d) {
-  if (!d) return `<section class="track-card"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
+  if (!d) return `<section class="track-card" id="track-${t.id}"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
     <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button></div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
   const a = analyzeTrack(t.id, d, t.qty);
-  return `<section class="track-card">
+  return `<section class="track-card" id="track-${t.id}">
     <div class="track-head">
       <h2>${esc(name)}</h2>
       <span class="signal ${a.signal.kind}">${a.signal.icon} ${a.signal.label}</span>
@@ -927,7 +927,28 @@ async function renderTrack() {
     ${list.length ? list.map((t, i) => trackCard(t, trackNames.get(t.id), datas[i])).join("") : `<div class="detail-hint">🐸 위에서 재료를 검색해서 추가해라 개굴.</div>`}
   </section>`;
   if (caret != null) { const el = app.querySelector("#track-search"); el.focus(); el.setSelectionRange(caret, caret); }
+  // 왼쪽 사이드바: 트래킹 중인 재료 목록 (누르면 그 카드로)
+  trackJumpList = list.map((t, i) => {
+    const d = datas[i];
+    return { id: t.id, name: trackNames.get(t.id) || `#${t.id}`, icon: d ? analyzeTrack(t.id, d, t.qty).signal.icon : "⚪" };
+  });
+  const box = document.querySelector("#side .track-jump");
+  if (box) box.innerHTML = trackJumpHtml();
 }
+let trackJumpList = [];
+function trackJumpHtml() {
+  if (!trackJumpList.length) return "";
+  return `<div class="sb-title">트래킹 중인 재료 ${trackJumpList.length}</div>
+    <nav class="nav track-nav">${trackJumpList.map((x) => `<a href="#track" data-track-jump="${x.id}">${x.icon} ${esc(x.name)}</a>`).join("")}</nav>`;
+}
+document.getElementById("side").addEventListener("click", (e) => {
+  const j = e.target.closest("[data-track-jump]");
+  if (!j) return;
+  e.preventDefault();
+  const card = document.getElementById(`track-${j.dataset.trackJump}`);
+  if (card) { card.scrollIntoView({ behavior: "smooth", block: "start" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
+  document.body.classList.remove("side-open");
+});
 
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.id !== "track-search") return;
@@ -1230,6 +1251,7 @@ function renderSide() {
   }
   if (p === "track") {
     side.innerHTML = sideHead(p) + `
+      <div class="track-jump">${trackJumpHtml()}</div>
       <div class="sb-note">마지막 갱신: ${fmtTime(meta.updatedAt)} (${ago(meta.updatedAt)})<br>매시간 알아서 갱신된다 개굴</div>
       <p class="hint">관심 재료를 등록해 두면 서버별 최저가, 살 때인지 기다릴 때인지, 어디서 몇 개 사면 제일 싼지 알려준다 개굴.
       가격 기록은 매일 쌓여서 최대 ${60}일까지 본다 개굴.</p>

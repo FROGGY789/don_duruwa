@@ -268,3 +268,11 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .track-live{margin:0 0 var(--space-4);padding:0;border:0}
 .track-chart .hit{fill:transparent;cursor:pointer}
 .track-chart .hit:hover{fill:var(--primary-soft)}
+/* 지금 시세 다시 받기: 스크롤해도 위에 붙어 있다 */
+.track .track-live{position:sticky;top:0;z-index:5;margin:0 calc(-1 * var(--space-2)) var(--space-4);padding:var(--space-2);
+  background:var(--bg);border-bottom:1px solid var(--border)}
+.track-card{scroll-margin-top:64px}
+.track-card.flash{animation:track-flash 1.2s ease-out}
+@keyframes track-flash{0%{box-shadow:0 0 0 3px var(--primary)}100%{box-shadow:var(--shadow-sm)}}
+.track-nav a{font-size:var(--fs-sm);padding:6px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-jump .sb-title{margin-top:var(--space-2)}

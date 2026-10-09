@@ -531,6 +531,8 @@ async function render() {
 // 기록: {e: [[날짜 "YYYY-MM-DD", 레시피ID, 제작 횟수], ...], at: 고친 시각} — 캐릭터마다 서버(KV)에 저장, 이 브라우저에도 복사
 let J = null, jQuery = "", jPick = null, jTimer = 0;
 const jOpen = new Set(); // 단골 재료 중 펼쳐 본 것
+let jAllDays = false;
+const JSHOW = load("ffxivJournalShow", { 샤드: false, 크리스탈: false, 클러스터: false });
 // 최근 판매: 7일에 기록이 없으면 14일까지 넓혀서 (한국 전체, 하루 중앙값을 팔린 개수로 가중 평균)
 function saleStats(d) {
   for (const n of [7, 14]) {
@@ -604,7 +606,15 @@ async function renderJournal() {
       if (!m.for.includes(nm)) m.for.push(nm);
     }
   }
-  const matList = Object.values(mats).filter((m) => m.market).sort((a, b) => b.qty - a.qty).slice(0, 40);
+  // 샤드·크리스탈·클러스터는 체크해야 보인다 (거의 늘 쓰는 거라 목록이 길어진다)
+  const kindOf = (name) => (name.match(/(샤드|크리스탈|클러스터)$/) || [])[1];
+  const hiddenCnt = {};
+  const matList = Object.values(mats).filter((m) => m.market).filter((m) => {
+    const k = kindOf(m.name);
+    if (k && !JSHOW[k]) { hiddenCnt[k] = (hiddenCnt[k] || 0) + 1; return false; }
+    return true;
+  }).sort((a, b) => b.qty - a.qty).slice(0, 40);
+  const shardFilter = `<div class="j-filter">${["샤드", "크리스탈", "클러스터"].map((k) => `<label><input type="checkbox" data-j-show="${k}"${JSHOW[k] ? " checked" : ""}> ${k} 보기${!JSHOW[k] && hiddenCnt[k] ? ` <span class="faint">(${hiddenCnt[k]})</span>` : ""}</label>`).join("")}</div>`;
   // 판단은 📈 재료 트래킹이랑 같은 방법 (있는 기록만큼 써서, 근거를 같이 보여준다)
   const tds = await Promise.all(matList.map((m) => trackShard(m.id).then((sh) => sh[m.id] || null).catch(() => null)));
   const SIG = { buy: "good", wait: "bad" };
@@ -629,15 +639,20 @@ async function renderJournal() {
   // 날짜별 기록 (최근 것부터)
   const days = {};
   J.e.forEach((x, i) => (days[x[0]] = days[x[0]] || []).push([x, i]));
-  const log = Object.keys(days).sort().reverse().slice(0, 30).map((d) => `<div class="j-day"><div class="j-date">${esc(d)}</div><ul>${days[d].map(([x, i]) =>
-    `<li><span>${esc((byId.get(x[1]) || { name: `레시피 ${x[1]}` }).name)}</span><b>×${x[2]}</b><button type="button" class="chip-x" data-j-del="${i}" title="지우기">✕</button></li>`).join("")}</ul></div>`).join("");
+  const dayKeys = Object.keys(days).sort().reverse();
+  const shownDays = jAllDays ? dayKeys.slice(0, 60) : dayKeys.slice(0, 5);
+  const log = shownDays.map((d) => `<div class="j-day"><div class="j-date">${esc(d)} <span class="faint">· ${days[d].reduce((a, [x]) => a + x[2], 0)}회</span></div><ul>${days[d].map(([x, i]) =>
+    `<li><span>${esc((byId.get(x[1]) || { name: `레시피 ${x[1]}` }).name)}</span>
+      <label class="j-n">×<input type="number" min="1" max="999" value="${x[2]}" data-j-n="${i}" aria-label="횟수 고치기"></label>
+      <button type="button" class="chip-x" data-j-del="${i}" title="지우기">✕</button></li>`).join("")}</ul></div>`).join("")
+    + (dayKeys.length > 5 ? `<button type="button" class="link-btn" data-j-alldays="1">${jAllDays ? "▲ 최근 5일만 보기" : `▼ 전체 보기 (${dayKeys.length}일)`}</button>` : "");
   const keep = app.querySelector("#j-search");
   const caret = keep && document.activeElement === keep ? keep.selectionStart : null;
   app.innerHTML = `<section class="journal">
     <div class="eyebrow">CRAFTING JOURNAL</div><h1>📒 나의 제작일지</h1>
     <p class="tagline">만든 걸 적어 두면 자주 쓰는 재료를 모아서, 평소보다 싸게 올라왔을 때 미리 사 두라고 알려준다 개굴.</p>
     <div class="j-card j-add">
-      <h2>✏️ 만든 거 적기</h2>
+      <h2>🗓 만든 기록</h2>
       <input id="j-search" type="search" placeholder="🔍 만든 템 이름 (예: 파인애플 케이크)" autocomplete="off" value="${esc(jQuery)}">
       ${sugg.length ? `<div class="track-sugg">${sugg.map((r) => `<button type="button" data-j-pick="${r.id}">${esc(r.name)} <small>${esc(r.job)} Lv${r.level}</small></button>`).join("")}</div>`
         : q ? `<div class="track-sugg"><span class="faint">그런 레시피는 없다 개굴.</span></div>` : ""}
@@ -645,18 +660,26 @@ async function renderJournal() {
         <label>횟수 <input type="number" id="j-n" min="1" max="999" value="1"></label>
         <label>날짜 <input type="date" id="j-d" value="${ymd(new Date())}"></label>
         <button type="button" class="btn" data-j-add="1">📒 기록</button></div>` : ""}
+      <div class="j-log">${log || `<div class="faint">아직 없다 개굴. 위에서 만든 템을 찾아서 적거나, 순위 표 📒 · 장보기 '📒 만들었다' 를 눌러라 개굴.</div>`}</div>
     </div>
     <div class="j-grid">
       <div class="j-card"><div class="j-head"><h2>🧺 단골 재료 · 최근 30일</h2>
+        ${shardFilter}
         ${matList.length ? `<button type="button" class="cart-btn" data-j-trackall="1">📈 전부 트래킹에 담기</button>` : ""}</div>
         ${matList.length ? `<div class="table-wrap"><table><thead><tr><th>재료</th><th class="num">30일 사용</th><th>제일 싼 곳 (지금 매물)</th><th class="num" title="상태(🟢🟡🔴)를 정할 때 비교한 값 개굴">평소 가격 (판단 기준)</th><th class="num">최근 판매가</th><th>상태</th></tr></thead>
           <tbody>${matRows}</tbody></table></div>` : `<div class="detail-hint">🐸 아직 기록이 없다 개굴. 위에서 만든 걸 적거나, 장보기에서 '📒 만들었다' 를 눌러라 개굴.</div>`}</div>
       <div class="j-card"><h2>🏆 자주 만드는 것 · 최근 30일</h2>${top ? `<ul class="j-top">${top}</ul>` : `<div class="faint">아직 없다 개굴.</div>`}</div>
     </div>
-    <div class="j-card"><h2>🗓 기록</h2>${log || `<div class="faint">아직 없다 개굴.</div>`}</div>
   </section>`;
   if (caret != null) { const el = app.querySelector("#j-search"); el.focus(); el.setSelectionRange(caret, caret); }
 }
+// 기록 횟수 고치기
+document.getElementById("app").addEventListener("change", (e) => {
+  const inp = e.target.closest("[data-j-n]");
+  if (!inp || page() !== "journal") return;
+  const x = J.e[Number(inp.dataset.jN)];
+  if (x) { x[2] = Math.max(1, Math.min(999, Math.round(Number(inp.value) || 1))); journalSave(); renderJournal(); }
+});
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.id !== "j-search") return;
   jQuery = e.target.value;
@@ -665,6 +688,9 @@ document.getElementById("app").addEventListener("input", (e) => {
 });
 document.getElementById("app").addEventListener("click", (e) => {
   if (page() !== "journal") return;
+  const sh = e.target.closest("[data-j-show]");
+  if (sh) { JSHOW[sh.dataset.jShow] = sh.checked; save("ffxivJournalShow", JSHOW); renderJournal(); return; }
+  if (e.target.closest("[data-j-alldays]")) { jAllDays = !jAllDays; renderJournal(); return; }
   const op = e.target.closest("[data-j-open]");
   if (op) { const id = Number(op.dataset.jOpen); if (jOpen.has(id)) jOpen.delete(id); else jOpen.add(id); renderJournal(); return; }
   const pick = e.target.closest("[data-j-pick]");

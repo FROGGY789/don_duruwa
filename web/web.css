@@ -291,3 +291,10 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .track-peek{border:2px dashed var(--primary)}
 .peek-tag{font-size:var(--fs-xs);font-weight:700;color:var(--primary-strong);background:var(--primary-soft);border-radius:var(--radius-pill);padding:2px 8px}
 .track-peek .track-head .cart-btn{margin-left:auto}
+.j-filter{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-left:auto;font-size:var(--fs-sm);color:var(--text-muted)}
+.j-filter label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.j-filter input{accent-color:var(--primary)}
+.j-log{margin-top:var(--space-4);display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-3) var(--space-5);align-items:start}
+.j-log > .link-btn{grid-column:1/-1;justify-self:start}
+.j-n{display:inline-flex;align-items:center;gap:2px;color:var(--primary-strong);font-weight:700}
+.j-n input{width:3.4em;padding:2px 4px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;text-align:right}

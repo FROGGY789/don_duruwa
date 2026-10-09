@@ -257,9 +257,10 @@ async function loadLive(row) {
     const ls = key === "dc" ? listings : listings.filter((l) => String(l.worldID) === key);
     const ss = key === "dc" ? sales : sales.filter((x) => String(x.worldID) === key);
     const last = ss.reduce((a, x) => (!a || x.timestamp > a.timestamp ? x : a), null);
+    const s7 = ss.filter((x) => x.timestamp >= Date.now() / 1000 - 7 * 86400);
     const up = key === "dc" ? cur.lastUploadTime : (cur.worldUploadTimes || {})[key];
     return { key, name: key === "dc" ? "통합" : names[key] || key, min: ls.length ? Math.min(...ls.map((l) => l.pricePerUnit)) : null,
-      listings: ls.length, sales: ss.length, median: med(ss.map((x) => x.pricePerUnit)),
+      listings: ls.length, sales: ss.length, median: med(ss.map((x) => x.pricePerUnit)), median7: med(s7.map((x) => x.pricePerUnit)), sales7: s7.length,
       last: last ? { price: last.pricePerUnit, qty: last.quantity, ago: ago(last.timestamp) } : null,
       uploaded: up ? ago(up / 1000) : "기록 없음" };
   };

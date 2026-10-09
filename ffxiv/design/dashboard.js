@@ -334,9 +334,15 @@ function renderLive(d, row) {
   if (!L || L.loading) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">방금 시세 받는 중이다 개굴…</span></div></div>`;
   if (L.error) return `<div class="live"><div class="live-head"><h3>⚡ 지금 시세</h3><span class="faint">못 받아왔다 개굴 (${esc(L.error)}). 표 숫자는 매시간 받아 둔 값이다 개굴.</span>
     <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div></div>`;
-  const diff = L.net != null && V(row).net != null ? L.net - V(row).net : null;
-  const rows = L.worlds.map((w) => `<tr class="${w.key === "dc" ? "dc" : ""}">
+  // 판매 예상가: 🌏 통합이면 전체 기간 중앙값, 서버를 골라 보고 있으면 그 서버 최근 7일 중앙값 (7일에 없으면 기간 전체)
+  const W = state.server !== "dc" ? L.worlds.find((w) => w.key === state.server) : null;
+  const sell = W ? (W.median7 ?? W.median) : L.sell;
+  const sellLabel = W ? `${W.name} ${W.median7 != null ? "최근 7일" : L.period} 판매 중앙값` : `통합 ${L.period} 중앙값`;
+  const net = sell != null && L.cost != null ? sell * (1 - (L.tax ?? 0)) - L.cost : null;
+  const diff = net != null && V(row).net != null ? net - V(row).net : null;
+  const rows = L.worlds.map((w) => `<tr class="${w.key === "dc" ? "dc" : ""}${W && w.key === W.key ? " selected" : ""}">
     <td>${esc(w.name)}</td><td class="num">${gil(w.min)}</td><td class="num">${w.listings}</td>
+    <td class="num">${gil(w.median7)}${w.sales7 ? ` <small class="faint">${w.sales7}건</small>` : ""}</td>
     <td class="num">${gil(w.median)}</td><td class="num">${w.sales}</td>
     <td>${w.last ? `${gil(w.last.price)} ×${w.last.qty} <span class="faint">${esc(w.last.ago)}</span>` : '<span class="dash">-</span>'}</td>
     <td class="faint">${esc(w.uploaded)}</td></tr>`).join("");
@@ -345,13 +351,13 @@ function renderLive(d, row) {
       <span class="faint">표 숫자는 매시간 받아 둔 값이고, 이건 방금 다시 받은 값이다 개굴. 이상 거래·미끼는 안 뺐다 개굴.</span>
       <button type="button" class="live-retry" data-live-retry="1">다시 받기</button></div>
     <div class="live-kv">
-      <div><span>지금 판매 예상가 (${esc(L.period)} 중앙값)</span><b>${gil(L.sell)}</b></div>
+      <div><span>지금 판매 예상가 (${esc(sellLabel)})</span><b>${gil(sell)}</b></div>
       ${L.mats ? `<div><span>지금 재료 원가</span><b>${gil(L.cost)}</b></div>` : ""}
-      <div><span>지금 기준 순수익</span><b>${L.net == null ? '<span class="dash">-</span>' : signed(L.net)}</b></div>
+      <div><span>지금 기준 순수익</span><b>${net == null ? '<span class="dash">-</span>' : signed(net)}</b></div>
       ${diff != null ? `<div><span>표보다</span><b>${signed(diff)}</b></div>` : ""}
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>서버</th><th class="num">지금 최저 매물</th><th class="num">매물 수</th><th class="num">${esc(L.period)} 판매 중앙값</th><th class="num">판매 건수</th><th>마지막 판매</th><th>마지막 업로드</th></tr></thead>
+      <thead><tr><th>서버</th><th class="num">지금 최저 매물</th><th class="num">매물 수</th><th class="num">7일 판매 중앙값</th><th class="num">${esc(L.period)} 판매 중앙값</th><th class="num">${esc(L.period)} 판매 건수</th><th>마지막 판매</th><th>마지막 업로드</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }

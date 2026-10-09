@@ -948,12 +948,16 @@ async function renderTrack() {
   const datas = (await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)))).map((d, i) => withLive(list[i].id, d));
   if (trackPeek && list.some((t) => t.id === trackPeek)) trackPeek = null;
   const peekCard = trackPeek ? trackCard({ id: trackPeek, qty: 99 }, trackNames.get(trackPeek), withLive(trackPeek, await trackShard(trackPeek).then((sh) => sh[trackPeek]).catch(() => null)), true) : "";
-  const liveAt = list.map((t) => trackLive[t.id]?.at).filter(Boolean);
+  const liveAt = [...list.map((t) => t.id), ...(trackPeek ? [trackPeek] : [])].map((id) => trackLive[id]?.at).filter(Boolean);
   const q = trackQuery.replace(/\s/g, "");
   const sugg = q ? [...trackNames].filter(([, n]) => n.replace(/\s/g, "").includes(q)).slice(0, 12) : [];
   const keep = app.querySelector("#track-search");
   const caret = keep && document.activeElement === keep ? keep.selectionStart : null;
   app.innerHTML = `<section class="track">
+    ${list.length || trackPeek ? `<div class="cart-live track-live">
+      <button type="button" class="cart-btn primary" data-track-live="1"${trackLiveBusy ? " disabled" : ""}>${trackLiveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>
+      <span class="faint">${liveAt.length ? `⚡ ${esc(fmtTime(Math.min(...liveAt) / 1000).slice(11))} 에 다시 받은 매물이다 개굴. 판단·구매 계획도 이걸로 다시 했다 개굴`
+        : "지금은 매시간 받아 둔 매물이다 개굴. 사러 돌아다니기 전에 눌러서 지금 값으로 봐라 개굴"}${trackLiveMsg ? ` · ⚠ 못 받아왔다 개굴 (${esc(trackLiveMsg)})` : ""}</span></div>` : ""}
     <div class="eyebrow">MATERIAL TRACKER</div><h1>📈 재료 트래킹</h1>
     <div class="track-add">
       <input id="track-search" type="search" placeholder="🔍 재료 이름으로 추가 (예: 안개비단, 다마스쿠스 주괴)" autocomplete="off" value="${esc(trackQuery)}">
@@ -961,10 +965,6 @@ async function renderTrack() {
         : q ? `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>` : ""}
     </div>
     ${peekCard}
-    ${list.length ? `<div class="cart-live track-live">
-      <button type="button" class="cart-btn primary" data-track-live="1"${trackLiveBusy ? " disabled" : ""}>${trackLiveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>
-      <span class="faint">${liveAt.length ? `⚡ ${esc(fmtTime(Math.min(...liveAt) / 1000).slice(11))} 에 다시 받은 매물이다 개굴. 판단·구매 계획도 이걸로 다시 했다 개굴`
-        : "지금은 매시간 받아 둔 매물이다 개굴. 사러 돌아다니기 전에 눌러서 지금 값으로 봐라 개굴"}${trackLiveMsg ? ` · ⚠ 못 받아왔다 개굴 (${esc(trackLiveMsg)})` : ""}</span></div>` : ""}
     ${list.length ? list.map((t, i) => trackCard(t, trackNames.get(t.id), datas[i])).join("") : `<div class="detail-hint">🐸 위에서 재료를 검색해서 추가해라 개굴.</div>`}
   </section>`;
   if (caret != null) { const el = app.querySelector("#track-search"); el.focus(); el.setSelectionRange(caret, caret); }
@@ -1034,9 +1034,10 @@ document.getElementById("app").addEventListener("click", (e) => {
     saveTracked(list); trackQuery = ""; trackPeek = null; renderTrack(); return;
   }
   const pk = e.target.closest("[data-track-peek]");
-  if (pk) { trackPeek = Number(pk.dataset.trackPeek); trackQuery = ""; renderTrack(); return; }
+  if (pk) { trackPeek = Number(pk.dataset.trackPeek); trackQuery = ""; renderTrack(); refreshTrackLive([trackPeek]); return; } // 미리 보기는 바로 지금 시세로
   if (e.target.closest("[data-peek-close]")) { trackPeek = null; renderTrack(); return; }
-  if (e.target.closest("[data-track-live]")) { refreshTrackLive(tracked().map((t) => t.id)); return; }
+  // 트래킹 목록 + 미리 보는 재료까지 다시 받는다
+  if (e.target.closest("[data-track-live]")) { refreshTrackLive([...new Set([...tracked().map((t) => t.id), ...(trackPeek ? [trackPeek] : [])])]); return; }
   const rm = e.target.closest("[data-untrack]");
   if (rm) { saveTracked(tracked().filter((t) => t.id !== Number(rm.dataset.untrack))); renderTrack(); }
 });

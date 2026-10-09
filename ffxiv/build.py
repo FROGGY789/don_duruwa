@@ -113,8 +113,10 @@ def gather_tag(gd, item_id):
     """재료 표시용: 언제든 캘 수 있는 채집물이면 {"g": "광부·원예가", "gl": 채집 레벨}, 제작템이면 {"t": 몇 차 제작}."""
     out = {}
     g = gd.gather.get(item_id)
-    if g and not g.timed:
+    if g:
         out.update(g="·".join(g.jobs or (g.job,)), gl=g.level)
+        if g.timed:
+            out["tm"] = 1  # 시간 한정 채집물 (⏰)
     tier = gd.craft_tier(item_id)
     if tier:
         out["t"] = tier

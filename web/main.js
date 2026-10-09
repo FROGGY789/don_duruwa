@@ -213,11 +213,11 @@ function applyMakes(d, resultAmount) {
     }
     const al = alts[n.id];
     if (al && al.src === "직접 제작") { // 사는 중간재료도 뭘로 만드는지 (장바구니 화면용)
-      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ name: k.name, amount: k.amount, t: k.t })) };
+      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm })) };
     }
     const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
     const key = `${n.id}|${n.source}|${world}`;
-    const s = shop[key] || (shop[key] = { id: n.id, name: n.name, qty: 0, unit: n.unit, source: n.source, world, g: n.g, gl: n.gl, t: n.t, via: [],
+    const s = shop[key] || (shop[key] = { id: n.id, name: n.name, qty: 0, unit: n.unit, source: n.source, world, g: n.g, gl: n.gl, tm: n.tm, t: n.t, via: [],
       craftUnit: n.other && n.other.to === "craft" ? n.other.unit : null });
     s.canCraft = s.craftUnit != null;
     s.qty += qty;
@@ -578,7 +578,8 @@ function journalAdd(list, day = ymd(new Date())) {
   journalSave();
 }
 const jTier = (t) => (t ? ` <span class="tier-mark t${Math.min(t, 3)}" data-tip="${t}차 제작">${t}차</span>` : "");
-const jGather = (g) => (g ? g.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} 로 언제든 캘 수 있다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("") : "");
+const jGather = (g, tm) => (g ? g.split("·").map((j) => ` <span class="gather-mark ${j === "광부" ? "mine" : "botany"}" title="${esc(j)} 로 ${tm ? "정해진 시간에만" : "언제든"} 캘 수 있다 개굴">${j === "광부" ? "⛏" : "🌿"}</span>`).join("")
+  + (tm ? ' <span class="gather-mark timed" title="시간 한정 채집물이다 개굴">⏰</span>' : "") : "");
 async function renderJournal() {
   const app = document.getElementById("app");
   if (!app.querySelector(".journal")) app.innerHTML = `<div class="boot">🐸 제작일지 불러오는 중이다 개굴…</div>`;
@@ -596,7 +597,7 @@ async function renderJournal() {
   const mats = {};
   for (const rid of rids) {
     for (const s of (ds.details[rid] || {}).shopping || []) {
-      const m = mats[s.id] || (mats[s.id] = { id: s.id, name: s.name, qty: 0, for: [], t: s.t, g: s.g, market: false });
+      const m = mats[s.id] || (mats[s.id] = { id: s.id, name: s.name, qty: 0, for: [], t: s.t, g: s.g, tm: s.tm, market: false });
       m.qty += s.qty * freq[rid];
       if (s.source === "거래소") m.market = true;
       const nm = byId.get(rid).name;
@@ -611,7 +612,7 @@ async function renderJournal() {
     const d = tds[i], need = Math.ceil(m.qty), open = jOpen.has(m.id);
     const a = d ? analyzeTrack(m.id, d, need) : null, s = d ? saleStats(d) : null;
     const head = `<tr class="${a ? SIG[a.signal.kind] || "" : ""}${open ? " j-on" : ""}">
-      <td><button type="button" class="mat-link" data-j-open="${m.id}" title="눌러서 그래프·서버별 매물 보기">${open ? "▾" : "▸"} ${esc(m.name)}</button>${jTier(m.t)}${jGather(m.g)}
+      <td><button type="button" class="mat-link" data-j-open="${m.id}" title="눌러서 그래프·서버별 매물 보기">${open ? "▾" : "▸"} ${esc(m.name)}</button>${jTier(m.t)}${jGather(m.g, m.tm)}
         <div class="mat-for">↳ ${esc(m.for.slice(0, 3).join(" · "))}${m.for.length > 3 ? " …" : ""}</div></td>
       <td class="num">${need.toLocaleString("ko-KR")}</td>
       <td>${a && a.best ? `${esc(a.best.name)} <b>${gil(a.cur)}</b>` : '<span class="faint">매물 없음</span>'}</td>

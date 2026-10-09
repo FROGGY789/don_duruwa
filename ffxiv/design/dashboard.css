@@ -555,3 +555,12 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cp-card .tree{color:var(--text-faint);margin-right:4px}
 .cp-raw{margin-top:3px;font-size:var(--fs-xs);color:var(--text-muted);font-weight:400}
 @media (max-width:1300px){.cartpage{grid-template-columns:1fr}.cartpage-side{position:static;max-height:none}}
+.gather-mark.timed{background:var(--info-soft);color:var(--info)}
+.cp-make{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:1px 8px;border:1px solid var(--border-strong);border-radius:var(--radius-pill);
+  font-size:var(--fs-xs);font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap;vertical-align:middle}
+.cp-make:has(input:checked){border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong)}
+.cp-make input{margin:0;accent-color:var(--primary);cursor:pointer}
+.cp-make .faint{font-weight:400}
+.cp-card tr.cp-ref > td{color:var(--text-faint);font-size:var(--fs-xs);padding-top:4px;padding-bottom:4px}
+.cp-card tr.cp-ref .gather-mark,.cp-card tr.cp-ref .tier-mark{opacity:.75}
+.cp-count input{width:3.6em;margin:0 2px;padding:2px 4px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;text-align:right}

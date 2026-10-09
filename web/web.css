@@ -276,3 +276,18 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 @keyframes track-flash{0%{box-shadow:0 0 0 3px var(--primary)}100%{box-shadow:var(--shadow-sm)}}
 .track-nav a{font-size:var(--fs-sm);padding:6px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .track-jump .sb-title{margin-top:var(--space-2)}
+.track-nav-row{display:flex;align-items:center;gap:2px}
+.track-nav-row a{flex:1;min-width:0}
+.track-nav-row .chip-x{opacity:0;flex:none}
+.track-nav-row:hover .chip-x,.track-nav-row .chip-x:focus{opacity:1}
+@media (hover:none){.track-nav-row .chip-x{opacity:.6}}
+/* 트래킹 재료 목록: 본문 왼쪽 빈 곳에 떠 있다 */
+.track-float{position:fixed;top:72px;z-index:6;max-height:calc(100vh - 96px);overflow-y:auto;
+  padding:var(--space-3);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+.track-float .sb-title{margin:0 0 var(--space-2);font-size:var(--fs-xs);font-weight:700;color:var(--primary-strong)}
+.track-float .nav{display:flex;flex-direction:column;gap:2px}
+.track-float .track-nav a{display:block;color:var(--text);text-decoration:none;border-radius:var(--radius-sm)}
+.track-float .track-nav a:hover{background:var(--surface-hover)}
+.track-peek{border:2px dashed var(--primary)}
+.peek-tag{font-size:var(--fs-xs);font-weight:700;color:var(--primary-strong);background:var(--primary-soft);border-radius:var(--radius-pill);padding:2px 8px}
+.track-peek .track-head .cart-btn{margin-left:auto}

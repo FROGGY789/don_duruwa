@@ -804,18 +804,22 @@ function trackChart(a) {
       <span><i class="sw sw-min"></i>그날 최저 매물</span>${a.p25 != null ? `<span><i class="sw sw-band"></i>보통 가격대 (판단 기준)</span>` : ""}</div>`;
 }
 
-function trackCard(t, name, d) {
-  if (!d) return `<section class="track-card" id="track-${t.id}"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
-    <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button></div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
+function trackCard(t, name, d, peek = false) {
+  // peek = 검색해서 미리 보는 중 (아직 트래킹 목록에 없음)
+  const btns = peek ? `<button type="button" class="cart-btn primary" data-track-add="${t.id}">+ 트래킹 목록에 추가</button>
+      <button type="button" class="chip-x" data-peek-close="1" title="닫기">✕</button>`
+    : `<button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>`;
+  if (!d) return `<section class="track-card${peek ? " track-peek" : ""}" id="track-${peek ? "peek" : t.id}"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
+    ${btns}</div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
   const a = analyzeTrack(t.id, d, t.qty);
-  return `<section class="track-card" id="track-${t.id}">
+  return `<section class="track-card${peek ? " track-peek" : ""}" id="track-${peek ? "peek" : t.id}">
     <div class="track-head">
-      <h2>${esc(name)}</h2>
+      ${peek ? '<span class="peek-tag">🔍 미리 보기</span>' : ""}<h2>${esc(name)}</h2>
       <span class="signal ${a.signal.kind}">${a.signal.icon} ${a.signal.label}</span>
       <span class="faint">${d.live ? "⚡ 방금 받은 매물" : `데이터 ${ago(d.upd)}`}</span>
-      <button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>
+      ${btns}
     </div>
-    ${trackBody(a, t, true)}
+    ${trackBody(a, peek ? { ...t, label: `${t.qty}개 살 때 (추가하면 수량을 바꿀 수 있다 개굴)` } : t, !peek)}
   </section>`;
 }
 // 트래킹 카드 본문 (판단 멘트 · 그래프 · 구매 계획 · 서버별 매물). 제작일지 펼침에서도 같이 쓴다
@@ -836,7 +840,7 @@ function trackBody(a, t, editable) {
       <div class="buy-plan">
         <div class="ev-cap">🛒 구매 계획</div>
         ${editable ? `<label class="field"><span>필요 수량</span><input type="number" min="1" max="99999" value="${t.qty}" data-track-qty="${t.id}"></label>`
-          : `<p class="faint">최근 30일 쓴 만큼 (${t.qty.toLocaleString("ko-KR")}개) 살 때</p>`}
+          : `<p class="faint">${esc(t.label || `최근 30일 쓴 만큼 (${t.qty.toLocaleString("ko-KR")}개) 살 때`)}</p>`}
         ${a.got ? `<div class="plan-total"><b>${gil(a.spend)}</b>길 <span class="faint">(개당 평균 ${gil(a.spend / a.got)}길${a.got < t.qty ? ` · 지금 매물로는 ${a.got}개까지만` : ""})</span></div>
           <ul class="plan-list">${plan}</ul>` : `<p class="faint">살 수 있는 매물이 없다 개굴.</p>`}
       </div>
@@ -908,6 +912,8 @@ async function renderTrack() {
   }
   const list = tracked();
   const datas = (await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)))).map((d, i) => withLive(list[i].id, d));
+  if (trackPeek && list.some((t) => t.id === trackPeek)) trackPeek = null;
+  const peekCard = trackPeek ? trackCard({ id: trackPeek, qty: 99 }, trackNames.get(trackPeek), withLive(trackPeek, await trackShard(trackPeek).then((sh) => sh[trackPeek]).catch(() => null)), true) : "";
   const liveAt = list.map((t) => trackLive[t.id]?.at).filter(Boolean);
   const q = trackQuery.replace(/\s/g, "");
   const sugg = q ? [...trackNames].filter(([, n]) => n.replace(/\s/g, "").includes(q)).slice(0, 12) : [];
@@ -917,9 +923,10 @@ async function renderTrack() {
     <div class="eyebrow">MATERIAL TRACKER</div><h1>📈 재료 트래킹</h1>
     <div class="track-add">
       <input id="track-search" type="search" placeholder="🔍 재료 이름으로 추가 (예: 안개비단, 다마스쿠스 주괴)" autocomplete="off" value="${esc(trackQuery)}">
-      ${sugg.length ? `<div class="track-sugg">${sugg.map(([id, n]) => `<button type="button" data-track-add="${id}"${list.some((t) => t.id === id) ? " disabled" : ""}>${esc(n)}${list.some((t) => t.id === id) ? " ✓" : ""}</button>`).join("")}</div>`
+      ${sugg.length ? `<div class="track-sugg">${sugg.map(([id, n]) => `<button type="button" data-track-peek="${id}"${list.some((t) => t.id === id) ? " disabled" : ""}>${esc(n)}${list.some((t) => t.id === id) ? " ✓" : ""}</button>`).join("")}</div>`
         : q ? `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>` : ""}
     </div>
+    ${peekCard}
     ${list.length ? `<div class="cart-live track-live">
       <button type="button" class="cart-btn primary" data-track-live="1"${trackLiveBusy ? " disabled" : ""}>${trackLiveBusy ? "⚡ 받는 중이다 개굴…" : "⚡ 지금 시세로 다시 받기"}</button>
       <span class="faint">${liveAt.length ? `⚡ ${esc(fmtTime(Math.min(...liveAt) / 1000).slice(11))} 에 다시 받은 매물이다 개굴. 판단·구매 계획도 이걸로 다시 했다 개굴`
@@ -934,21 +941,44 @@ async function renderTrack() {
   });
   const box = document.querySelector("#side .track-jump");
   if (box) box.innerHTML = trackJumpHtml();
+  placeTrackFloat();
 }
-let trackJumpList = [];
+// 넓은 화면이면 목록을 본문 왼쪽 빈 곳에 띄워 둔다 (스크롤해도 따라온다). 자리가 없으면 사이드바에
+function placeTrackFloat() {
+  let fl = document.getElementById("track-float");
+  const side = document.querySelector("#side .track-jump");
+  if (page() !== "track" || !trackJumpList.length) { fl?.remove(); if (side) side.hidden = false; return; }
+  const app = document.getElementById("app"), r = app.getBoundingClientRect();
+  const contentLeft = r.left + parseFloat(getComputedStyle(app).paddingLeft || 0);
+  const sideW = document.body.classList.contains("side-folded") || innerWidth <= 900 ? 0 : document.getElementById("side").offsetWidth;
+  const room = contentLeft - sideW - 24;
+  if (room < 150) { fl?.remove(); if (side) side.hidden = false; return; }
+  if (!fl) { fl = document.createElement("aside"); fl.id = "track-float"; fl.className = "track-float"; document.body.appendChild(fl); }
+  const w = Math.min(230, room);
+  Object.assign(fl.style, { left: `${contentLeft - w - 12}px`, width: `${w}px` });
+  fl.innerHTML = trackJumpHtml();
+  if (side) side.hidden = true;
+}
+window.addEventListener("resize", placeTrackFloat);
+let trackJumpList = [], trackPeek = null;
 function trackJumpHtml() {
   if (!trackJumpList.length) return "";
   return `<div class="sb-title">트래킹 중인 재료 ${trackJumpList.length}</div>
-    <nav class="nav track-nav">${trackJumpList.map((x) => `<a href="#track" data-track-jump="${x.id}">${x.icon} ${esc(x.name)}</a>`).join("")}</nav>`;
+    <nav class="nav track-nav">${trackJumpList.map((x) => `<div class="track-nav-row"><a href="#track" data-track-jump="${x.id}">${x.icon} ${esc(x.name)}</a>
+      <button type="button" class="chip-x" data-side-untrack="${x.id}" title="트래킹에서 빼기" aria-label="${esc(x.name)} 트래킹에서 빼기">✕</button></div>`).join("")}</nav>`;
 }
-document.getElementById("side").addEventListener("click", (e) => {
+const onTrackListClick = (e) => {
+  const rm = e.target.closest("[data-side-untrack]");
+  if (rm) { saveTracked(tracked().filter((t) => t.id !== Number(rm.dataset.sideUntrack))); renderTrack(); return; }
   const j = e.target.closest("[data-track-jump]");
   if (!j) return;
   e.preventDefault();
   const card = document.getElementById(`track-${j.dataset.trackJump}`);
   if (card) { card.scrollIntoView({ behavior: "smooth", block: "start" }); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
   document.body.classList.remove("side-open");
-});
+};
+document.getElementById("side").addEventListener("click", onTrackListClick);
+document.addEventListener("click", (e) => { if (e.target.closest("#track-float")) onTrackListClick(e); });
 
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.id !== "track-search") return;
@@ -967,8 +997,11 @@ document.getElementById("app").addEventListener("click", (e) => {
   if (add) {
     const list = tracked(), id = Number(add.dataset.trackAdd);
     if (!list.some((t) => t.id === id)) list.unshift({ id, qty: 99 });
-    saveTracked(list); trackQuery = ""; renderTrack(); return;
+    saveTracked(list); trackQuery = ""; trackPeek = null; renderTrack(); return;
   }
+  const pk = e.target.closest("[data-track-peek]");
+  if (pk) { trackPeek = Number(pk.dataset.trackPeek); trackQuery = ""; renderTrack(); return; }
+  if (e.target.closest("[data-peek-close]")) { trackPeek = null; renderTrack(); return; }
   if (e.target.closest("[data-track-live]")) { refreshTrackLive(tracked().map((t) => t.id)); return; }
   const rm = e.target.closest("[data-untrack]");
   if (rm) { saveTracked(tracked().filter((t) => t.id !== Number(rm.dataset.untrack))); renderTrack(); }
@@ -1361,6 +1394,7 @@ function setFold(folded) {
   if (!wide()) { document.body.classList.remove("side-open"); return; }
   document.body.classList.toggle("side-folded", folded);
   save("ffxivSideFolded", folded);
+  setTimeout(placeTrackFloat, 250); // 사이드바 접고 펴는 움직임이 끝난 뒤 자리 다시 잡기
 }
 
 // ⚙ 처음 설정: 권한 받고 처음 들어온 캐릭터(이 기기·서버 둘 다 설정이 없을 때)한테 한 번 보여준다
@@ -1570,6 +1604,7 @@ window.addEventListener("hashchange", () => {
   document.body.classList.remove("side-open");
   renderSide();
   render();
+  placeTrackFloat();
 });
 bindSide();
 frogRain();

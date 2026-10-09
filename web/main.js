@@ -788,10 +788,17 @@ function trackChart(a) {
   const x = (i) => L + (i * (W - L - R)) / Math.max(1, pts.length - 1);
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const line = (key) => { let d = "", prev = false; pts.forEach((p, i) => { if (p[key] == null) { prev = false; return; } d += `${prev ? "L" : "M"}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`; prev = true; }); return d; };
-  const band = a.p25 != null ? `<rect x="${L}" y="${y(a.p75)}" width="${W - L - R}" height="${Math.max(1, y(a.p25) - y(a.p75))}" class="band"><title>보통 가격대 (하위 25% ~ 상위 25%)</title></rect>` : "";
+  const band = a.p25 != null ? `<rect x="${L}" y="${y(a.p75)}" width="${W - L - R}" height="${Math.max(1, y(a.p25) - y(a.p75))}" class="band" data-tip="보통 가격대 (하위 25% ~ 상위 25%) 개굴"></rect>` : "";
   const grid = [lo, (lo + hi) / 2, hi].map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L - 6}" y="${y(v) + 3}" class="axis" text-anchor="end">${gil(v)}</text>`).join("");
   const labels = pts.map((p, i) => (i === 0 || i === pts.length - 1 || i === Math.floor(pts.length / 2)) ? `<text x="${x(i)}" y="${H - 6}" class="axis" text-anchor="middle">${esc(p.date)}</text>` : "").join("");
-  const dots = pts.map((p, i) => p.med != null ? `<circle cx="${x(i)}" cy="${y(p.med)}" r="3" class="dot"><title>${esc(p.date)} 판매 중앙값 ${gil(p.med)}길 · ${p.units}개 팔림</title></circle>` : "").join("");
+  // 점에 마우스를 올리면 바로 뜨게 (브라우저 기본 말풍선은 몇 초 걸린다). 잡기 쉽게 안 보이는 큰 동그라미도 같이
+  const tipOf = (p) => [`${p.date}`, p.med != null ? `한국 전체 판매 중앙값 ${gil(p.med)}길 · ${p.units}개 팔림` : "", p.wmed != null ? `${a.bestName} 판매 중앙값 ${gil(p.wmed)}길` : "",
+    p.min != null ? `그날 최저 매물 ${gil(p.min)}길` : ""].filter(Boolean).join("\n");
+  const dots = pts.map((p, i) => {
+    const v = p.med ?? p.wmed ?? p.min;
+    if (v == null) return "";
+    return `${p.med != null ? `<circle cx="${x(i)}" cy="${y(p.med)}" r="3" class="dot"/>` : ""}<circle cx="${x(i)}" cy="${y(v)}" r="10" class="hit" data-tip="${esc(tipOf(p))}"/>`;
+  }).join("");
   return `<svg viewBox="0 0 ${W} ${H}" class="chart track-chart">${band}${grid}${labels}<path d="${line("min")}" class="line-min"/>${a.bestName ? `<path d="${line("wmed")}" class="line-w"/>` : ""}<path d="${line("med")}" class="line"/>${dots}</svg>
     <div class="legend"><span><i class="sw sw-med"></i>한국 전체 판매 중앙값</span>${a.bestName ? `<span><i class="sw sw-w"></i>${esc(a.bestName)} 판매 중앙값</span>` : ""}
       <span><i class="sw sw-min"></i>그날 최저 매물</span>${a.p25 != null ? `<span><i class="sw sw-band"></i>보통 가격대 (판단 기준)</span>` : ""}</div>`;
@@ -838,6 +845,20 @@ function trackBody(a, t, editable) {
       <thead><tr><th>서버</th><th class="num">최저 매물</th><th class="num">매물 수</th><th class="num">7일 판매 중앙값</th><th class="num">7일 판매량</th><th>싼 매물 (가격×수량)</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
 }
+
+// 대시보드 밖(트래킹·제작일지·부대 화면)의 data-tip 도 바로 뜨는 말풍선으로
+document.addEventListener("mousemove", (e) => {
+  if (e.target.closest?.(".dash-host")) return; // 대시보드는 자기 말풍선이 있다
+  const hit = e.target.closest?.("[data-tip]");
+  let tip = document.querySelector("body > .tip");
+  if (!hit) { tip?.remove(); return; }
+  if (!tip) { tip = document.createElement("div"); tip.className = "tip"; document.body.appendChild(tip); }
+  if (tip.textContent !== hit.dataset.tip) tip.textContent = hit.dataset.tip;
+  tip.style.left = "0px";
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, e.clientX + 12 + w > innerWidth - 8 ? e.clientX - 12 - w : e.clientX + 12) + "px";
+  tip.style.top = (e.clientY - 12 - h < 8 ? e.clientY + 20 : e.clientY - 12 - h) + "px";
+});
 
 // ⚡ 트래킹 재료 매물을 지금 시세로 다시 받는다 (매시간 받아 둔 매물 대신 이걸로 판단·구매 계획)
 let trackLive = {}, trackLiveBusy = false, trackLiveMsg = "";

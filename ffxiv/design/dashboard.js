@@ -776,10 +776,14 @@ function renderCartPage(d) {
   for (const g of list) for (const it of g.items) if (!(it.id in doneKey)) doneKey[it.id] = it.key;
   const cards = rows.map((r) => {
     const n = state.cart[r.id], v = V(r), out = n * r.resultAmount;
+    const craftsAt = []; // 깊이별로 위 재료를 몇 회 만드는지 (재료 수량 = 1회에 들어가는 수 × 그 횟수)
     const mats = (r.materials || []).map((m) => {
       const made = m.source === "직접 제작";
       const need = m.need * n;
       const crafts = made ? Math.ceil(need / (m.ra || 1) - 1e-9) : 0;
+      const parentCrafts = m.depth ? craftsAt[m.depth - 1] : n;
+      craftsAt[m.depth] = crafts;
+      const per = `<div class="cp-per">1회 ${m.amount}개 × ${parentCrafts}회</div>`;
       // 만들 수 있는 중간재료: ☑ 직접 만들기 (끄면 산다). 처음 추천으로 돌아가면 내 선택은 지운다
       const orig = m.picked ? (made ? "buy" : "craft") : (made ? "craft" : "buy");
       const check = d.setMake && m.other && m.other.unit != null
@@ -789,12 +793,12 @@ function renderCartPage(d) {
       const rawCrafts = !made && m.raw ? Math.ceil(need / (m.raw.ra || 1) - 1e-9) : 0;
       const rawRows = !made && m.raw && m.raw.kids.length ? m.raw.kids.map((k) => `<tr class="cp-ref sub">
         <td style="padding-left:${10 + (m.depth + 1) * 22}px"><span class="tree">└</span>${esc(k.name)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}</td>
-        <td class="num">${(k.amount * rawCrafts).toLocaleString("ko-KR")}</td><td colspan="4" class="faint">만들 때 필요한 재료 (지금은 안 산다)</td></tr>`).join("") : "";
+        <td class="num">${(k.amount * rawCrafts).toLocaleString("ko-KR")}<div class="cp-per">1회 ${k.amount}개 × ${rawCrafts}회</div></td><td colspan="4" class="faint">만들 때 필요한 재료 (지금은 안 산다)</td></tr>`).join("") : "";
       const key = !made ? doneKey[m.id] : null, got = key && state.done[key];
       const box = key ? `<label class="buy cp-buy" data-tip="샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"><input type="checkbox" data-done="${esc(key)}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
       return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}${got ? " cp-got" : ""}">
         <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}${box}<b>${esc(m.name)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
-        <td class="num">${need.toLocaleString("ko-KR")}</td>
+        <td class="num">${need.toLocaleString("ko-KR")}${per}</td>
         <td>${made ? `<span class="badge src-craft">🔨 직접 제작</span> <span class="faint">${crafts}회</span>` : `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`}</td>
         <td class="num">${gil(m.unit)}</td>
         <td class="num">${made ? '<span class="faint">↓ 재료값</span>' : gil(m.unit != null ? m.unit * need : null)}</td>

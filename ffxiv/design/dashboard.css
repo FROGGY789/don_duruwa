@@ -567,3 +567,4 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cp-buy{margin-right:6px;vertical-align:middle}
 .cp-card tr.cp-got > td{color:var(--text-faint)}
 .cp-card tr.cp-got > td b{text-decoration:line-through}
+.cp-per{font-size:10px;font-weight:400;color:var(--text-faint);white-space:nowrap;line-height:1.3}

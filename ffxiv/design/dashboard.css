@@ -564,3 +564,6 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cp-card tr.cp-ref > td{color:var(--text-faint);font-size:var(--fs-xs);padding-top:4px;padding-bottom:4px}
 .cp-card tr.cp-ref .gather-mark,.cp-card tr.cp-ref .tier-mark{opacity:.75}
 .cp-count input{width:3.6em;margin:0 2px;padding:2px 4px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;text-align:right}
+.cp-buy{margin-right:6px;vertical-align:middle}
+.cp-card tr.cp-got > td{color:var(--text-faint)}
+.cp-card tr.cp-got > td b{text-decoration:line-through}

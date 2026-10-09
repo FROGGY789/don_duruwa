@@ -770,7 +770,10 @@ function renderCartPage(d) {
     <p class="tagline">담은 완성품마다 재료가 어떻게 들어가는지, 1차·2차 중간재료는 뭘로 만드는지까지 펼쳐 본다 개굴.</p></header>`;
   if (!Object.keys(state.cart).length) return head + `<div class="detail-hint">🐸 아직 담은 게 없다 개굴. <a href="#craft">⚒️ 제작</a> 순위에서 + 를 눌러 담아라 개굴.</div>`;
   if (cartWaiting(d)) return head + `<div class="detail-hint">🐸 재료 목록 불러오는 중이다 개굴…</div>`;
-  const { rows } = cartPlan(d);
+  const { rows, list } = cartPlan(d);
+  // 왼쪽 재료 줄 ↔ 오른쪽 장보기 칸 (같은 체크 상태를 같이 쓴다)
+  const doneKey = {};
+  for (const g of list) for (const it of g.items) if (!(it.id in doneKey)) doneKey[it.id] = it.key;
   const cards = rows.map((r) => {
     const n = state.cart[r.id], v = V(r), out = n * r.resultAmount;
     const mats = (r.materials || []).map((m) => {
@@ -787,8 +790,10 @@ function renderCartPage(d) {
       const rawRows = !made && m.raw && m.raw.kids.length ? m.raw.kids.map((k) => `<tr class="cp-ref sub">
         <td style="padding-left:${10 + (m.depth + 1) * 22}px"><span class="tree">└</span>${esc(k.name)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}</td>
         <td class="num">${(k.amount * rawCrafts).toLocaleString("ko-KR")}</td><td colspan="4" class="faint">만들 때 필요한 재료 (지금은 안 산다)</td></tr>`).join("") : "";
-      return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}">
-        <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}<b>${esc(m.name)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
+      const key = !made ? doneKey[m.id] : null, got = key && state.done[key];
+      const box = key ? `<label class="buy cp-buy" data-tip="샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"><input type="checkbox" data-done="${esc(key)}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
+      return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}${got ? " cp-got" : ""}">
+        <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}${box}<b>${esc(m.name)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
         <td class="num">${need.toLocaleString("ko-KR")}</td>
         <td>${made ? `<span class="badge src-craft">🔨 직접 제작</span> <span class="faint">${crafts}회</span>` : `<span class="badge ${SOURCE_CLASS[m.source] || "src-npc"}">${esc(m.source)}</span>`}</td>
         <td class="num">${gil(m.unit)}</td>

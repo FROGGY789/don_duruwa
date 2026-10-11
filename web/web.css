@@ -322,3 +322,6 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .t-use-chip.mine{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-strong);font-weight:700}
 .t-use-chip.mine small{color:var(--primary-strong);font-weight:400;opacity:.8}
 .t-use-chip.fin{border-style:dashed}
+.t-use-chip.direct{background:var(--info-soft);border-color:color-mix(in oklab,var(--info) 45%,transparent);color:var(--info)}
+.t-use-chip.direct small{color:var(--info);opacity:.75}
+.t-use-chip.fin{background:transparent}

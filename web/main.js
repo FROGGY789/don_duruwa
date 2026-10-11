@@ -940,7 +940,7 @@ function trackUses(a, id) {
   const mine = ((JUSE && JUSE.get(id)) || []).sort((x, y) => y.n - x.n);
   const mineNames = new Set(mine.map((x) => x.name));
   const mineChips = mine.map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦${u.amt ? ` · 1회 ${u.amt}개` : ` · ${esc((u.via || []).join(" → "))} 거쳐서`}</small></span>`).join("");
-  const chips = mineChips + a.uses.filter((u) => !mineNames.has(u[0])).map((u) => `<span class="t-use-chip">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
+  const chips = mineChips + a.uses.filter((u) => !mineNames.has(u[0])).map((u) => `<span class="t-use-chip direct">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
   // 중간재료를 거쳐 결국 들어가는 완성품 (예: 암철 광석 → 암철 덩어리 → 암철 주괴 → 검은장막 난쟁이등)
   const fins = (a.finals || []).filter((f) => !mineNames.has(f[0])).map((f) => `<span class="t-use-chip fin">${esc(f[0])} <small>${esc(f[1])} Lv${f[2]}${f[3] != null ? ` · 개당 ${f[3] >= 0 ? "+" : ""}${Math.round(f[3]).toLocaleString("ko-KR")}` : ""}
     · ${esc([...f[4]].join(" → "))} 거쳐서</small></span>`).join("");

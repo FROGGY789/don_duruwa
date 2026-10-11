@@ -794,9 +794,19 @@ function renderCartPage(d) {
           🔨 직접 만들기 <span class="faint">(${made ? `사면 ${gil(m.other.unit)}` : `만들면 ${gil(m.other.unit)}`})</span></label>` : "";
       // 사는 중간재료도 뭘로 만드는지 └ 로 (만들 때 필요한 수량, 흐리게)
       const rawCrafts = !made && m.raw ? Math.ceil(need / (m.raw.ra || 1) - 1e-9) : 0;
-      const rawRows = !made && m.raw && m.raw.kids.length ? m.raw.kids.map((k) => `<tr class="cp-ref sub">
-        <td style="padding-left:${10 + (m.depth + 1) * 22}px"><span class="tree">└</span>${matName(k.id, k.name, k.amount * rawCrafts)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}</td>
-        <td class="num">${(k.amount * rawCrafts).toLocaleString("ko-KR")}<div class="cp-per">1회 ${k.amount}개 × ${rawCrafts}회</div></td><td colspan="4" class="faint">만들 때 필요한 재료 (지금은 안 산다)</td></tr>`).join("") : "";
+      // 사는 중간재료를 만들면 들어갈 것: 2차 ㄴ 1차 ㄴ 원재료 (흐리게). 그 안의 1차도 체크하면 위까지 같이 만들기로
+      const refCrafts = [rawCrafts];
+      const rawRows = !made && m.raw && (m.raw.rows || []).length ? m.raw.rows.map((k) => {
+        const parentCrafts = refCrafts[k.d] ?? 0, kneed = k.amount * parentCrafts;
+        refCrafts[k.d + 1] = k.ra ? Math.ceil(kneed / k.ra - 1e-9) : 0;
+        const want = d.makeChoice ? d.makeChoice(k.id) : null, on = want ? want === "craft" : k.made;
+        const chk = k.can && d.setMakes ? `<label class="cp-make cp-make-ref" data-tip="체크하면 이걸 직접 만들고, 위의 ${esc(m.name)}${k.chain.length > 1 ? " 등" : ""}도 같이 만들기로 바뀐다 개굴"><input type="checkbox" data-make-chain="${k.chain.join(",")}" data-make-self="${k.id}"${on ? " checked" : ""}> 🔨 만들기</label>` : "";
+        const how = k.made || on ? `🔨 만들어서${refCrafts[k.d + 1] ? ` ${refCrafts[k.d + 1]}회` : ""}` : k.src === "직접 채집" ? "직접 채집" : `${esc(k.src || "")}에서 산다`;
+        return `<tr class="cp-ref sub${k.opt ? " cp-ref-opt" : ""}">
+        <td style="padding-left:${10 + (m.depth + 1 + k.d) * 22}px"><span class="tree">└</span>${matName(k.id, k.name, kneed)}${tierMark(k.t)}${gatherMarks(k.g, k.gl, k.tm)}${chk}</td>
+        <td class="num">${kneed.toLocaleString("ko-KR")}<div class="cp-per">1회 ${k.amount}개 × ${parentCrafts}회</div></td>
+        <td colspan="4" class="faint">${how} <span class="cp-ref-note">· 만들 때만 필요 (지금은 안 산다)</span></td></tr>`;
+      }).join("") : "";
       const key = !made ? doneKey[m.id] : null, got = key && state.done[key];
       const box = key ? `<label class="buy cp-buy" data-tip="샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"><input type="checkbox" data-done="${esc(key)}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
       return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}${got ? " cp-got" : ""}">
@@ -994,6 +1004,13 @@ export default function (component) {
     if (mat && data.trackMaterial) hideMatPop();
     if (mat && data.trackMaterial) return data.trackMaterial(Number(mat.dataset.trackMat), Number(mat.dataset.need) || 1);
     // 📒 순위 표에서 바로 제작일지에 1회 적기
+    const chainBox = e.target.closest("[data-make-chain]");
+    if (chainBox && data.setMakes) {
+      const ups = chainBox.dataset.makeChain.split(",").map(Number).filter(Boolean);
+      const self = Number(chainBox.dataset.makeSelf);
+      data.setMakes([...(chainBox.checked ? ups.map((id) => [id, "craft"]) : []), [self, chainBox.checked ? "craft" : "buy"]]);
+      return;
+    }
     const mc = e.target.closest("[data-make-check]");
     if (mc && data.setMake) { const to = mc.checked ? "craft" : "buy"; data.setMake(Number(mc.dataset.makeCheck), to === mc.dataset.orig ? null : to); return; }
     const mk = e.target.closest("[data-make]");

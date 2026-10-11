@@ -572,3 +572,5 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cartpage-head h1 .cart-empty{margin-left:var(--space-3);vertical-align:middle;font-family:inherit;font-size:var(--fs-sm);color:var(--negative)}
 .cp-card .mat-link{font-weight:inherit;color:inherit}
 .cp-card tr.cp-got .mat-link{text-decoration:line-through}
+.cp-make-ref{padding:0 6px;font-size:10px;font-weight:600}
+.cp-ref-note{opacity:.75}

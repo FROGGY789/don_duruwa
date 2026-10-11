@@ -154,6 +154,12 @@ function setMake(id, to) {
   save("ffxivMake", MAKE);
   render();
 }
+// 여러 개 한 번에 (예: 사는 2차 밑의 1차를 만들기로 → 2차도 같이 만들기로)
+function setMakes(pairs) {
+  for (const [id, to] of pairs) { if (to) MAKE[id] = to; else delete MAKE[id]; }
+  save("ffxivMake", MAKE);
+  render();
+}
 // 상세 재료(깊이 순 펼침)에 내 선택을 반영해서 재료 표·장보기·원가를 다시 만든다
 function applyMakes(d, resultAmount) {
   const alts = d.alts || {};
@@ -213,7 +219,22 @@ function applyMakes(d, resultAmount) {
     }
     const al = alts[n.id];
     if (al && al.src === "직접 제작") { // 사는 중간재료도 뭘로 만드는지 (장바구니 화면용)
-      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ id: k.id, name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm })) };
+      // 2차 ㄴ 1차 ㄴ 원재료까지: 만들기로 바꿨을 때의 재료를 끝까지 (사는 1차도 만들 수 있으면 그 밑까지)
+      const refRows = (kids, base, chain, seen) => {
+        const out = [], stack = [];
+        for (const k of kids || []) {
+          while (stack.length && stack[stack.length - 1].depth >= k.depth) stack.pop();
+          const ch = [...chain, ...stack.map((x) => x.id)];
+          const ka = alts[k.id], made = k.source === "직접 제작", can = made || (ka && ka.src === "직접 제작");
+          out.push({ id: k.id, name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm, d: base + k.depth, src: k.source, made, can,
+            ra: made ? k.ra || 1 : ka && ka.src === "직접 제작" ? ka.ra : null, chain: ch });
+          stack.push({ depth: k.depth, id: k.id });
+          if (!made && ka && ka.src === "직접 제작" && !seen.has(k.id)) out.push(...refRows(ka.kids, base + k.depth + 1, [...ch, k.id], new Set(seen).add(k.id)).map((x) => ({ ...x, opt: true })));
+        }
+        return out;
+      };
+      materials[materials.length - 1].raw = { ra: al.ra, unit: al.unit, rows: refRows(al.kids, 0, [n.id], new Set([n.id])),
+        kids: (al.kids || []).filter((k) => k.depth === 0).map((k) => ({ id: k.id, name: k.name, amount: k.amount, t: k.t, g: k.g, gl: k.gl, tm: k.tm })) };
     }
     const world = n.source === "거래소" ? (n.world && !n.world.startsWith("매물 없음") ? n.world.split(" (")[0] : "서버 미정") : "";
     const key = `${n.id}|${n.source}|${world}`;
@@ -492,6 +513,7 @@ async function render() {
     materialInfo,
     setMake: (id, to) => { const sel = ds.cache[window.__ffxivDash?.selected]; if (sel) sel.live = null; setMake(id, to); },
     makeChoice: (id) => MAKE[id] || null,
+    setMakes: (pairs) => { const sel = ds.cache[window.__ffxivDash?.selected]; if (sel) sel.live = null; setMakes(pairs); },
     fcSelling,
     fcMarked,
     fcToggle,

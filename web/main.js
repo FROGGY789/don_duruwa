@@ -875,13 +875,41 @@ function cartUsesOf(id) {
   return Object.entries(st.cart).map(([cid, n]) => [ds.cache[cid], n]).filter(([row]) => row && (row.materials || []).some((m) => m.id === id))
     .map(([row, n]) => `${row.name} ×${n}회`);
 }
-// 이 재료가 어디에 쓰이나: 장바구니 + 바로 들어가는 레시피 (수익 높은 순)
+// 📒 제작일지에 적은 레시피들이 어떤 재료를 쓰나: 재료ID → [{name, n(만든 횟수), amt(1회 수량)}]
+let JUSE = null, jUseAt = 0;
+async function journalUseMap() {
+  await journalLoad();
+  if (JUSE && jUseAt === (J.at || 0)) return JUSE;
+  const ds = await dataset("craft-nq").catch(() => null);
+  if (!ds) return (JUSE = new Map());
+  const made = {};
+  for (const [, rid, n] of J.e) made[rid] = (made[rid] || 0) + n;
+  const rids = Object.keys(made).map(Number).filter((r) => ds.rows.some((x) => x.id === r)).slice(0, 80);
+  await Promise.all(rids.map((r) => loadDetail("craft-nq", r).catch(() => null)));
+  const map = new Map();
+  for (const rid of rids) {
+    const d = ds.details[rid], row = ds.rows.find((x) => x.id === rid);
+    if (!d || !row) continue;
+    const seen = new Set();
+    for (const m of d.materials || []) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      (map.get(m.id) || map.set(m.id, []).get(m.id)).push({ name: row.name, n: made[rid], amt: m.depth ? null : m.amount });
+    }
+  }
+  jUseAt = J.at || 0;
+  return (JUSE = map);
+}
+// 이 재료가 어디에 쓰이나: 장바구니 + 📒 내가 만든 것(맨 앞, 색칠) + 바로 들어가는 레시피 (수익 높은 순)
 function trackUses(a, id) {
   const inCart = cartUsesOf(id);
-  const chips = a.uses.map((u) => `<span class="t-use-chip">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
+  const mine = ((JUSE && JUSE.get(id)) || []).sort((x, y) => y.n - x.n);
+  const mineNames = new Set(mine.map((x) => x.name));
+  const mineChips = mine.map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦${u.amt ? ` · 1회 ${u.amt}개` : " · 중간재료로"}</small></span>`).join("");
+  const chips = mineChips + a.uses.filter((u) => !mineNames.has(u[0])).map((u) => `<span class="t-use-chip">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
   if (!inCart.length && !chips) return "";
   return `<div class="t-use">${inCart.length ? `<div><span class="t-use-cap">🛒 장바구니에서</span> <b>${esc(inCart.join(" · "))}</b></div>` : ""}
-    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${a.usesN}개</span> <span class="faint">(수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}</div>`;
+    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}</div>`;
 }
 function trackBody(a, t, editable) {
   const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
@@ -981,6 +1009,7 @@ async function renderMatPanel() {
   let el = document.getElementById("mat-panel");
   if (!MP) { document.querySelectorAll("#mat-panel").forEach((x) => x.remove()); return; }
   if (!trackNames) { try { trackNames = new Map(await getJSON("data/track/items.json")); } catch { trackNames = new Map(); } }
+  await journalUseMap().catch(() => null);
   const d = withLive(MP.id, await trackShard(MP.id).then((sh) => sh[MP.id]).catch(() => null));
   if (!MP) return;
   el = document.getElementById("mat-panel"); // 기다리는 동안 다른 호출이 이미 만들었을 수 있다
@@ -1065,6 +1094,7 @@ async function renderTrack() {
     }
   }
   const list = tracked();
+  await journalUseMap().catch(() => null); // 📒 내가 만든 것 표시용
   const datas = (await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)))).map((d, i) => withLive(list[i].id, d));
   if (trackPeek && list.some((t) => t.id === trackPeek)) trackPeek = null;
   const peekCard = trackPeek ? trackCard({ id: trackPeek, qty: 99 }, trackNames.get(trackPeek), withLive(trackPeek, await trackShard(trackPeek).then((sh) => sh[trackPeek]).catch(() => null)), true) : "";

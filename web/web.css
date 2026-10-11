@@ -319,3 +319,5 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .mpn-head{cursor:move;user-select:none;touch-action:none}
 .mpn-head button,.mpn-head a{cursor:pointer}
 .mat-panel.dragging{opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25)}
+.t-use-chip.mine{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-strong);font-weight:700}
+.t-use-chip.mine small{color:var(--primary-strong);font-weight:400;opacity:.8}

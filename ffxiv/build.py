@@ -502,11 +502,35 @@ def main():
         for iid, amt in rc.ingredients:
             used_in.setdefault(iid, []).append((rc, amt))
 
+    def finals(iid):
+        """중간재료를 거쳐 결국 이 재료가 들어가는 완성품 (3단계까지). 너무 흔한 재료(샤드 등)는 건너뜀."""
+        if len(used_in.get(iid, [])) > 60:
+            return {}
+        seen, frontier, found = {iid}, [(iid, [])], {}
+        for depth in range(3):
+            nxt = []
+            for x, path in frontier:
+                for rc, _ in used_in.get(x, []):
+                    r = rc.result_id
+                    if r in seen or len(seen) > 3000:
+                        continue
+                    seen.add(r)
+                    if depth:
+                        found[r] = (rc, path)
+                    nxt.append((r, path + [gd.name(r)]))
+            frontier = nxt
+        lst = sorted(found.values(), key=lambda x: -(craft_net.get(x[0].result_id, -1e12)))
+        top = [[gd.name(rc.result_id), rc.job_name, rc.job_level, round(craft_net[rc.result_id]) if rc.result_id in craft_net else None, path]
+               for rc, path in lst[:8]]
+        return {"f": top, "fn": len(lst)} if lst else {}
+
     def uses(iid):
+        if gd.name(iid).endswith(("샤드", "크리스탈", "클러스터")):
+            return {}  # 거의 모든 레시피에 들어가서 보여 줄 의미가 없다
         lst = sorted(used_in.get(iid, []), key=lambda x: (-(craft_net.get(x[0].result_id, -1e12)), -x[0].job_level))
         top = [[gd.name(rc.result_id), rc.job_name, rc.job_level, amt, round(craft_net[rc.result_id]) if rc.result_id in craft_net else None]
                for rc, amt in lst[:8]]
-        return {"u": top, "un": len(lst)} if lst else {}
+        return {"u": top, "un": len(lst), **finals(iid)} if lst else {}
     n = build_tracking(gd, cache.items, hist, cfg, write, data, uses)
     print(f"트래킹: 아이템 {n}개, 기록 {len(hist['days'])}일치 ({time.time() - t:.0f}초)")
 

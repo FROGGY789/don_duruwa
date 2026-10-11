@@ -321,3 +321,4 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .mat-panel.dragging{opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25)}
 .t-use-chip.mine{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-strong);font-weight:700}
 .t-use-chip.mine small{color:var(--primary-strong);font-weight:400;opacity:.8}
+.t-use-chip.fin{border-style:dashed}

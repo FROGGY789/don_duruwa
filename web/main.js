@@ -842,7 +842,7 @@ function analyzeTrack(id, d, qty) {
   // 그래프: 판단에 쓴 서버의 하루 판매 중앙값도 같이 (보통 가격대 띠랑 같은 기준)
   if (bestW && pastMins.length < 5) d.h.forEach((h, i) => (days[i].wmed = (h[1][bestW.key] || [])[0] ?? null));
   return { worlds, cur, ref, p25, p75, days, signal, plan, got, spend, bestName: bestW && pastMins.length < 5 ? bestW.name : null,
-    basis, refDays: refs.length, best: bestW || null, uses: d.u || [], usesN: d.un || 0 };
+    basis, refDays: refs.length, best: bestW || null, uses: d.u || [], usesN: d.un || 0, finals: d.f || [], finalsN: d.fn || 0 };
 }
 
 function trackChart(a) {
@@ -912,26 +912,42 @@ async function journalUseMap() {
   for (const rid of rids) {
     const d = ds.details[rid], row = ds.rows.find((x) => x.id === rid);
     if (!d || !row) continue;
-    const seen = new Set();
-    for (const m of d.materials || []) {
-      if (seen.has(m.id)) continue;
-      seen.add(m.id);
-      (map.get(m.id) || map.set(m.id, []).get(m.id)).push({ name: row.name, n: made[rid], amt: m.depth ? null : m.amount });
-    }
+    const alts = d.alts || {}, seen = new Set();
+    // 재료 줄(깊이 순)을 따라가며 거쳐 온 중간재료를 기억. 사는 중간재료라도 만들 수 있으면 그 재료까지 (1차·2차 재료로 쓰인 것)
+    const walk = (rows, base, guard) => {
+      const stack = [];
+      for (const m of rows || []) {
+        while (stack.length && stack[stack.length - 1].depth >= m.depth) stack.pop();
+        const via = [...base, ...stack.map((x) => x.name)];
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          (map.get(m.id) || map.set(m.id, []).get(m.id)).push({ name: row.name, n: made[rid], amt: via.length ? null : m.amount, via });
+        }
+        stack.push({ depth: m.depth, name: m.name });
+        const al = alts[m.id];
+        if (m.source !== "직접 제작" && al && al.src === "직접 제작" && !guard.has(m.id)) walk(al.kids, [...via, m.name], new Set(guard).add(m.id));
+      }
+    };
+    walk(d.materials, [], new Set());
   }
   jUseAt = J.at || 0;
   return (JUSE = map);
 }
 // 이 재료가 어디에 쓰이나: 장바구니 + 📒 내가 만든 것(맨 앞, 색칠) + 바로 들어가는 레시피 (수익 높은 순)
 function trackUses(a, id) {
+  if (/(샤드|크리스탈|클러스터)$/.test((trackNames && trackNames.get(id)) || "")) return ""; // 거의 다 들어가서 의미 없다
   const inCart = cartUsesOf(id);
   const mine = ((JUSE && JUSE.get(id)) || []).sort((x, y) => y.n - x.n);
   const mineNames = new Set(mine.map((x) => x.name));
-  const mineChips = mine.map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦${u.amt ? ` · 1회 ${u.amt}개` : " · 중간재료로"}</small></span>`).join("");
+  const mineChips = mine.map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦${u.amt ? ` · 1회 ${u.amt}개` : ` · ${esc((u.via || []).join(" → "))} 거쳐서`}</small></span>`).join("");
   const chips = mineChips + a.uses.filter((u) => !mineNames.has(u[0])).map((u) => `<span class="t-use-chip">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
-  if (!inCart.length && !chips) return "";
+  // 중간재료를 거쳐 결국 들어가는 완성품 (예: 암철 광석 → 암철 덩어리 → 암철 주괴 → 검은장막 난쟁이등)
+  const fins = (a.finals || []).filter((f) => !mineNames.has(f[0])).map((f) => `<span class="t-use-chip fin">${esc(f[0])} <small>${esc(f[1])} Lv${f[2]}${f[3] != null ? ` · 개당 ${f[3] >= 0 ? "+" : ""}${Math.round(f[3]).toLocaleString("ko-KR")}` : ""}
+    · ${esc([...f[4]].join(" → "))} 거쳐서</small></span>`).join("");
+  if (!inCart.length && !chips && !fins) return "";
   return `<div class="t-use">${inCart.length ? `<div><span class="t-use-cap">🛒 장바구니에서</span> <b>${esc(inCart.join(" · "))}</b></div>` : ""}
-    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}</div>`;
+    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}
+    ${fins ? `<div><span class="t-use-cap">🏁 이걸로 최종 만드는 것 ${a.finalsN}개</span> <span class="faint">(중간재료 거쳐서 · 수익 높은 순)</span> ${fins}${a.finalsN > a.finals.length ? ` <small class="faint">외 ${a.finalsN - a.finals.length}개</small>` : ""}</div>` : ""}</div>`;
 }
 function trackBody(a, t, editable) {
   const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];

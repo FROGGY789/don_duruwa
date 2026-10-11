@@ -1001,17 +1001,53 @@ async function renderMatPanel() {
     ${MP.min ? "" : `<div class="mpn-body">${a ? trackBody(a, { id: MP.id, qty: MP.need, label: `${MP.need.toLocaleString("ko-KR")}개 살 때` }, false) : '<p class="faint">시세 기록이 없다 개굴.</p>'}</div>`}`;
   placeMatPanel();
 }
+// 자리: 끌어서 옮긴 곳(MPOS)이 있으면 거기, 없으면 왼쪽 아래 (사이드바 옆)
+let MPOS = load("ffxivMatPanelPos", null); // {x, y} 창 왼쪽 위
 function placeMatPanel() {
   const el = document.getElementById("mat-panel");
   if (!el) return;
+  if (MPOS) {
+    const x = Math.max(0, Math.min(MPOS.x, innerWidth - 120)), y = Math.max(0, Math.min(MPOS.y, innerHeight - 48));
+    MPOS = { x, y };
+    // 아래쪽으로 옮겨도 화면 밖으로 안 나가게 높이를 줄인다
+    Object.assign(el.style, { left: `${x}px`, top: `${y}px`, bottom: "auto", maxHeight: `${Math.max(160, innerHeight - y - 12)}px` });
+    return;
+  }
   const side = !document.body.classList.contains("side-folded") && innerWidth > 900 ? document.getElementById("side").offsetWidth : 0;
-  el.style.left = `${side + 12}px`;
+  Object.assign(el.style, { left: `${side + 12}px`, top: "", bottom: "", maxHeight: "" });
 }
+// 제목 줄을 잡고 끌면 옮겨진다 (버튼 말고 빈 곳). 더블클릭하면 원래 자리로
+document.addEventListener("pointerdown", (e) => {
+  const head = e.target.closest("#mat-panel .mpn-head");
+  if (!head || e.button !== 0 || e.target.closest("button, a, input")) return;
+  const el = document.getElementById("mat-panel"), r = el.getBoundingClientRect();
+  const dx = e.clientX - r.left, dy = e.clientY - r.top;
+  let moved = false;
+  const move = (ev) => {
+    if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) < 4) return; // 살짝 누른 건 클릭(접기)으로
+    moved = true;
+    el.classList.add("dragging");
+    MPOS = { x: ev.clientX - dx, y: ev.clientY - dy };
+    placeMatPanel();
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    el.classList.remove("dragging");
+    if (moved) { save("ffxivMatPanelPos", MPOS); head.dataset.justDragged = "1"; setTimeout(() => delete head.dataset.justDragged, 0); }
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+});
+document.addEventListener("dblclick", (e) => {
+  if (!e.target.closest("#mat-panel .mpn-head") || e.target.closest("button, a")) return;
+  MPOS = null; save("ffxivMatPanelPos", null); placeMatPanel();
+});
 window.addEventListener("resize", placeMatPanel);
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#mat-panel")) return;
   if (e.target.closest("[data-mpn-close]")) { MP = null; save("ffxivMatPanel", null); renderMatPanel(); return; }
-  if (e.target.closest("[data-mpn-min]")) { MP.min = !MP.min; save("ffxivMatPanel", MP); renderMatPanel(); return; }
+  if (e.target.closest("[data-mpn-min]") && !e.target.closest("[data-just-dragged]")) { MP.min = !MP.min; save("ffxivMatPanel", MP); renderMatPanel(); return; }
   if (e.target.closest("[data-mpn-live]")) { refreshTrackLive([MP.id]); return; }
   if (e.target.closest("[data-mpn-add]")) {
     const list = tracked();

@@ -316,3 +316,6 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .t-use-cap{font-weight:700;color:var(--primary-strong)}
 .t-use-chip{display:inline-block;margin:2px 4px 2px 0;padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);border:1px solid var(--border);white-space:nowrap}
 .t-use-chip small{color:var(--text-faint)}
+.mpn-head{cursor:move;user-select:none;touch-action:none}
+.mpn-head button,.mpn-head a{cursor:pointer}
+.mat-panel.dragging{opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25)}

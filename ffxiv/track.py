@@ -83,7 +83,7 @@ def update_history(hist, items, cfg):
     return hist
 
 
-def build_tracking(gd, items, hist, cfg, write, out):
+def build_tracking(gd, items, hist, cfg, write, out, uses=None):
     """화면용 파일을 쓴다. write(path, data) 는 build.py 의 JSON 쓰기."""
     odd, outlier = cfg.get("odd_sale_ratio", 3), cfg["outlier_ratio"]
     dates = sorted(hist.get("days", {}))
@@ -111,6 +111,7 @@ def build_tracking(gd, items, hist, cfg, write, out):
                 h.append([d[5:], rec.get("s", {}), rec.get("m", {})])
         shards.setdefault(iid % TRACK_SHARDS, {})[str(iid)] = {
             "w": worlds, "h": h, "upd": (entry.get("last_upload") or 0) / 1000, "stack": item.stack_size,
+            **(uses(iid) if uses else {}),  # u: [[완성품, 직업, 레벨, 1회 수량, 개당 순수익]], un: 전체 레시피 수
         }
     names.sort(key=lambda x: x[1])
     write(out / "track" / "items.json", names)

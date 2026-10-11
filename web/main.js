@@ -820,7 +820,7 @@ function analyzeTrack(id, d, qty) {
   // 그래프: 판단에 쓴 서버의 하루 판매 중앙값도 같이 (보통 가격대 띠랑 같은 기준)
   if (bestW && pastMins.length < 5) d.h.forEach((h, i) => (days[i].wmed = (h[1][bestW.key] || [])[0] ?? null));
   return { worlds, cur, ref, p25, p75, days, signal, plan, got, spend, bestName: bestW && pastMins.length < 5 ? bestW.name : null,
-    basis, refDays: refs.length, best: bestW || null };
+    basis, refDays: refs.length, best: bestW || null, uses: d.u || [], usesN: d.un || 0 };
 }
 
 function trackChart(a) {
@@ -868,6 +868,21 @@ function trackCard(t, name, d, peek = false) {
   </section>`;
 }
 // 트래킹 카드 본문 (판단 멘트 · 그래프 · 구매 계획 · 서버별 매물). 제작일지 펼침에서도 같이 쓴다
+// 장바구니에 담은 완성품 중 이 재료가 들어가는 것 (상세를 받아 둔 줄만)
+function cartUsesOf(id) {
+  const st = window.__ffxivDash, ds = datasets[`craft-${QUALITY_KEY[S.quality]}`];
+  if (!st || !ds) return [];
+  return Object.entries(st.cart).map(([cid, n]) => [ds.cache[cid], n]).filter(([row]) => row && (row.materials || []).some((m) => m.id === id))
+    .map(([row, n]) => `${row.name} ×${n}회`);
+}
+// 이 재료가 어디에 쓰이나: 장바구니 + 바로 들어가는 레시피 (수익 높은 순)
+function trackUses(a, id) {
+  const inCart = cartUsesOf(id);
+  const chips = a.uses.map((u) => `<span class="t-use-chip">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
+  if (!inCart.length && !chips) return "";
+  return `<div class="t-use">${inCart.length ? `<div><span class="t-use-cap">🛒 장바구니에서</span> <b>${esc(inCart.join(" · "))}</b></div>` : ""}
+    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${a.usesN}개</span> <span class="faint">(수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}</div>`;
+}
 function trackBody(a, t, editable) {
   const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
   const rows = a.worlds.map((w) => `<tr class="${best && w.key === best.key ? "best" : ""}">
@@ -877,6 +892,7 @@ function trackBody(a, t, editable) {
       <td class="lots">${w.lst.slice(0, 5).map((l) => `<span class="lot${l[3] ? " bait" : ""}${l[2] ? " hq" : ""}" title="${l[3] ? "미끼 매물 (그 서버 보통 가격의 절반도 안 된다)" : ""}">${gil(l[0])}×${l[1]}${l[2] ? " HQ" : ""}</span>`).join("")}</td></tr>`).join("");
   const plan = Object.entries(a.plan).sort((x, y) => y[1].qty - x[1].qty).map(([w, p]) => `<li><b>${esc(w)}</b> ${p.qty.toLocaleString("ko-KR")}개 <span class="faint">(평균 ${gil(p.spend / p.qty)}길 · 매물 ${p.lots}개)</span></li>`).join("");
   return `<p class="signal-text">${esc(a.signal.text)}${a.signal.trend ? ` ${esc(a.signal.trend)}` : ""}</p>
+    ${trackUses(a, t.id)}
     <div class="track-grid">
       <div>
         <div class="ev-cap">가격 추이 (${a.days.length}일)</div>

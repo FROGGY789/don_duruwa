@@ -431,6 +431,7 @@ def main():
 
     default_city = cfg["tax_city"]
     tax, _ = seller_tax_rate(cfg, cache.tax_rates, default_city)
+    craft_net = {}
     for page, build in (("craft", build_craft), ("gather", build_gather)):
         t = time.time()
         made = {}
@@ -440,6 +441,12 @@ def main():
             made[key] = (summary, details, badges.items)
             write_page(data, f"{page}-{key}", *made[key])
         write_page(data, f"{page}-all", *combine(made["nq"], made["hq"]))
+        if page == "craft":  # 📈 재료 트래킹 '쓰이는 곳' 정렬용: 완성품 개당 순수익 (NQ·HQ 중 큰 것, 통합 시세)
+            for r in made["nq"][0] + made["hq"][0]:
+                sell = r["v"]["dc"][0]
+                if sell is not None and r["cost"] is not None:
+                    net = sell * (1 - tax) - r["cost"]
+                    craft_net[r["item"]] = max(net, craft_net.get(r["item"], net))
         # 로그: 계산 못 한 이유 (재료 시세 없음 / 판매 기록 없음) — 레벨 70 이하, 통합 기준
         rows70 = [r for r in made["nq"][0] + made["hq"][0] if r["level"] <= 70]
         nocost = [r for r in rows70 if r["cost"] is None]
@@ -487,7 +494,20 @@ def main():
     hist_path = ROOT / "cache" / "history.json.gz"
     hist = update_history(load_history(hist_path), cache.items, cfg)
     save_history(hist_path, hist)
-    n = build_tracking(gd, cache.items, hist, cfg, write, data)
+    # 재료마다 바로 들어가는 레시피 (수익 높은 순 8개) — 트래킹 카드에 "어디에 쓰나"
+    used_in = {}
+    for rc in gd.recipes:
+        if rc.expert or rc.specialist:
+            continue
+        for iid, amt in rc.ingredients:
+            used_in.setdefault(iid, []).append((rc, amt))
+
+    def uses(iid):
+        lst = sorted(used_in.get(iid, []), key=lambda x: (-(craft_net.get(x[0].result_id, -1e12)), -x[0].job_level))
+        top = [[gd.name(rc.result_id), rc.job_name, rc.job_level, amt, round(craft_net[rc.result_id]) if rc.result_id in craft_net else None]
+               for rc, amt in lst[:8]]
+        return {"u": top, "un": len(lst)} if lst else {}
+    n = build_tracking(gd, cache.items, hist, cfg, write, data, uses)
     print(f"트래킹: 아이템 {n}개, 기록 {len(hist['days'])}일치 ({time.time() - t:.0f}초)")
 
     t = time.time()

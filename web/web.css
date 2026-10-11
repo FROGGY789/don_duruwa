@@ -312,3 +312,7 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .mpn-body{overflow-y:auto;padding:var(--space-3)}
 .mpn-body .track-grid{grid-template-columns:1fr}
 .mpn-body .signal-text{font-size:var(--fs-sm)}
+.t-use{display:flex;flex-direction:column;gap:6px;margin:0 0 var(--space-3);font-size:var(--fs-sm)}
+.t-use-cap{font-weight:700;color:var(--primary-strong)}
+.t-use-chip{display:inline-block;margin:2px 4px 2px 0;padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);border:1px solid var(--border);white-space:nowrap}
+.t-use-chip small{color:var(--text-faint)}

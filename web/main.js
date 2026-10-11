@@ -898,7 +898,7 @@ function cartUsesOf(id) {
     .map(([row, n]) => `${row.name} ×${n}회`);
 }
 // 📒 제작일지에 적은 레시피들이 어떤 재료를 쓰나: 재료ID → [{name, n(만든 횟수), amt(1회 수량)}]
-let JUSE = null, jUseAt = 0;
+let JUSE = null, JNAME = new Map(), jUseAt = 0; // JNAME: 재료 이름 → 그걸 부속재료로 쓴 📒 완성품들
 async function journalUseMap() {
   await journalLoad();
   if (JUSE && jUseAt === (J.at || 0)) return JUSE;
@@ -908,7 +908,20 @@ async function journalUseMap() {
   for (const [, rid, n] of J.e) made[rid] = (made[rid] || 0) + n;
   const rids = Object.keys(made).map(Number).filter((r) => ds.rows.some((x) => x.id === r)).slice(0, 80);
   await Promise.all(rids.map((r) => loadDetail("craft-nq", r).catch(() => null)));
+  // 사는 게 싼 중간재료(예: 별자작나무 목재)는 alts 에 하위 재료가 없을 수 있다 → 그 레시피 상세를 직접 불러서 따라간다
+  const ridOf = new Map(ds.rows.map((x) => [x.name, x.id]));
+  const subKids = (m, al) => (al && al.src === "직접 제작" ? al.kids : null) || (ridOf.has(m.name) && ds.details[ridOf.get(m.name)] ? ds.details[ridOf.get(m.name)].materials : null);
+  for (let round = 0, todo = rids; round < 3 && todo.length; round++) {
+    const need = new Set();
+    for (const r of todo) {
+      const d = ds.details[r];
+      for (const m of (d && d.materials) || []) if (m.source !== "직접 제작" && ridOf.has(m.name) && !(d.alts && d.alts[m.id] && d.alts[m.id].src === "직접 제작") && !ds.details[ridOf.get(m.name)]) need.add(ridOf.get(m.name));
+    }
+    todo = [...need].slice(0, 60);
+    await Promise.all(todo.map((r) => loadDetail("craft-nq", r).catch(() => null)));
+  }
   const map = new Map();
+  JNAME = new Map();
   for (const rid of rids) {
     const d = ds.details[rid], row = ds.rows.find((x) => x.id === rid);
     if (!d || !row) continue;
@@ -919,13 +932,15 @@ async function journalUseMap() {
       for (const m of rows || []) {
         while (stack.length && stack[stack.length - 1].depth >= m.depth) stack.pop();
         const via = [...base, ...stack.map((x) => x.name)];
+        const jn = JNAME.get(m.name) || JNAME.set(m.name, []).get(m.name);
+        if (!jn.some((x) => x.name === row.name)) jn.push({ name: row.name, n: made[rid] });
         if (!seen.has(m.id)) {
           seen.add(m.id);
           (map.get(m.id) || map.set(m.id, []).get(m.id)).push({ name: row.name, n: made[rid], amt: via.length ? null : m.amount, via });
         }
         stack.push({ depth: m.depth, name: m.name });
-        const al = alts[m.id];
-        if (m.source !== "직접 제작" && al && al.src === "직접 제작" && !guard.has(m.id)) walk(al.kids, [...via, m.name], new Set(guard).add(m.id));
+        const kids = m.source !== "직접 제작" && !guard.has(m.id) ? subKids(m, alts[m.id]) : null;
+        if (kids) walk(kids, [...via, m.name], new Set(guard).add(m.id));
       }
     };
     walk(d.materials, [], new Set());
@@ -939,14 +954,35 @@ function trackUses(a, id) {
   const inCart = cartUsesOf(id);
   const mine = ((JUSE && JUSE.get(id)) || []).sort((x, y) => y.n - x.n);
   const mineNames = new Set(mine.map((x) => x.name));
-  const mineChips = mine.map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦${u.amt ? ` · 1회 ${u.amt}개` : ` · ${esc((u.via || []).join(" → "))} 거쳐서`}</small></span>`).join("");
-  const chips = mineChips + a.uses.filter((u) => !mineNames.has(u[0])).map((u) => `<span class="t-use-chip direct">${esc(u[0])} <small>${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}</small></span>`).join("");
+  // 📒 바로 넣은 것(1회 k개)은 완성품 칩, 중간재료를 거친 것은 그 중간재료(예: 별자작나무 목재)를 진하게 맨 앞에
+  const mineChips = mine.filter((u) => u.amt).map((u) => `<span class="t-use-chip mine" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦 · 1회 ${u.amt}개</small></span>`).join("");
+  const parents = new Map(); // 바로 위 중간재료 → 그걸로 만든 📒 완성품들
+  for (const u of mine) if (!u.amt && u.via && u.via.length) {
+    const k = u.via[u.via.length - 1], l = parents.get(k) || parents.set(k, []).get(k);
+    if (!l.some((x) => x.name === u.name)) l.push({ name: u.name, n: u.n });
+  }
+  const forMine = (name) => {
+    const l = [...(parents.get(name) || [])];
+    for (const x of JNAME.get(name) || []) if (!l.some((y) => y.name === x.name)) l.push(x);
+    return l.sort((x, y) => y.n - x.n);
+  };
+  const stat = (u) => `${esc(u[1])} Lv${u[2]} · 1회 ${u[3]}개${u[4] != null ? ` · 개당 ${u[4] >= 0 ? "+" : ""}${Math.round(u[4]).toLocaleString("ko-KR")}` : ""}`;
+  const usesBy = new Map(a.uses.map((u) => [u[0], u]));
+  const hiNames = [...new Set([...parents.keys(), ...a.uses.map((u) => u[0]).filter((n) => !mineNames.has(n) && forMine(n).length)])];
+  const hiChips = hiNames.map((n) => {
+    const fm = forMine(n), u = usesBy.get(n);
+    const tip = `📒 ${fm.map((x) => `${x.name}(${x.n}회)`).join(" · ")} 만들기 위해 사용했다 개굴`;
+    return `<span class="t-use-chip mine" data-tip="${esc(tip)}">📒 ${esc(n)} <small>${u ? `${stat(u)} · ` : ""}${esc(fm[0].name)}${fm.length > 1 ? ` 외 ${fm.length - 1}` : ""}용</small></span>`;
+  }).join("");
+  const hiSet = new Set(hiNames);
+  const direct = a.uses.filter((u) => !mineNames.has(u[0]) && !hiSet.has(u[0]));
+  const chips = mineChips + hiChips + direct.map((u) => `<span class="t-use-chip direct">${esc(u[0])} <small>${stat(u)}</small></span>`).join("");
   // 중간재료를 거쳐 결국 들어가는 완성품 (예: 암철 광석 → 암철 덩어리 → 암철 주괴 → 검은장막 난쟁이등)
   const fins = (a.finals || []).filter((f) => !mineNames.has(f[0])).map((f) => `<span class="t-use-chip fin">${esc(f[0])} <small>${esc(f[1])} Lv${f[2]}${f[3] != null ? ` · 개당 ${f[3] >= 0 ? "+" : ""}${Math.round(f[3]).toLocaleString("ko-KR")}` : ""}
     · ${esc([...f[4]].join(" → "))} 거쳐서</small></span>`).join("");
   if (!inCart.length && !chips && !fins) return "";
   return `<div class="t-use">${inCart.length ? `<div><span class="t-use-cap">🛒 장바구니에서</span> <b>${esc(inCart.join(" · "))}</b></div>` : ""}
-    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}
+    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length || hiNames.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}
     ${fins ? `<div><span class="t-use-cap">🏁 이걸로 최종 만드는 것 ${a.finalsN}개</span> <span class="faint">(중간재료 거쳐서 · 수익 높은 순)</span> ${fins}${a.finalsN > a.finals.length ? ` <small class="faint">외 ${a.finalsN - a.finals.length}개</small>` : ""}</div>` : ""}</div>`;
 }
 function trackBody(a, t, editable) {

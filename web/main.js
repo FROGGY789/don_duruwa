@@ -978,12 +978,14 @@ function trackUses(a, id) {
   const direct = a.uses.filter((u) => !mineNames.has(u[0]) && !hiSet.has(u[0]));
   const chips = mineChips + hiChips + direct.map((u) => `<span class="t-use-chip direct">${esc(u[0])} <small>${stat(u)}</small></span>`).join("");
   // 중간재료를 거쳐 결국 들어가는 완성품 (예: 암철 광석 → 암철 덩어리 → 암철 주괴 → 검은장막 난쟁이등)
-  const fins = (a.finals || []).filter((f) => !mineNames.has(f[0])).map((f) => `<span class="t-use-chip fin">${esc(f[0])} <small>${esc(f[1])} Lv${f[2]}${f[3] != null ? ` · 개당 ${f[3] >= 0 ? "+" : ""}${Math.round(f[3]).toLocaleString("ko-KR")}` : ""}
+  // 📒 중간재료를 거쳐 만든 제작일지 템은 최종 완성품에서도 맨 앞에 진하게
+  const mineFins = mine.filter((u) => !u.amt).map((u) => `<span class="t-use-chip mine fin" title="📒 제작일지에 적은 템이다 개굴">📒 ${esc(u.name)} <small>${u.n}회 만듦 · ${esc((u.via || []).join(" → "))} 거쳐서</small></span>`).join("");
+  const fins = mineFins + (a.finals || []).filter((f) => !mineNames.has(f[0])).map((f) => `<span class="t-use-chip fin">${esc(f[0])} <small>${esc(f[1])} Lv${f[2]}${f[3] != null ? ` · 개당 ${f[3] >= 0 ? "+" : ""}${Math.round(f[3]).toLocaleString("ko-KR")}` : ""}
     · ${esc([...f[4]].join(" → "))} 거쳐서</small></span>`).join("");
   if (!inCart.length && !chips && !fins) return "";
   return `<div class="t-use">${inCart.length ? `<div><span class="t-use-cap">🛒 장바구니에서</span> <b>${esc(inCart.join(" · "))}</b></div>` : ""}
-    ${chips ? `<div><span class="t-use-cap">🔨 쓰이는 레시피 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length || hiNames.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}
-    ${fins ? `<div><span class="t-use-cap">🏁 이걸로 최종 만드는 것 ${a.finalsN}개</span> <span class="faint">(중간재료 거쳐서 · 수익 높은 순)</span> ${fins}${a.finalsN > a.finals.length ? ` <small class="faint">외 ${a.finalsN - a.finals.length}개</small>` : ""}</div>` : ""}</div>`;
+    ${chips ? `<div><span class="t-use-cap">🔨 바로 쓰는 곳 ${Math.max(a.usesN, mine.length)}개</span> <span class="faint">(${mine.length || hiNames.length ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${chips}${a.usesN > a.uses.length ? ` <small class="faint">외 ${a.usesN - a.uses.length}개</small>` : ""}</div>` : ""}
+    ${fins ? `<div><span class="t-use-cap">🏁 최종 완성품 ${Math.max(a.finalsN, mine.filter((u) => !u.amt).length)}개</span> <span class="faint">(중간재료 거쳐서 · ${mine.some((u) => !u.amt) ? "📒 내가 만든 것 먼저, 나머지는 " : ""}수익 높은 순)</span> ${fins}${a.finalsN > a.finals.length ? ` <small class="faint">외 ${a.finalsN - a.finals.length}개</small>` : ""}</div>` : ""}</div>`;
 }
 function trackBody(a, t, editable) {
   const best = a.worlds.filter((w) => w.min != null).sort((x, y) => x.min - y.min)[0];
@@ -1101,25 +1103,31 @@ async function renderMatPanel() {
         <button type="button" class="chip-x" data-mpn-min="1" title="${MP.min ? "펴기" : "접기"}">${MP.min ? "▴" : "▾"}</button>
         <button type="button" class="chip-x" data-mpn-close="1" title="닫기">✕</button>
       </span></div>
-    ${MP.min ? "" : `<div class="mpn-body">${a ? trackBody(a, { id: MP.id, qty: MP.need, label: `${MP.need.toLocaleString("ko-KR")}개 살 때` }, false) : '<p class="faint">시세 기록이 없다 개굴.</p>'}</div>`}`;
+    ${MP.min ? "" : `<div class="mpn-body">${a ? trackBody(a, { id: MP.id, qty: MP.need, label: `${MP.need.toLocaleString("ko-KR")}개 살 때` }, false) : '<p class="faint">시세 기록이 없다 개굴.</p>'}</div>
+    ${["nw", "ne", "sw", "se"].map((c) => `<span class="mpn-rz ${c}" data-rz="${c}" title="끌어서 크기 조절"></span>`).join("")}`}`;
   placeMatPanel();
 }
-// 자리: 끌어서 옮긴 곳(MPOS)이 있으면 거기, 없으면 왼쪽 아래 (사이드바 옆)
+// 자리·크기: 끌어서 옮긴 곳(MPOS)이 있으면 거기, 없으면 왼쪽 아래 (사이드바 옆). 크기(MSIZE)는 모서리를 끌어서 정한다
 let MPOS = load("ffxivMatPanelPos", null); // {x, y} 창 왼쪽 위
+let MSIZE = load("ffxivMatPanelSize", null); // {w, h}
+const clampN = (v, lo, hi) => Math.max(lo, Math.min(v, Math.max(lo, hi)));
+function matPanelSize() {
+  const w = clampN(MSIZE ? MSIZE.w : 620, 320, innerWidth - 24);
+  const h = clampN(MSIZE ? MSIZE.h : Math.min(560, Math.round(innerHeight * 0.72)), 200, innerHeight - 24);
+  return { w, h };
+}
 function placeMatPanel() {
   const el = document.getElementById("mat-panel");
   if (!el) return;
-  if (MPOS) {
-    const x = Math.max(0, Math.min(MPOS.x, innerWidth - 120)), y = Math.max(0, Math.min(MPOS.y, innerHeight - 48));
-    MPOS = { x, y };
-    // 아래쪽으로 옮겨도 화면 밖으로 안 나가게 높이를 줄인다
-    Object.assign(el.style, { left: `${x}px`, top: `${y}px`, bottom: "auto", maxHeight: `${Math.max(160, innerHeight - y - 12)}px` });
-    return;
-  }
+  const { w, h } = matPanelSize();
+  Object.assign(el.style, { width: `${w}px`, height: MP && MP.min ? "" : `${h}px`, bottom: "auto", maxHeight: "" });
   const side = !document.body.classList.contains("side-folded") && innerWidth > 900 ? document.getElementById("side").offsetWidth : 0;
-  Object.assign(el.style, { left: `${side + 12}px`, top: "", bottom: "", maxHeight: "" });
+  const p = MPOS || { x: side + 12, y: innerHeight - el.offsetHeight - 12 };
+  const x = clampN(p.x, 0, innerWidth - 120), y = clampN(p.y, 0, innerHeight - 48);
+  if (MPOS) MPOS = { x, y };
+  Object.assign(el.style, { left: `${x}px`, top: `${y}px` });
 }
-// 제목 줄을 잡고 끌면 옮겨진다 (버튼 말고 빈 곳). 더블클릭하면 원래 자리로
+// 제목 줄을 잡고 끌면 옮겨진다 (버튼 말고 빈 곳). 더블클릭하면 원래 자리·크기로
 document.addEventListener("pointerdown", (e) => {
   const head = e.target.closest("#mat-panel .mpn-head");
   if (!head || e.button !== 0 || e.target.closest("button, a, input")) return;
@@ -1142,9 +1150,34 @@ document.addEventListener("pointerdown", (e) => {
   document.addEventListener("pointermove", move);
   document.addEventListener("pointerup", up);
 });
+// 네 모서리를 잡고 끌면 크기가 바뀐다 (반대쪽 모서리는 그 자리에 그대로)
+document.addEventListener("pointerdown", (e) => {
+  const grip = e.target.closest("#mat-panel [data-rz]");
+  if (!grip || e.button !== 0) return;
+  e.preventDefault();
+  const el = document.getElementById("mat-panel"), r = el.getBoundingClientRect(), c = grip.dataset.rz;
+  const x0 = r.left, y0 = r.top, w0 = r.width, h0 = r.height;
+  el.classList.add("dragging");
+  const move = (ev) => {
+    const mx = ev.clientX - e.clientX, my = ev.clientY - e.clientY;
+    const w = clampN(c.includes("e") ? w0 + mx : w0 - mx, 320, innerWidth - 24);
+    const h = clampN(c.includes("s") ? h0 + my : h0 - my, 200, innerHeight - 24);
+    MSIZE = { w, h };
+    MPOS = { x: c.includes("w") ? x0 + w0 - w : x0, y: c.includes("n") ? y0 + h0 - h : y0 };
+    placeMatPanel();
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    el.classList.remove("dragging");
+    save("ffxivMatPanelSize", MSIZE); save("ffxivMatPanelPos", MPOS);
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+});
 document.addEventListener("dblclick", (e) => {
   if (!e.target.closest("#mat-panel .mpn-head") || e.target.closest("button, a")) return;
-  MPOS = null; save("ffxivMatPanelPos", null); placeMatPanel();
+  MPOS = null; MSIZE = null; save("ffxivMatPanelPos", null); save("ffxivMatPanelSize", null); placeMatPanel();
 });
 window.addEventListener("resize", placeMatPanel);
 document.addEventListener("click", (e) => {

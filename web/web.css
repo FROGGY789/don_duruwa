@@ -302,14 +302,18 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .j-cart:hover{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong)}
 .j-cart:disabled{border-color:var(--positive);color:var(--positive);background:var(--positive-soft)}
 /* 📈 왼쪽 아래 재료 창 */
-.mat-panel{position:fixed;bottom:12px;z-index:1000005;width:min(620px,calc(100vw - 24px));max-height:min(72vh,640px);display:flex;flex-direction:column;
+.mat-panel{position:fixed;z-index:1000005;width:min(620px,calc(100vw - 24px));display:flex;flex-direction:column;
   background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow)}
 .mpn-head{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--border);background:var(--surface-2);border-radius:var(--radius-lg) var(--radius-lg) 0 0}
 .mat-panel.min .mpn-head{border-bottom:0;border-radius:var(--radius-lg)}
 .mpn-name{cursor:pointer;font-size:var(--fs-md)}
 .mpn-btns{margin-left:auto;display:flex;align-items:center;gap:4px}
 .mpn-btns .cart-btn{padding:3px 10px;text-decoration:none}
-.mpn-body{overflow-y:auto;padding:var(--space-3)}
+.mpn-body{flex:1;min-height:0;overflow-y:auto;padding:var(--space-3)}
+.mpn-rz{position:absolute;width:16px;height:16px;z-index:2;touch-action:none}
+.mpn-rz.nw{left:-4px;top:-4px;cursor:nwse-resize}.mpn-rz.se{right:-4px;bottom:-4px;cursor:nwse-resize}
+.mpn-rz.ne{right:-4px;top:-4px;cursor:nesw-resize}.mpn-rz.sw{left:-4px;bottom:-4px;cursor:nesw-resize}
+.mpn-rz.se::after{content:"";position:absolute;right:7px;bottom:7px;width:8px;height:8px;border-right:2px solid var(--border-strong);border-bottom:2px solid var(--border-strong);border-radius:0 0 3px 0}
 .mpn-body .track-grid{grid-template-columns:1fr}
 .mpn-body .signal-text{font-size:var(--fs-sm)}
 .t-use{display:flex;flex-direction:column;gap:6px;margin:0 0 var(--space-3);font-size:var(--fs-sm)}
@@ -321,7 +325,7 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .mat-panel.dragging{opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25)}
 .t-use-chip.mine{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-strong);font-weight:700}
 .t-use-chip.mine small{color:var(--primary-strong);font-weight:400;opacity:.8}
-.t-use-chip.fin{border-style:dashed}
+.t-use-chip.fin:not(.mine){border-style:dashed}
 .t-use-chip.direct{background:var(--info-soft);border-color:color-mix(in oklab,var(--info) 45%,transparent);color:var(--info)}
 .t-use-chip.direct small{color:var(--info);opacity:.75}
-.t-use-chip.fin{background:transparent}
+.t-use-chip.fin:not(.mine){background:transparent}

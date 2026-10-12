@@ -939,6 +939,24 @@ export default function (component) {
         root.__wrapRO.observe(wrap);
       }
     }
+    floatHead();
+  }
+
+  // 표 제목 줄(원가·이익률…)은 아래로 내려도 화면 맨 위에 붙어 따라온다 (표가 가로로 스크롤돼서 sticky 대신 직접 내림)
+  function floatHead() {
+    const wrap = root.querySelector(".rank-table"), head = wrap?.querySelector(":scope > table > thead");
+    if (!wrap || !head) return;
+    const top = wrap.getBoundingClientRect().top;
+    const y = Math.max(0, Math.min(-top, wrap.offsetHeight - head.offsetHeight));
+    wrap.style.setProperty("--head-y", y + "px");
+    wrap.classList.toggle("head-floating", y > 0);
+  }
+  if (!root.__floatHead) {
+    root.__floatHead = true;
+    let ticking = false;
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { ticking = false; floatHead(); }); } };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
   }
 
   // 🐸 제목 옆 개구리를 누르믄 개구리 비가 한 번 더 온다

@@ -318,6 +318,9 @@ td:has(> .badges){white-space:normal;min-width:200px}
 .bundles td.bundle-best{background:var(--primary-soft);color:var(--primary-strong);font-weight:600}
 
 /* 순위 표 촘촘하게: 칸 제목은 두 줄까지 접는다 */
+.rank-table > table > thead th{transform:translateY(var(--head-y,0px));z-index:2}
+.rank-table.head-floating > table > thead th{box-shadow:0 1px 0 var(--border),var(--shadow-sm)}
+.rank-table.head-floating > table > thead th.col-log{box-shadow:inset 1px 0 0 var(--border),0 1px 0 var(--border),var(--shadow-sm)}
 .rank-table > table > thead th{white-space:normal;word-break:keep-all;line-height:1.3;vertical-align:bottom;padding:10px 8px}
 .rank-table > table > thead th.num{min-width:3.5em}
 .rank-table > table > tbody > tr > td{padding:10px 8px}

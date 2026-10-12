@@ -7,7 +7,7 @@ const PALETTES = { "초록": "jade", "골드": "gold", "크리스탈": "crystal"
 const QUALITY_KEY = { NQ: "nq", HQ: "hq", "통합": "all" };
 const SHARDS = 32;
 const CRAFT_CATS = { all: "전체", "가구": "가구", "장비": "장비", "재료": "재료", "소모품": "소모품", "기타": "기타" };
-const GATHER_CATS = { all: "전체", "일반": "일반", "시간 한정": "시간 한정", "크리스탈": "크리스탈" };
+const GATHER_CATS = { all: "전체", "일반": "비시간제", "시간 한정": "시간제", "크리스탈": "크리스탈" };
 const EXCHANGE_CRAFT_CATS = { all: "전체", "군표": "군표", "제작자·채집가 화폐": "제작자·채집가 화폐", "알라그 석판": "알라그 석판" };
 const EXCHANGE_CATS = { all: "전체", "군표": "군표", "제작자·채집가 화폐": "제작자·채집가 화폐", "알라그 석판": "알라그 석판", "기타 화폐": "기타 화폐" };
 const MAX_RESULTS = 30, MAX_FAILED = 400;
@@ -374,7 +374,7 @@ function compute(p, ds, name) {
       tier: r.tier, id: r.id, item: r.item, name: r.name, stars: r.stars, job: r.job, level: r.level, cost: r.cost, cat: r.cat, sub: r.sub,
       updated: r.updated, updatedText: ago(r.updated), stale, sellingHq: r.hq, resultAmount: r.resultAmount,
       badges: (stale ? [{ kind: "stale", text: "⚠ 데이터 오래됨", tip: staleTip }] : []).concat(r.badges),
-      scope, raw: r,
+      scope, raw: r, bu: r.bu, useNet: r.bu ? r.bu[4] : null, // ⛏ 채집템으로 만들 수 있는 것 중 제일 돈 되는 제작
     });
     if (ds.details[r.id]) mergeDetail(ds, r.id); // 🔨↔🛒 내 선택이 있으면 원가가 바뀐다
     for (const k of keys) {

@@ -432,7 +432,32 @@ def main():
     default_city = cfg["tax_city"]
     tax, _ = seller_tax_rate(cfg, cache.tax_rates, default_city)
     craft_net = {}
-    for page, build in (("craft", build_craft), ("gather", build_gather)):
+    used_in = {}  # 재료 → 그게 바로 들어가는 레시피들 (채집 '제일 돈 되는 제작', 트래킹 '바로 쓰는 곳')
+    for rc in gd.recipes:
+        if rc.expert or rc.specialist:
+            continue
+        for iid, amt in rc.ingredients:
+            used_in.setdefault(iid, []).append((rc, amt))
+
+    def best_use(iid):
+        """⛏ 채집템으로 만들 수 있는 것 중 개당 순수익이 제일 높은 완성품: [이름, 직업, 레벨, 1회 수량, 순수익, 쓰는 레시피 수]"""
+        if gd.name(iid).endswith(("샤드", "크리스탈", "클러스터")):
+            return None
+        lst = [(rc, amt) for rc, amt in used_in.get(iid, []) if rc.result_id in craft_net]
+        if not lst:
+            return None
+        rc, amt = max(lst, key=lambda x: craft_net[x[0].result_id])
+        return [gd.name(rc.result_id), rc.job_name, rc.job_level, amt, round(craft_net[rc.result_id]), len(used_in[iid])]
+
+    def build_gather_uses(*a):
+        summary, details = build_gather(*a)
+        for r in summary:
+            bu = best_use(r["item"])
+            if bu:
+                r["bu"] = bu
+        return summary, details
+
+    for page, build in (("craft", build_craft), ("gather", build_gather_uses)):
         t = time.time()
         made = {}
         for key, hq in (("nq", False), ("hq", True)):
@@ -494,13 +519,7 @@ def main():
     hist_path = ROOT / "cache" / "history.json.gz"
     hist = update_history(load_history(hist_path), cache.items, cfg)
     save_history(hist_path, hist)
-    # 재료마다 바로 들어가는 레시피 (수익 높은 순 8개) — 트래킹 카드에 "어디에 쓰나"
-    used_in = {}
-    for rc in gd.recipes:
-        if rc.expert or rc.specialist:
-            continue
-        for iid, amt in rc.ingredients:
-            used_in.setdefault(iid, []).append((rc, amt))
+    # 재료마다 바로 들어가는 레시피 (수익 높은 순 8개) — 트래킹 카드에 "어디에 쓰나" (used_in 은 위에서)
 
     def finals(iid):
         """중간재료를 거쳐 결국 이 재료가 들어가는 완성품 (3단계까지). 너무 흔한 재료(샤드 등)는 건너뜀."""

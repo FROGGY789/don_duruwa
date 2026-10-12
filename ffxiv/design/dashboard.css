@@ -577,3 +577,4 @@ tr.done .qty-in{text-decoration:line-through;opacity:.6}
 .cp-card tr.cp-got .mat-link{text-decoration:line-through}
 .cp-make-ref{padding:0 6px;font-size:10px;font-weight:600}
 .cp-ref-note{opacity:.75}
+.rank-table td.best-use{min-width:150px;max-width:220px;white-space:normal;word-break:keep-all;line-height:1.35;font-size:var(--fs-sm)}

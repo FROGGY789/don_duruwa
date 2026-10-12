@@ -77,7 +77,9 @@ function columns(d) {
   }
   if (!isGather(d)) return d.logCraft ? COLUMNS : COLUMNS.filter((c) => c.key !== "log");
   return COLUMNS.filter((c) => !["pick", "cost", "margin", "log"].includes(c.key))
-    .map((c) => (c.key === "level" ? { ...c, label: "채집 레벨" } : c.key === "net" ? { ...c, label: "개당 순수익" } : c));
+    .map((c) => (c.key === "level" ? { ...c, label: "채집 레벨" } : c.key === "net" ? { ...c, label: "개당 순수익" } : c))
+    .flatMap((c) => (c.key === "net" ? [c, { key: "useNet", label: "🔨 제일 돈 되는 제작", sortable: true,
+      tip: "이 채집템이 바로 들어가는 레시피 중 완성품 개당 순수익(통합 시세)이 제일 높은 것이다 개굴. 누르면 그걸로 정렬된다 개굴" }] : [c]));
 }
 
 // 지금 고른 서버 보기(통합 또는 서버 하나)의 값
@@ -237,6 +239,7 @@ function renderTable(d, rows) {
       spend: `<td class="num">${gil(r.spend)}</td>`,
       level: `<td class="num">${isExchange(d) ? `${r.level.toLocaleString("ko-KR")}${r.resultAmount > 1 ? `<small class="per"> /${r.resultAmount}개</small>` : ""}` : r.level}</td>`,
       sell: `<td class="num">${gil(v.sell)}</td>`,
+      useNet: `<td class="best-use">${r.bu ? `<span data-tip="${esc(`${r.bu[5]}개 레시피에 들어가는데, 그중 개당 제일 많이 남는 게 이거다 개굴 (1회에 ${r.bu[3]}개 들어감)`)}"><b>${esc(r.bu[0])}</b> ${signed(r.bu[4])}<br><small class="per">${esc(r.bu[1])} Lv${r.bu[2]} · 1회 ${r.bu[3]}개</small></span>` : '<span class="dash">-</span>'}</td>`,
       cost: `<td class="num">${gil(r.cost)}</td>`,
       net: `<td class="num">${signed(v.net)}</td>`,
       perCur: `<td class="num">${v.perCur == null ? '<span class="dash">-</span>' : `<span class="pct ${v.perCur >= 0 ? "pos" : "neg"}">${v.perCur >= 100 ? gil(v.perCur) : v.perCur.toFixed(1)}</span>`}</td>`,

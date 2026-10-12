@@ -220,18 +220,19 @@ class GameData:
         # 채집지(GatheringPoint) → 채집 묶음(GatheringPointBase), 시간 한정 채집지
         timed_points = {_int(k) for k, v in iter_rows("GatheringPointTransient")
                         if _int(v[0]) != 65535 or _int(v[2]) != 0}
-        base_timed = {}  # base → [시간 한정 여부, ...] (그 묶음을 쓰는 채집지마다)
+        base_timed = {}  # base → [(시간 한정 여부, 지도에 있는 채집지인지), ...] (그 묶음을 쓰는 채집지마다)
         for k, v in iter_rows("GatheringPoint"):
             base = _int(v[3])
             if base:
-                base_timed.setdefault(base, []).append(_int(k) in timed_points)
+                # 지역(TerritoryType)이 0·1 인 채집지는 지도에 없는 자리라서 '보통 채집지' 로 치면 안 된다 (예: 암철 광석)
+                base_timed.setdefault(base, []).append((_int(k) in timed_points, _int(v[7]) > 1))
         found = {}  # 아이템 → (직업, 레벨, 별, [시간 한정 여부...])
         jobs_of = {}
         for k, v in iter_rows("GatheringPointBase"):
             job = GATHER_TYPE_JOB.get(_int(v[0]))
             if not job:
                 continue  # 작살 등
-            timed = base_timed.get(_int(k), [False])
+            timed = base_timed.get(_int(k), [(False, True)])
             for g in v[2:10]:
                 iid, (level, stars) = gitems.get(_int(g), (0, (0, 0)))
                 if iid <= 0 or iid not in self.items or not level:
@@ -244,7 +245,8 @@ class GameData:
                     found[iid] = (prev[0], level, stars, prev[3] + timed) if level < prev[1] else (*prev[:3], prev[3] + timed)
         for iid, (job, level, stars, timed) in found.items():
             # 보통 채집지에서도 나오면 시간 한정이 아니다
-            self.gather[iid] = GatherItem(iid, job, level, stars, all(timed), tuple(sorted(jobs_of[iid])))
+            real = [t for t, on_map in timed if on_map]  # 지도에 있는 채집지만 본다 (하나도 없으면 전부)
+            self.gather[iid] = GatherItem(iid, job, level, stars, all(real or [t for t, _ in timed]), tuple(sorted(jobs_of[iid])))
 
     def craft_tier(self, item_id, _seen=()):
         """몇 차 제작인지: 0 = 제작 안 되는 템(채집·구매·드랍), 1 = 재료가 전부 0차, 2 = 1차 재료가 들어감 …

@@ -54,6 +54,7 @@ class Stats:
     listing_count: int = 0
     min_listing: float = None
     last_upload: float = 0  # 초
+    quiet_days: float = None  # 마지막 판매(기간 안) 뒤로 데이터 받은 시각까지 며칠째 안 팔렸나
     dropped: list = field(default_factory=list)  # 이상 거래로 뺀 판매 기록
     good_listings: list = field(default_factory=list)  # 미끼로 안 본 매물
     bait: list = field(default_factory=list)  # 미끼로 본 매물
@@ -141,6 +142,8 @@ def market_stats(entry, hq, hours, outlier_ratio=0.0, world=None, odd_ratio=0.0,
     st.sold_qty = sum(s[1] for s in sales)
     if sales:
         st.median = statistics.median(s[0] for s in sales)
+        if entry.get("fetched_at"):
+            st.quiet_days = max(0.0, (entry["fetched_at"] - max(s[3] for s in sales)) / 86400)
     counts = entry.get("counts")
     if counts is None:  # 예전 캐시 형식
         st.listing_count = len(listings)
@@ -560,10 +563,14 @@ class Calculator:
         """(예상 판매 소요일, 싼 매물 가격 앞의 2개).
 
         내 가격 이하로 올라온 매물 수량 + 내 1개를, 하루 평균 판매 수량으로 나눈다.
+        단, 기간 앞쪽에만 몰려 팔리고 그 뒤로 며칠째 안 팔렸으면 적어도 그만큼은 걸린다고 본다
+        (예: 14일 중 첫날에만 팔리고 12일째 조용하면 5일이 아니라 12일).
         """
         ahead = sum(l[1] for l in st.good_listings if l[0] <= sell)
         daily = st.sold_qty / (self.hours / 24)
         days = (ahead + 1) / daily if daily > 0 else None
+        if days is not None and st.quiet_days is not None:
+            days = max(days, st.quiet_days)
         return days, [l[0] for l in st.good_listings[:2]]
 
     def quality_compare(self, item_id, unit_cost, world):

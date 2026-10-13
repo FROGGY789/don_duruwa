@@ -899,51 +899,34 @@ function cartUsesOf(id) {
 }
 // 📒 제작일지에 적은 레시피들이 어떤 재료를 쓰나: 재료ID → [{name, n(만든 횟수), amt(1회 수량)}]
 let JUSE = null, JNAME = new Map(), jUseAt = 0; // JNAME: 재료 이름 → 그걸 부속재료로 쓴 📒 완성품들
+let JTREE = null; // data/jtree.json: 레시피 → 완성품 + 재료 트리 [id, 1회 수량, 깊이, ...] (빌드할 때 미리 펼쳐 둔 것)
 async function journalUseMap() {
   await journalLoad();
   if (JUSE && jUseAt === (J.at || 0)) return JUSE;
-  const ds = await dataset("craft-nq").catch(() => null);
-  if (!ds) return (JUSE = new Map());
+  if (!JTREE) JTREE = await getJSON("data/jtree.json").catch(() => null);
+  if (!JTREE) return (JUSE = new Map());
   const made = {};
   for (const [, rid, n] of J.e) made[rid] = (made[rid] || 0) + n;
-  const rids = Object.keys(made).map(Number).filter((r) => ds.rows.some((x) => x.id === r)).slice(0, 80);
-  await Promise.all(rids.map((r) => loadDetail("craft-nq", r).catch(() => null)));
-  // 사는 게 싼 중간재료(예: 별자작나무 목재)는 alts 에 하위 재료가 없을 수 있다 → 그 레시피 상세를 직접 불러서 따라간다
-  const ridOf = new Map(ds.rows.map((x) => [x.name, x.id]));
-  const subKids = (m, al) => (al && al.src === "직접 제작" ? al.kids : null) || (ridOf.has(m.name) && ds.details[ridOf.get(m.name)] ? ds.details[ridOf.get(m.name)].materials : null);
-  for (let round = 0, todo = rids; round < 3 && todo.length; round++) {
-    const need = new Set();
-    for (const r of todo) {
-      const d = ds.details[r];
-      for (const m of (d && d.materials) || []) if (m.source !== "직접 제작" && ridOf.has(m.name) && !(d.alts && d.alts[m.id] && d.alts[m.id].src === "직접 제작") && !ds.details[ridOf.get(m.name)]) need.add(ridOf.get(m.name));
-    }
-    todo = [...need].slice(0, 60);
-    await Promise.all(todo.map((r) => loadDetail("craft-nq", r).catch(() => null)));
-  }
+  const nm = (id) => JTREE.n[id] || `#${id}`;
   const map = new Map();
   JNAME = new Map();
-  for (const rid of rids) {
-    const d = ds.details[rid], row = ds.rows.find((x) => x.id === rid);
-    if (!d || !row) continue;
-    const alts = d.alts || {}, seen = new Set();
-    // 재료 줄(깊이 순)을 따라가며 거쳐 온 중간재료를 기억. 사는 중간재료라도 만들 수 있으면 그 재료까지 (1차·2차 재료로 쓰인 것)
-    const walk = (rows, base, guard) => {
-      const stack = [];
-      for (const m of rows || []) {
-        while (stack.length && stack[stack.length - 1].depth >= m.depth) stack.pop();
-        const via = [...base, ...stack.map((x) => x.name)];
-        const jn = JNAME.get(m.name) || JNAME.set(m.name, []).get(m.name);
-        if (!jn.some((x) => x.name === row.name)) jn.push({ name: row.name, n: made[rid] });
-        if (!seen.has(m.id)) {
-          seen.add(m.id);
-          (map.get(m.id) || map.set(m.id, []).get(m.id)).push({ name: row.name, n: made[rid], amt: via.length ? null : m.amount, via });
-        }
-        stack.push({ depth: m.depth, name: m.name });
-        const kids = m.source !== "직접 제작" && !guard.has(m.id) ? subKids(m, alts[m.id]) : null;
-        if (kids) walk(kids, [...via, m.name], new Set(guard).add(m.id));
+  for (const rid of Object.keys(made)) {
+    const t = JTREE.r[rid];
+    if (!t) continue;
+    const product = nm(t[0]), seen = new Set(), stack = [];
+    // 재료 줄(깊이 순)을 따라가며 거쳐 온 중간재료를 기억 (1차·2차 재료로 쓰인 것까지)
+    for (let i = 1; i + 2 < t.length; i += 3) {
+      const id = t[i], amount = t[i + 1], depth = t[i + 2], name = nm(id);
+      while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+      const via = stack.map((x) => x.name);
+      const jn = JNAME.get(name) || JNAME.set(name, []).get(name);
+      if (!jn.some((x) => x.name === product)) jn.push({ name: product, n: made[rid] });
+      if (!seen.has(id)) {
+        seen.add(id);
+        (map.get(id) || map.set(id, []).get(id)).push({ name: product, n: made[rid], amt: via.length ? null : amount, via });
       }
-    };
-    walk(d.materials, [], new Set());
+      stack.push({ depth, name });
+    }
   }
   jUseAt = J.at || 0;
   return (JUSE = map);

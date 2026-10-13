@@ -326,6 +326,33 @@ def combine(nq, hq):
     return rows, details, badges.items
 
 
+def journal_tree(gd, recipe_ids):
+    """📒 제작일지 '어디에 썼나' 용: 레시피마다 [완성품ID, 재료ID, 1회 수량, 깊이, ...] (만들 수 있는 재료는 3단계까지 펼침).
+    화면이 레시피 상세 조각(수십 MB)을 다 받지 않아도 되게 미리 펼쳐 둔다. 크리스탈류(ID 20 미만)는 뺀다."""
+    by_id = {rc.id: rc for rc in gd.recipes}
+    names, out = {}, {}
+
+    def walk(rc, depth, guard, row):
+        for iid, amt in rc.ingredients:
+            if iid < 20:
+                continue
+            row += [iid, amt, depth]
+            names[iid] = gd.name(iid)
+            subs = [x for x in gd.recipes_by_result.get(iid, []) if not x.expert]
+            if subs and depth < 3 and iid not in guard:
+                walk(subs[0], depth + 1, guard | {iid}, row)
+
+    for rid in sorted(recipe_ids):
+        rc = by_id.get(rid)
+        if rc is None:
+            continue
+        row = [rc.result_id]
+        names[rc.result_id] = gd.name(rc.result_id)
+        walk(rc, 0, {rc.result_id}, row)
+        out[rid] = row
+    return {"n": names, "r": out}
+
+
 def write_page(out, name, summary, details, badges):
     write(out / f"{name}.json", {"fields": VIEW_FIELDS, "badges": badges, "rows": summary})
     shards = {}
@@ -466,6 +493,8 @@ def main():
             made[key] = (summary, details, badges.items)
             write_page(data, f"{page}-{key}", *made[key])
         write_page(data, f"{page}-all", *combine(made["nq"], made["hq"]))
+        if page == "craft":
+            write(data / "jtree.json", journal_tree(gd, {r["id"] for r in made["nq"][0] + made["hq"][0]}))
         if page == "craft":  # 📈 재료 트래킹 '쓰이는 곳' 정렬용: 완성품 개당 순수익 (NQ·HQ 중 큰 것, 통합 시세)
             for r in made["nq"][0] + made["hq"][0]:
                 sell = r["v"]["dc"][0]

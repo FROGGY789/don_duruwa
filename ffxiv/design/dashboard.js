@@ -777,6 +777,12 @@ function renderCartPage(d) {
   // 왼쪽 재료 줄 ↔ 오른쪽 장보기 칸 (같은 체크 상태를 같이 쓴다)
   const doneKey = {};
   for (const g of list) for (const it of g.items) if (!(it.id in doneKey)) doneKey[it.id] = it.key;
+  // 같은 재료를 여러 완성품이 같이 쓰면 카드마다 따로 체크 (key@완성품). 다 체크되면 오른쪽 장보기도 체크된다
+  const partsOf = {};
+  for (const r of rows) for (const m of r.materials || []) {
+    const k = m.source !== "직접 제작" ? doneKey[m.id] : null;
+    if (k && !(partsOf[k] || (partsOf[k] = [])).includes(r.id)) partsOf[k].push(r.id);
+  }
   // 재료 이름: 마우스 올리면 서버별 최저가·평균 판매가 창, 누르면 📈 재료 트래킹 (오른쪽 장보기랑 같다)
   const matName = (id, name, need) => (id && d.trackMaterial
     ? `<button type="button" class="mat-link" data-track-mat="${id}" data-need="${need}">${esc(name)}</button>` : esc(name));
@@ -810,8 +816,9 @@ function renderCartPage(d) {
         <td class="num">${kneed.toLocaleString("ko-KR")}<div class="cp-per">1회 ${k.amount}개 × ${parentCrafts}회</div></td>
         <td colspan="4" class="faint">${how} <span class="cp-ref-note">· 만들 때만 필요 (지금은 안 산다)</span></td></tr>`;
       }).join("") : "";
-      const key = !made ? doneKey[m.id] : null, got = key && state.done[key];
-      const box = key ? `<label class="buy cp-buy" data-tip="샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"><input type="checkbox" data-done="${esc(key)}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
+      const key = !made ? doneKey[m.id] : null, got = key && (state.done[key] || state.done[`${key}@${r.id}`]);
+      const shared = key && partsOf[key].length > 1;
+      const box = key ? `<label class="buy cp-buy" data-tip="${shared ? `이 완성품에 들어갈 몫을 샀으면 체크해라 개굴. ${partsOf[key].length}개 완성품 몫이 다 체크되면 오른쪽 장보기에도 체크된다 개굴` : "샀거나 이미 가지고 있으면 체크해라 개굴. 오른쪽 장보기에도 같이 체크된다 개굴"}"><input type="checkbox" data-done-part="${esc(key)}" data-part-of="${r.id}" data-parts="${partsOf[key].join(",")}"${got ? " checked" : ""} aria-label="${esc(m.name)} 샀다"></label>` : "";
       return `<tr class="${made ? "cp-made" : ""}${m.depth ? " sub" : ""}${got ? " cp-got" : ""}">
         <td style="padding-left:${10 + m.depth * 22}px">${m.depth ? '<span class="tree">└</span>' : ""}${box}<b>${matName(m.id, m.name, need)}</b>${tierMark(m.t)}${gatherMarks(m.g, m.gl, m.tm)}${check}</td>
         <td class="num">${need.toLocaleString("ko-KR")}${per}</td>
@@ -1290,9 +1297,24 @@ export default function (component) {
       saveCart();
       return render();
     }
+    const part = e.target.closest("[data-done-part]");
+    if (part) {
+      // 🛒 장바구니 카드: 그 완성품 몫만. 다 체크되면 장보기 칸도 체크, 하나라도 풀면 장보기 칸도 풀린다
+      const key = part.dataset.donePart, parts = part.dataset.parts.split(","), me = part.dataset.partOf;
+      if (state.done[key]) { parts.forEach((p) => (state.done[`${key}@${p}`] = true)); delete state.done[key]; }
+      if (part.checked) state.done[`${key}@${me}`] = true; else delete state.done[`${key}@${me}`];
+      if (parts.every((p) => state.done[`${key}@${p}`])) {
+        parts.forEach((p) => delete state.done[`${key}@${p}`]);
+        state.done[key] = true;
+      }
+      saveCart();
+      return render();
+    }
     const box = e.target.closest("[data-done]");
     if (box) {
-      if (box.checked) state.done[box.dataset.done] = true; else delete state.done[box.dataset.done];
+      const key = box.dataset.done;
+      for (const k of Object.keys(state.done)) if (k.startsWith(`${key}@`)) delete state.done[k]; // 장보기 칸은 전체 몫
+      if (box.checked) state.done[key] = true; else delete state.done[key];
       saveCart();
       return render();
     }

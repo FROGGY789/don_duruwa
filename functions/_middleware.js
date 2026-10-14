@@ -310,6 +310,8 @@ export async function onRequest(ctx) {
   if (url.pathname === "/__settings") return me ? handleSettings(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
   // 📒 제작일지: 캐릭터마다 따로 (한 줄 50바이트쯤, 최대 400KB)
   if (url.pathname === "/__journal") return me ? handleSettings(env, request, me, "log", "journal", 400000) : json({ error: "로그인이 필요하다 개굴" }, 401);
+  // 📈 재료 트래킹 목록: 캐릭터마다 따로 ({list:[{id,qty}], at})
+  if (url.pathname === "/__track") return me ? handleSettings(env, request, me, "trk", "track", 20000) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (url.pathname === "/__fc") return me ? handleFc(env, request, me) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (url.pathname.startsWith("/__admin/")) return me ? handleAdmin(env, request, me, url) : json({ error: "로그인이 필요하다 개굴" }, 401);
   if (me) return next();

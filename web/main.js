@@ -760,7 +760,28 @@ const trackShards = {};
 let trackNames = null;
 let trackQuery = "";
 const tracked = () => load("ffxivTrack", null) ?? [{ id: 8026, qty: 99 }]; // 처음엔 안개비단
-const saveTracked = (list) => save("ffxivTrack", list);
+// 트래킹 목록은 캐릭터 계정에도 저장해서 다른 컴퓨터에서도 그대로 (📒 제작일지랑 같은 방식, 나중에 고친 쪽이 이긴다)
+let trackTimer = null;
+function saveTracked(list) {
+  save("ffxivTrack", list);
+  if (!who()) return;
+  const at = Date.now();
+  save(`ffxivTrackAt:${who()}`, at);
+  clearTimeout(trackTimer);
+  trackTimer = setTimeout(() => fetch("/__track", { method: "PUT", body: JSON.stringify({ list, at }) }).catch(() => {}), 800);
+}
+async function trackSync() {
+  if (!who()) return;
+  try {
+    const res = await fetch("/__track", { cache: "no-cache" });
+    const remote = res.ok ? (await res.json()).track : null;
+    const at = load(`ffxivTrackAt:${who()}`, 0);
+    if (remote && Array.isArray(remote.list) && (remote.at || 0) >= at) {
+      save("ffxivTrack", remote.list);
+      save(`ffxivTrackAt:${who()}`, remote.at || 0);
+    } else if (load("ffxivTrack", null)) saveTracked(tracked()); // 서버에 아직 없거나 이 컴퓨터 게 더 새것 → 올린다
+  } catch { /* 서버 못 가면 이 브라우저 것만 */ }
+}
 const gil = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const quantile = (a, q) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
@@ -1879,6 +1900,7 @@ async function start() {
   }
   applyTheme();
   renderSide();
+  await trackSync(); // 다른 컴퓨터에서 고친 트래킹 목록 받아오기
   renderMatPanel(); // 지난번에 띄워 둔 재료 창
   if (first) onboard();
   await render();

@@ -115,6 +115,10 @@ def build_tracking(gd, items, hist, cfg, write, out, uses=None):
         }
     names.sort(key=lambda x: x[1])
     write(out / "track" / "items.json", names)
+    # 🔍 재료가 아니어서 매시간 안 받는 템도 이름으로 찾을 수 있게 (화면이 그때그때 시세를 받는다)
+    have = {iid for iid, _ in names}
+    more = sorted(([iid, it.name] for iid, it in gd.items.items() if it.marketable and it.name and iid not in have), key=lambda x: x[1])
+    write(out / "track" / "more.json", more)
     for n in range(TRACK_SHARDS):
         write(out / "track" / f"t{n}.json", shards.get(n, {}))
     return len(names)

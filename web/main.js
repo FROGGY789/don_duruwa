@@ -758,6 +758,49 @@ function app_journalMats() {
 const TRACK_SHARDS = 64;
 const trackShards = {};
 let trackNames = null;
+// 🔍 재료가 아닌 템(매시간 안 받는 것)도 이름으로 찾기: 누르면 그때 시세·최근 거래를 바로 받아 온다
+let trackMore = null, trackMoreP = null;
+const liveTried = new Set();
+function loadTrackMore() {
+  return trackMoreP || (trackMoreP = (async () => {
+    const more = await getJSON("data/track/more.json").catch(() => []);
+    if (!trackNames) trackNames = new Map(await getJSON("data/track/items.json").catch(() => []));
+    trackMore = new Set();
+    for (const [id, n] of more) { trackMore.add(id); if (!trackNames.has(id)) trackNames.set(id, n); }
+    return trackMore;
+  })());
+}
+const isMore = (id) => !!(trackMore && trackMore.has(id));
+// 검색 칸 아래 후보 (이름이 이걸로 시작하는 것 → 재료 → 짧은 이름 순)
+function trackSuggHtml() {
+  const q = trackQuery.replace(/\s/g, "");
+  if (!q || !trackNames) return "";
+  const list = tracked(), key = (n) => n.replace(/\s/g, "");
+  const hits = [...trackNames].filter(([, n]) => key(n).includes(q))
+    .sort((a, b) => (!key(a[1]).startsWith(q)) - (!key(b[1]).startsWith(q)) || isMore(a[0]) - isMore(b[0]) || a[1].length - b[1].length).slice(0, 12);
+  if (!hits.length) return `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>`;
+  return `<div class="track-sugg">${hits.map(([id, n]) => {
+    const on = list.some((t) => t.id === id), more = isMore(id);
+    return `<button type="button" data-track-peek="${id}"${on ? " disabled" : ""}${more ? ' title="재료가 아니라 매시간은 안 받는 템이다 개굴. 누르면 지금 시세를 바로 받아 온다 개굴"' : ""}>${esc(n)}${more ? ' <small class="faint">⚡</small>' : ""}${on ? " ✓" : ""}</button>`;
+  }).join("")}</div>`;
+}
+// 받아 온 거래 기록 → 트래킹 기록 모양 [MM-DD, {서버: [중앙값, 수량, 건수]}, {서버: 그날 최저 매물}]
+function liveHistory(entries, w) {
+  const day = (t) => new Date(t * 1000 + 9 * 3600000).toISOString().slice(0, 10); // 한국 날짜
+  const days = {};
+  for (const e of entries) {
+    const d = days[day(e.timestamp)] || (days[day(e.timestamp)] = {});
+    for (const k of ["dc", String(e.worldID)]) (d[k] || (d[k] = [])).push(e);
+  }
+  const h = Object.keys(days).sort().map((d) => [d, Object.fromEntries(Object.entries(days[d]).map(([k, es]) =>
+    [k, [median(es.map((e) => e.pricePerUnit)), es.reduce((a, e) => a + e.quantity, 0), es.length]]))]);
+  const today = day(Date.now() / 1000);
+  let last = h[h.length - 1];
+  if (!last || last[0] !== today) h.push((last = [today, {}]));
+  last[2] = {};
+  for (const [wid, x] of Object.entries(w)) if (x.lst.length) last[2][wid] = x.lst[0][0];
+  return h.map((x) => [x[0].slice(5), x[1], x[2] || {}]);
+}
 let trackQuery = "";
 const tracked = () => load("ffxivTrack", null) ?? [{ id: 8026, qty: 99 }]; // 처음엔 안개비단
 // 트래킹 목록은 캐릭터 계정에도 저장해서 다른 컴퓨터에서도 그대로 (📒 제작일지랑 같은 방식, 나중에 고친 쪽이 이긴다)
@@ -898,13 +941,13 @@ function trackCard(t, name, d, peek = false) {
       <button type="button" class="chip-x" data-peek-close="1" title="닫기">✕</button>`
     : `<button type="button" class="chip-x" data-untrack="${t.id}" title="빼기">✕</button>`;
   if (!d) return `<section class="track-card${peek ? " track-peek" : ""}" id="track-${peek ? "peek" : t.id}"><div class="track-head"><h2>${esc(name || `#${t.id}`)}</h2>
-    ${btns}</div><p class="faint">시세 기록이 없다 개굴.</p></section>`;
+    ${btns}</div><p class="faint">${isMore(t.id) ? (trackLiveBusy ? "⚡ 재료가 아니라 매시간은 안 받는 템이다 개굴. 지금 시세 받는 중이다 개굴…" : "⚡ 재료가 아니라 매시간은 안 받는 템이다 개굴. 위의 ⚡ 버튼으로 지금 시세를 받아 봐라 개굴.") : "시세 기록이 없다 개굴."}</p></section>`;
   const a = analyzeTrack(t.id, d, t.qty);
   return `<section class="track-card${peek ? " track-peek" : ""}" id="track-${peek ? "peek" : t.id}">
     <div class="track-head">
       ${peek ? '<span class="peek-tag">🔍 미리 보기</span>' : ""}<h2>${esc(name)}</h2>
       <span class="signal ${a.signal.kind}">${a.signal.icon} ${a.signal.label}</span>
-      <span class="faint">${d.live ? "⚡ 방금 받은 매물" : `데이터 ${ago(d.upd)}`}</span>
+      <span class="faint">${d.liveOnly ? "⚡ 방금 받은 시세 (재료가 아니라 매시간 기록은 없다 개굴, 최근 14일 거래로 본다)" : d.live ? "⚡ 방금 받은 매물" : `데이터 ${ago(d.upd)}`}</span>
       ${btns}
     </div>
     ${trackBody(a, peek ? { ...t, label: `${t.qty}개 살 때 (추가하면 수량을 바꿀 수 있다 개굴)` } : t, !peek)}
@@ -1054,6 +1097,15 @@ async function refreshTrackLive(ids) {
         }
         trackLive[id] = { w, at: Date.now() };
       }
+      // 재료가 아닌 템은 받아 둔 기록이 없으니 최근 14일 거래도 같이
+      const extra = chunk.filter(isMore);
+      if (extra.length) {
+        const hr = await fetch(`${UNIVERSALIS}/history/${encodeURIComponent(meta.dc)}/${extra.join(",")}?entriesWithin=1209600&entriesToReturn=999`);
+        if (hr.ok) {
+          const hd = await hr.json(), hitems = extra.length === 1 ? { [extra[0]]: hd } : hd.items || {};
+          for (const id of extra) trackLive[id].h = liveHistory((hitems[id] || {}).entries || [], trackLive[id].w);
+        }
+      }
     }
   } catch (e) { trackLiveMsg = e.message || "오류"; }
   trackLiveBusy = false;
@@ -1062,7 +1114,8 @@ async function refreshTrackLive(ids) {
 // 받아 둔 기록에 방금 받은 매물을 덮는다. 미끼(그 서버 최근 판매 중앙값의 절반도 안 되는 값)는 다시 표시
 function withLive(id, d) {
   const L = trackLive[id];
-  if (!d || !L) return d;
+  if (!L) return d;
+  if (!d) { if (!L.h) return d; d = { w: {}, h: L.h, upd: L.at / 1000, liveOnly: true }; } // 재료가 아닌 템: 방금 받은 것만
   const w = {};
   for (const [wid, x] of Object.entries(L.w)) {
     const mid = median(d.h.slice(-14).map((h) => (h[1][wid] || [])[0]).filter((v) => v != null));
@@ -1089,6 +1142,8 @@ async function renderMatPanel() {
   let el = document.getElementById("mat-panel");
   if (!MP) { document.querySelectorAll("#mat-panel").forEach((x) => x.remove()); return; }
   if (!trackNames) { try { trackNames = new Map(await getJSON("data/track/items.json")); } catch { trackNames = new Map(); } }
+  await loadTrackMore();
+  if (MP && isMore(MP.id) && !trackLive[MP.id] && !liveTried.has(MP.id) && !trackLiveBusy) { liveTried.add(MP.id); setTimeout(() => refreshTrackLive([MP.id]), 0); }
   await journalUseMap().catch(() => null);
   const d = withLive(MP.id, await trackShard(MP.id).then((sh) => sh[MP.id]).catch(() => null));
   if (!MP) return;
@@ -1204,14 +1259,16 @@ async function renderTrack() {
       app.innerHTML = `<div class="boot">⚠ 트래킹 데이터를 못 받아왔다 개굴. (${esc(e.message)})</div>`; return;
     }
   }
+  await loadTrackMore();
   const list = tracked();
   await journalUseMap().catch(() => null); // 📒 내가 만든 것 표시용
   const datas = (await Promise.all(list.map((t) => trackShard(t.id).then((sh) => sh[t.id]).catch(() => null)))).map((d, i) => withLive(list[i].id, d));
   if (trackPeek && list.some((t) => t.id === trackPeek)) trackPeek = null;
   const peekCard = trackPeek ? trackCard({ id: trackPeek, qty: 99 }, trackNames.get(trackPeek), withLive(trackPeek, await trackShard(trackPeek).then((sh) => sh[trackPeek]).catch(() => null)), true) : "";
   const liveAt = [...list.map((t) => t.id), ...(trackPeek ? [trackPeek] : [])].map((id) => trackLive[id]?.at).filter(Boolean);
-  const q = trackQuery.replace(/\s/g, "");
-  const sugg = q ? [...trackNames].filter(([, n]) => n.replace(/\s/g, "").includes(q)).slice(0, 12) : [];
+  // 재료가 아닌 템은 받아 둔 기록이 없으니 처음 볼 때 바로 받아 온다 (한 번만)
+  const needLive = [...list.map((t) => t.id), ...(trackPeek ? [trackPeek] : [])].filter((id) => isMore(id) && !trackLive[id] && !liveTried.has(id));
+  if (needLive.length && !trackLiveBusy) { needLive.forEach((id) => liveTried.add(id)); setTimeout(() => refreshTrackLive(needLive), 0); }
   const keep = app.querySelector("#track-search");
   const caret = keep && document.activeElement === keep ? keep.selectionStart : null;
   app.innerHTML = `<section class="track">
@@ -1221,9 +1278,8 @@ async function renderTrack() {
         : "지금은 매시간 받아 둔 매물이다 개굴. 사러 돌아다니기 전에 눌러서 지금 값으로 봐라 개굴"}${trackLiveMsg ? ` · ⚠ 못 받아왔다 개굴 (${esc(trackLiveMsg)})` : ""}</span></div>` : ""}
     <div class="eyebrow">MATERIAL TRACKER</div><h1>📈 재료 트래킹</h1>
     <div class="track-add">
-      <input id="track-search" type="search" placeholder="🔍 재료 이름으로 추가 (예: 안개비단, 다마스쿠스 주괴)" autocomplete="off" value="${esc(trackQuery)}">
-      ${sugg.length ? `<div class="track-sugg">${sugg.map(([id, n]) => `<button type="button" data-track-peek="${id}"${list.some((t) => t.id === id) ? " disabled" : ""}>${esc(n)}${list.some((t) => t.id === id) ? " ✓" : ""}</button>`).join("")}</div>`
-        : q ? `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>` : ""}
+      <input id="track-search" type="search" placeholder="🔍 아이템 이름으로 찾기 (예: 안개비단, 보이드 맨드레이크)" autocomplete="off" value="${esc(trackQuery)}">
+      <div id="track-sugg-box">${trackSuggHtml()}</div>
     </div>
     ${peekCard}
     ${list.length ? list.map((t, i) => trackCard(t, trackNames.get(t.id), datas[i])).join("") : `<div class="detail-hint">🐸 위에서 재료를 검색해서 추가해라 개굴.</div>`}
@@ -1278,8 +1334,12 @@ document.addEventListener("click", (e) => { if (e.target.closest("#track-float")
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.id !== "track-search") return;
   trackQuery = e.target.value;
+  // 검색 칸은 그대로 두고 후보만 바꾼다 (화면을 통째로 다시 그리면 한글 입력이 끊긴다)
   clearTimeout(window.__trackTimer);
-  window.__trackTimer = setTimeout(renderTrack, 200);
+  window.__trackTimer = setTimeout(() => {
+    const box = document.getElementById("track-sugg-box");
+    if (box) box.innerHTML = trackSuggHtml(); else renderTrack();
+  }, 150);
 });
 document.getElementById("app").addEventListener("change", (e) => {
   const q = e.target.closest("[data-track-qty]");

@@ -34,6 +34,15 @@ jobs:
           path: cache/history.json.gz
           key: history-${{ github.run_id }}
           restore-keys: history-
+      # 지난번 시세: Universalis 가 느려서 시간 안에 다 못 받은 템은 이걸 그대로 쓴다 (config.yaml fetch_budget_min)
+      - name: 지난 시세 불러오기
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            cache/market_*.json
+            cache/server.json
+          key: market-${{ github.run_id }}
+          restore-keys: market-
       - name: 시세 받고 계산
         run: python -m ffxiv.build
       - name: 가격 기록 저장
@@ -41,6 +50,13 @@ jobs:
         with:
           path: cache/history.json.gz
           key: history-${{ github.run_id }}
+      - name: 시세 저장
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache/market_*.json
+            cache/server.json
+          key: market-${{ github.run_id }}
       - name: Cloudflare Pages 에 올리기
         uses: cloudflare/wrangler-action@v3
         with:

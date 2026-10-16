@@ -435,8 +435,13 @@ def main():
                 last[0] = p
                 print(f"  {msg}", flush=True)
 
-        print(f"시세 받는 중: 아이템 {len(ids)}개")
+        budget = cfg.get("fetch_budget_min", 25)
+        api.deadline = started + budget * 60
+        print(f"시세 받는 중: 아이템 {len(ids)}개 (준비 {time.time() - started:.0f}초, 받는 건 빌드 시작부터 {budget}분까지)")
         refresh(api, cache, server, sorted(ids), cfg["history_hours"], full=True, progress=progress)
+        api.deadline = None
+        if api.stats.get("late"):
+            print(f"  ⏰ 시간이 모자라서 {api.stats['late']}개는 지난번 시세를 그대로 쓴다 개굴 (다음 갱신 때 먼저 받는다)")
         with_sales = sum(1 for i in ids if (cache.items.get(i) or {}).get("sales"))
         with_listings = sum(1 for i in ids if (cache.items.get(i) or {}).get("listings"))
         ups = [(cache.items.get(i) or {}).get("last_upload") or 0 for i in ids]

@@ -22,6 +22,10 @@ BATCH = 100
 KEEP_LISTINGS = 30  # 서버·품질별로 싼 매물 몇 개까지 저장할지 (메모리 절약). 전체 개수는 따로 센다.
 
 
+class OutOfTime(requests.RequestException):
+    """시세 받는 시간(fetch_budget_min)을 다 썼다 — 남은 템은 지난번 값을 쓴다."""
+
+
 class Universalis:
     def __init__(self, base_url, interval=0.1, workers=4):
         self.base = base_url.rstrip("/")
@@ -32,9 +36,12 @@ class Universalis:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "ffxiv-craft-profit (personal analysis tool)"
         self.stats = {"missing": 0, "recovered": 0}  # 응답에서 빠진 아이템 수 (로그용)
+        self.deadline = None  # 이 시각(초)이 지나면 새 요청을 안 보낸다 (Universalis 가 느린 날 빌드가 40분 넘게 걸려 끊기지 않게)
 
     def _get(self, path, params=None):
         for attempt in range(5):
+            if self.deadline and time.time() > self.deadline:
+                raise OutOfTime()
             with self._lock:  # 여러 스레드가 같이 보내도 요청 간격은 지킨다
                 wait = self.interval - (time.time() - self._last)
                 if wait > 0:
@@ -91,6 +98,10 @@ class Universalis:
         작게 쪼개서 다시 받는다. Universalis 가 바쁠 때 일부만 돌려주는 일이 있다."""
         try:
             data = self._get(f"{path}/{','.join(map(str, chunk))}", params)
+        except OutOfTime:
+            with self._lock:
+                self.stats["late"] = self.stats.get("late", 0) + len(chunk)
+            return {}
         except requests.HTTPError as e:  # 다시 받을 때 하나짜리 요청은 모르는 아이템이면 404 가 온다
             code = e.response.status_code if e.response is not None else 0
             if depth and code == 404:
@@ -136,6 +147,11 @@ class Universalis:
 
         def one(chunk):
             now = time.time()
+            if self.deadline and now > self.deadline:  # 시간 다 썼으면 남은 묶음은 건너뛴다 (지난번 값 그대로)
+                with self._lock:
+                    self.stats["late"] = self.stats.get("late", 0) + len(chunk)
+                done[0] += 1
+                return {}
             current = self._many(f"/api/v2/{target}", chunk, {"entries": 0})
             history = self._many(f"/api/v2/history/{target}", chunk,
                                  {"entriesWithin": int(history_hours * 3600), "entriesToReturn": 999})
@@ -262,6 +278,9 @@ def resolve_server(api, cfg):
 def refresh(api, cache, server, item_ids, history_hours, full, progress=None):
     """full=True 면 전부 새로 받고, 아니면 캐시에 없는 아이템만 받는다."""
     ids = list(item_ids) if full else cache.missing(item_ids)
+    # 오래 전에 받은 템부터 (시간이 모자라 못 받은 템은 다음 갱신 때 먼저 받는다)
+    have = cache.data["items"]
+    ids.sort(key=lambda i: (have.get(str(i)) or {}).get("fetched_at", 0))
     tax = None
     if full or not cache.tax_rates:
         try:

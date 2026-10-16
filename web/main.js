@@ -771,18 +771,36 @@ function loadTrackMore() {
   })());
 }
 const isMore = (id) => !!(trackMore && trackMore.has(id));
-// 검색 칸 아래 후보 (이름이 이걸로 시작하는 것 → 재료 → 짧은 이름 순)
+// 검색 칸 아래 후보. 대소문자·띄어쓰기 상관없이, 띄어 쓴 조각이 다 들어 있어도 되고,
+// 그래도 적으면 글자가 순서대로 들어 있는 것(오타 조금: "a world aprt" → 낡은 악보: A World Apart)도 보여 준다
+const searchKey = (n) => n.toLowerCase().replace(/\s/g, "");
+function subseqSpan(hay, q) { // q 의 글자가 hay 에 순서대로 다 나오면 그 구간 길이, 아니면 Infinity
+  let best = Infinity;
+  for (let s0 = hay.indexOf(q[0]); s0 >= 0 && best > q.length; s0 = hay.indexOf(q[0], s0 + 1)) {
+    let i = s0, j = 0;
+    for (; i < hay.length && j < q.length; i++) if (hay[i] === q[j]) j++;
+    if (j === q.length) best = Math.min(best, i - s0); else break;
+  }
+  return best;
+}
 function trackSuggHtml() {
-  const q = trackQuery.replace(/\s/g, "");
+  const q = searchKey(trackQuery), parts = trackQuery.toLowerCase().split(/\s+/).filter(Boolean);
   if (!q || !trackNames) return "";
-  const list = tracked(), key = (n) => n.replace(/\s/g, "");
-  const hits = [...trackNames].filter(([, n]) => key(n).includes(q))
-    .sort((a, b) => (!key(a[1]).startsWith(q)) - (!key(b[1]).startsWith(q)) || isMore(a[0]) - isMore(b[0]) || a[1].length - b[1].length).slice(0, 12);
+  const list = tracked(), all = [...trackNames].map(([id, n]) => [id, n, searchKey(n)]);
+  const direct = all.filter(([, , k]) => k.includes(q) || (parts.length > 1 && parts.every((p) => k.includes(p))))
+    .sort((a, b) => (!a[2].startsWith(q)) - (!b[2].startsWith(q)) || (!a[2].includes(q)) - (!b[2].includes(q)) || isMore(a[0]) - isMore(b[0]) || a[1].length - b[1].length);
+  let hits = direct.slice(0, 12).map((x) => [x[0], x[1], false]);
+  if (hits.length < 12 && q.length >= 3) {
+    const seen = new Set(hits.map((x) => x[0]));
+    const fuzzy = all.filter(([id]) => !seen.has(id)).map(([id, n, k]) => [id, n, subseqSpan(k, q)])
+      .filter((x) => x[2] <= Math.ceil(q.length * 1.6)).sort((a, b) => a[2] - b[2] || a[1].length - b[1].length);
+    hits = hits.concat(fuzzy.slice(0, 12 - hits.length).map((x) => [x[0], x[1], true]));
+  }
   if (!hits.length) return `<div class="track-sugg"><span class="faint">그런 이름은 없다 개굴.</span></div>`;
-  return `<div class="track-sugg">${hits.map(([id, n]) => {
+  return `<div class="track-sugg">${hits.map(([id, n, fz]) => {
     const on = list.some((t) => t.id === id), more = isMore(id);
-    return `<button type="button" data-track-peek="${id}"${on ? " disabled" : ""}${more ? ' title="재료가 아니라 매시간은 안 받는 템이다 개굴. 누르면 지금 시세를 바로 받아 온다 개굴"' : ""}>${esc(n)}${more ? ' <small class="faint">⚡</small>' : ""}${on ? " ✓" : ""}</button>`;
-  }).join("")}</div>`;
+    return `<button type="button" data-track-peek="${id}"${on ? " disabled" : ""}${more ? ' title="재료가 아니라 매시간은 안 받는 템이다 개굴. 누르면 지금 시세를 바로 받아 온다 개굴"' : fz ? ' title="비슷한 이름이다 개굴"' : ""}>${fz ? '<small class="faint">혹시?</small> ' : ""}${esc(n)}${more ? ' <small class="faint">⚡</small>' : ""}${on ? " ✓" : ""}</button>`;
+  }).join("")}${direct.length > 12 ? ` <small class="faint">외 ${direct.length - 12}개 더 있다 개굴. 더 쳐 봐라 개굴</small>` : ""}</div>`;
 }
 // 받아 온 거래 기록 → 트래킹 기록 모양 [MM-DD, {서버: [중앙값, 수량, 건수]}, {서버: 그날 최저 매물}]
 function liveHistory(entries, w) {

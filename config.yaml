@@ -131,6 +131,8 @@ datamining_base_url: "https://raw.githubusercontent.com/Ra-Workspace/ffxiv-datam
 universalis_base_url: "https://universalis.app"
 # Universalis 요청 간격(초). 제한은 초당 25회 — 여유 있게 둡니다.
 request_interval_sec: 0.1
+# 동시에 보내는 요청 수. Universalis 허용은 동시 8개 — 느린 날 더 많이 받으려고 꽉 채운다.
+request_workers: 8
 # 시세 받는 데 쓸 최대 시간(분, 빌드 시작부터). Universalis 가 느린 날 넘으면 남은 템은 지난번 시세를 쓰고
 # 다음 갱신 때 먼저 받는다. GitHub Actions 제한(40분) 안에 계산·업로드까지 끝나게 여유를 둔다.
 fetch_budget_min: 25

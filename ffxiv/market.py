@@ -118,6 +118,16 @@ class Universalis:
                     self.stats["skipped"] = self.stats.get("skipped", 0) + len(chunk)
                 return {}
             raise
+        except (requests.RequestException, ValueError):
+            # 연결이 끊기거나(RemoteDisconnected) 응답이 깨지면: 5xx 랑 똑같이 쪼개서 다시, 안 되면 건너뛴다
+            if len(chunk) > 1 and depth < 3:
+                got, step = {}, max(1, len(chunk) // 4)
+                for i in range(0, len(chunk), step):
+                    got.update(self._many(path, chunk[i:i + step], params, depth + 1))
+                return got
+            with self._lock:
+                self.stats["skipped"] = self.stats.get("skipped", 0) + len(chunk)
+            return {}
         got = self._items(data)
         unresolved = {int(x) for x in data.get("unresolvedItems") or []}
         missing = [i for i in chunk if i not in got and i not in unresolved]

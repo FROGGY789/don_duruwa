@@ -343,3 +343,6 @@ body.split-on > .side, body.split-on > .main, body.split-on > .side-toggle{displ
 .split-div:hover,.split.dragging .split-div{background:var(--primary)}
 .split.dragging iframe{pointer-events:none}
 @media (max-width:900px){.split{flex-direction:column}.split-div{cursor:row-resize}}
+/* 📋 트래킹 목록 팝업 (왼쪽에 띄울 자리가 없을 때) */
+.track-pop-btn{position:fixed;right:16px;bottom:16px;z-index:8;box-shadow:var(--shadow)}
+.track-float.track-pop{top:auto;right:16px;bottom:60px;width:min(260px,calc(100vw - 32px));max-height:min(60vh,520px);z-index:8;box-shadow:var(--shadow)}

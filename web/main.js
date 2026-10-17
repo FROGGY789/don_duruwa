@@ -1318,12 +1318,13 @@ async function renderTrack() {
 function placeTrackFloat() {
   let fl = document.getElementById("track-float");
   const side = document.querySelector("#side .track-jump");
-  if (page() !== "track" || !trackJumpList.length) { fl?.remove(); if (side) side.hidden = false; return; }
+  if (page() !== "track" || !trackJumpList.length) { fl?.remove(); placeTrackPop(false); if (side) side.hidden = false; return; }
   const app = document.getElementById("app"), r = app.getBoundingClientRect();
   const contentLeft = r.left + parseFloat(getComputedStyle(app).paddingLeft || 0);
   const sideW = document.body.classList.contains("side-folded") || innerWidth <= 900 ? 0 : document.getElementById("side").offsetWidth;
   const room = contentLeft - sideW - 24;
-  if (room < 150) { fl?.remove(); if (side) side.hidden = false; return; }
+  if (room < 150) { fl?.remove(); if (side) side.hidden = false; placeTrackPop(true); return; } // 자리 없으면 (나눈 칸·좁은 화면) 버튼으로 여는 팝업
+  placeTrackPop(false);
   if (!fl) { fl = document.createElement("aside"); fl.id = "track-float"; fl.className = "track-float"; document.body.appendChild(fl); }
   const w = Math.min(230, room);
   Object.assign(fl.style, { left: `${contentLeft - w - 12}px`, width: `${w}px` });
@@ -1331,6 +1332,22 @@ function placeTrackFloat() {
   if (side) side.hidden = true;
 }
 window.addEventListener("resize", placeTrackFloat);
+// 📋 트래킹 목록 팝업: 왼쪽에 띄울 자리가 없을 때 오른쪽 아래 버튼으로 열고 닫는다 (연 상태는 기억)
+let trackPopOpen = load("ffxivTrackPop", false);
+function placeTrackPop(show) {
+  let btn = document.getElementById("track-pop-btn"), box = document.getElementById("track-pop");
+  if (!show) { btn?.remove(); box?.remove(); return; }
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button"; btn.id = "track-pop-btn"; btn.className = "cart-btn primary track-pop-btn";
+    btn.addEventListener("click", () => { trackPopOpen = !trackPopOpen; save("ffxivTrackPop", trackPopOpen); placeTrackPop(true); });
+    document.body.appendChild(btn);
+  }
+  btn.textContent = trackPopOpen ? "✕ 트래킹 목록 닫기" : `📋 트래킹 목록 ${trackJumpList.length}`;
+  if (!trackPopOpen) { box?.remove(); return; }
+  if (!box) { box = document.createElement("aside"); box.id = "track-pop"; box.className = "track-float track-pop"; document.body.appendChild(box); }
+  box.innerHTML = trackJumpHtml();
+}
 let trackJumpList = [], trackPeek = null;
 function trackJumpHtml() {
   if (!trackJumpList.length) return "";
@@ -1349,7 +1366,7 @@ const onTrackListClick = (e) => {
   document.body.classList.remove("side-open");
 };
 document.getElementById("side").addEventListener("click", onTrackListClick);
-document.addEventListener("click", (e) => { if (e.target.closest("#track-float")) onTrackListClick(e); });
+document.addEventListener("click", (e) => { if (e.target.closest("#track-float, #track-pop")) onTrackListClick(e); });
 
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.id !== "track-search") return;

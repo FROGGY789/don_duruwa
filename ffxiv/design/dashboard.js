@@ -28,7 +28,8 @@ const state = (window.__ffxivDash = window.__ffxivDash || { server: "dc", cat: "
 
 state.done = state.done || loadJSON("ffxivCartDone", {});
 state.saved = state.saved || loadJSON("ffxivSavedCarts", []);
-state.qty = state.qty || loadJSON("ffxivCartQty", {}); // 장보기에서 직접 고친 살 수량 {"서버|재료": 개수}
+state.qty = state.qty || loadJSON("ffxivCartQty", {});
+state.cartPop = state.cartPop ?? loadJSON("ffxivCartPop", false); // 좁은 화면(나눈 칸)에서 장보기 목록을 오른쪽에 띄울지 // 장보기에서 직접 고친 살 수량 {"서버|재료": 개수}
 
 // 장보기에 담은 것 {레시피ID: 제작 횟수}, 산 재료 체크 {"서버|재료": true}, 저장해 둔 목록 — 브라우저에 기억해 둔다
 function loadJSON(key, fallback) {
@@ -769,7 +770,8 @@ function cartBody(d) {
 
 // 🛒 장바구니 화면: 왼쪽은 완성품마다 재료 펼침, 오른쪽은 장보기 목록
 function renderCartPage(d) {
-  const head = `<header class="cartpage-head"><div class="eyebrow">SHOPPING CART</div><h1>🛒 장바구니${Object.keys(state.cart).length ? ' <button type="button" class="cart-btn cart-empty" data-clear="ask">🗑 전부 비우기</button>' : ""}</h1>
+  const head = `<header class="cartpage-head"><div class="eyebrow">SHOPPING CART</div><h1>🛒 장바구니${Object.keys(state.cart).length ? ` <button type="button" class="cart-btn cart-empty" data-clear="ask">🗑 전부 비우기</button>
+      <button type="button" class="cart-btn cart-pop-btn${state.cartPop ? " on" : ""}" data-cart-pop="1" data-tip="화면이 좁아서 장보기 목록이 맨 아래로 내려갔을 때, 오른쪽에 작게 띄워 둔다 개굴">${state.cartPop ? "🧾 장보기 목록 숨기기" : "🧾 장보기 목록 옆에 띄우기"}</button>` : ""}</h1>
     <p class="tagline">담은 완성품마다 재료가 어떻게 들어가는지, 1차·2차 중간재료는 뭘로 만드는지까지 펼쳐 본다 개굴.</p></header>`;
   if (!Object.keys(state.cart).length) return head + `<div class="detail-hint">🐸 아직 담은 게 없다 개굴. <a href="#craft">⚒️ 제작</a> 순위에서 + 를 눌러 담아라 개굴.</div>`;
   if (cartWaiting(d)) return head + `<div class="detail-hint">🐸 재료 목록 불러오는 중이다 개굴…</div>`;
@@ -842,7 +844,7 @@ function renderCartPage(d) {
         <tbody>${mats}</tbody></table></div>
     </section>`;
   }).join("");
-  return head + `<div class="cartpage"><div class="cartpage-main">${cards}</div><aside class="cartpage-side cart">${cartBody(d)}</aside></div>`;
+  return head + `<div class="cartpage${state.cartPop ? " pop" : ""}"><div class="cartpage-main">${cards}</div><aside class="cartpage-side cart">${state.cartPop ? '<div class="cp-pop-head"><b>🧾 장보기 목록</b><button type="button" class="chip-x" data-cart-pop="1" title="숨기기">✕</button></div>' : ""}${cartBody(d)}</aside></div>`;
 }
 
 // 화면 오른쪽 아래에 떠 있는 장보기 버튼
@@ -1091,6 +1093,7 @@ export default function (component) {
       });
       return;
     }
+    if (e.target.closest("[data-cart-pop]")) { state.cartPop = !state.cartPop; saveJSON("ffxivCartPop", state.cartPop); return render(); }
     const clr = e.target.closest("[data-clear]");
     if (clr && clr.dataset.clear === "ask" && !window.confirm("장바구니를 전부 비울까 개굴?")) return;
     if (clr) { state.liveCart = null; state.cart = {}; state.done = {}; state.qty = {}; state.cartOpen = false; saveCart(); return render(); }

@@ -329,3 +329,17 @@ body.login{display:grid;place-items:start center;min-height:100vh;padding:18vh v
 .t-use-chip.direct{background:var(--info-soft);border-color:color-mix(in oklab,var(--info) 45%,transparent);color:var(--info)}
 .t-use-chip.direct small{color:var(--info);opacity:.75}
 .t-use-chip.fin:not(.mine){background:transparent}
+/* 🪟 화면 나누기: 이 창은 칸 두 개만, 사이트는 칸마다 따로 뜬다 */
+body.split-on > .side, body.split-on > .main, body.split-on > .side-toggle{display:none}
+.split{position:fixed;inset:0;z-index:20;display:flex;background:var(--bg)}
+.split-pane{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1 1 0}
+.split-pane[data-pane="0"]{flex:0 0 calc(var(--split, .5) * 100% - 3px)}
+.split-bar{display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.split-bar select{font:inherit;font-size:var(--fs-sm);padding:3px 8px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);cursor:pointer}
+.split-btns{margin-left:auto;display:flex;gap:4px}
+.split-btns .cart-btn{padding:3px 10px}
+.split iframe{flex:1;width:100%;min-height:0;border:0;background:var(--bg)}
+.split-div{flex:0 0 6px;cursor:col-resize;background:var(--border);touch-action:none}
+.split-div:hover,.split.dragging .split-div{background:var(--primary)}
+.split.dragging iframe{pointer-events:none}
+@media (max-width:900px){.split{flex-direction:column}.split-div{cursor:row-resize}}

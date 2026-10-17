@@ -24,6 +24,8 @@ const datasets = {}; // "craft-nq" → {rows, details, shards}
 let S = null; // 설정 (브라우저에 기억)
 
 // ── 저장 ──
+// 🪟 화면 나누기: 나눈 칸 안에 뜬 사이트는 ?pane=1 (사이드바는 접어 두고, 처음 설정·개구리 비는 건너뛴다)
+const PANE = new URLSearchParams(location.search).has("pane");
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 }
@@ -1624,6 +1626,7 @@ function sideHead(p) {
       <a href="#cart" class="${p === "cart" ? "on" : ""}" data-nav-cart="1">🛒 장바구니${cartNavCount()}</a>
       <a href="#journal" class="${p === "journal" ? "on" : ""}">📒 나의 제작일지</a>
       <a href="#fc" class="${p === "fc" ? "on" : ""}">🏰 우리 부대</a>
+      ${PANE ? "" : '<a href="#" data-split-open="1" title="화면을 반으로 나눠서 탭 두 개를 같이 본다 개굴">🪟 화면 나누기</a>'}
     </nav>
     ${who() ? `<div class="sb-who">🐸 <b>${esc(who())}</b> 왔다 개굴 <a href="/__logout">나가기</a></div>` : ""}
     ${seg("theme", Object.keys(THEMES), S.theme)}
@@ -1763,6 +1766,7 @@ function bindSide() {
     const dot = e.target.closest("[data-pal]");
     if (dot) { S.palette = dot.dataset.pal; saveSettings(); applyTheme(); renderSide(); return; }
     if (e.target.closest("[data-fold]")) { setFold(true); return; }
+    if (e.target.closest("[data-split-open]")) { e.preventDefault(); openSplit(); return; }
     if (e.target.closest("[data-onboard]")) { onboard(); return; }
     if (e.target.closest("[data-tour]")) { tour(); return; }
     if (e.target.closest("[data-reload]")) { Object.keys(datasets).forEach((k) => delete datasets[k]); start(); }
@@ -1771,14 +1775,15 @@ function bindSide() {
     if (wide()) setFold(false);
     else document.body.classList.toggle("side-open");
   });
-  if (wide() && load("ffxivSideFolded", false)) document.body.classList.add("side-folded");
+  if ((wide() || PANE) && load(FOLD_KEY, PANE)) document.body.classList.add("side-folded"); // 나눈 칸 안에서는 처음엔 접어 둔다
 }
+const FOLD_KEY = PANE ? "ffxivSideFoldedPane" : "ffxivSideFolded";
 // 사이드바 접기: 넓은 화면은 접은 상태를 기억하고, 폰은 원래처럼 열고 닫기만 한다
 const wide = () => window.matchMedia("(min-width: 901px)").matches;
 function setFold(folded) {
   if (!wide()) { document.body.classList.remove("side-open"); return; }
   document.body.classList.toggle("side-folded", folded);
-  save("ffxivSideFolded", folded);
+  save(FOLD_KEY, folded);
   setTimeout(() => { placeTrackFloat(); placeMatPanel(); }, 250); // 사이드바 접고 펴는 움직임이 끝난 뒤 자리 다시 잡기
 }
 
@@ -1979,8 +1984,9 @@ async function start() {
   applyTheme();
   renderSide();
   await trackSync(); // 다른 컴퓨터에서 고친 트래킹 목록 받아오기
+  if (PANE) MP = null; // 나눈 칸마다 재료 창이 겹쳐 뜨지 않게 (칸 안에서 새로 열면 뜬다)
   renderMatPanel(); // 지난번에 띄워 둔 재료 창
-  if (first) onboard();
+  if (first && !PANE) onboard();
   await render();
   refreshPending();
 }
@@ -1993,6 +1999,102 @@ window.addEventListener("hashchange", () => {
   render();
   placeTrackFloat();
 });
+// ── 🪟 화면 나누기: 왼쪽·오른쪽에 사이트를 하나씩 띄워서 칸마다 원하는 탭을 본다 ──
+const SPLIT_TABS = [["craft", "⚒️ 제작"], ["gather", "⛏️ 채집"], ["exchange", "🪙 교환템 팔기"], ["exchange-craft", "🧪 교환 재료로 만들기"],
+  ["track", "📈 재료 트래킹"], ["cart", "🛒 장바구니"], ["journal", "📒 나의 제작일지"], ["fc", "🏰 우리 부대"]];
+let SPLIT = load("ffxivSplit", null); // {on, tabs: [왼쪽, 오른쪽], ratio}
+function openSplit() {
+  const cur = location.hash.slice(1) || "craft";
+  SPLIT = { on: true, tabs: [cur, cur === "track" ? "craft" : "track"], ratio: (SPLIT && SPLIT.ratio) || 0.5 };
+  save("ffxivSplit", SPLIT);
+  location.reload(); // 나눈 화면은 사이트를 새로 띄워서 시작한다 (이 창은 칸 두 개만 들고 있는다)
+}
+function closeSplit() {
+  SPLIT.on = false;
+  save("ffxivSplit", SPLIT);
+  history.replaceState(null, "", location.pathname + "#" + SPLIT.tabs[0]);
+  location.reload();
+}
+const splitVertical = () => innerWidth <= 900; // 좁은 화면은 위·아래로
+function renderSplit() {
+  const st = load("ffxivSettings", {}); // 테마만 (설정 전체는 칸 안의 사이트가 읽는다)
+  document.documentElement.dataset.theme = THEMES[st.theme] || "light";
+  document.documentElement.dataset.palette = PALETTES[st.palette] || "jade";
+  document.body.classList.add("split-on");
+  const el = document.createElement("div");
+  el.id = "split";
+  el.className = "split";
+  const opts = (cur) => SPLIT_TABS.map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${l}</option>`).join("");
+  el.innerHTML = [0, 1].map((i) => `<section class="split-pane" data-pane="${i}">
+      <div class="split-bar"><select data-split-tab="${i}" aria-label="${i ? "오른쪽" : "왼쪽"} 화면 탭">${opts(SPLIT.tabs[i])}</select>
+        ${i ? `<span class="split-btns"><button type="button" class="cart-btn" data-split-swap="1" title="왼쪽·오른쪽 바꾸기">⇄ 바꾸기</button>
+          <button type="button" class="cart-btn" data-split-close="1" title="한 화면으로 돌아간다 개굴">✕ 나누기 끝</button></span>` : ""}</div>
+      <iframe src="./?pane=1#${esc(SPLIT.tabs[i])}" title="${i ? "오른쪽" : "왼쪽"} 화면"></iframe></section>${i ? "" : '<div class="split-div" title="끌어서 크기 조절 · 더블클릭하면 반반"></div>'}`).join("");
+  document.body.appendChild(el);
+  el.style.setProperty("--split", SPLIT.ratio || 0.5);
+  // 칸 안에서 메뉴를 눌러 탭이 바뀌면 위쪽 고르기 칸도 따라간다
+  el.querySelectorAll("iframe").forEach((f, i) => f.addEventListener("load", () => {
+    try {
+      f.contentWindow.addEventListener("hashchange", () => {
+        const t = f.contentWindow.location.hash.slice(1) || "craft";
+        SPLIT.tabs[i] = t;
+        save("ffxivSplit", SPLIT);
+        el.querySelector(`[data-split-tab="${i}"]`).value = t;
+      });
+    } catch { /* 같은 사이트라 막힐 일은 없다 */ }
+  }));
+  el.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-split-tab]");
+    if (!sel) return;
+    const i = Number(sel.dataset.splitTab);
+    SPLIT.tabs[i] = sel.value;
+    save("ffxivSplit", SPLIT);
+    el.querySelectorAll("iframe")[i].contentWindow.location.hash = "#" + sel.value;
+  });
+  el.addEventListener("click", (e) => {
+    if (e.target.closest("[data-split-close]")) return closeSplit();
+    if (e.target.closest("[data-split-swap]")) { SPLIT.tabs.reverse(); save("ffxivSplit", SPLIT); location.reload(); }
+  });
+  const div = el.querySelector(".split-div");
+  div.addEventListener("dblclick", () => { SPLIT.ratio = 0.5; save("ffxivSplit", SPLIT); el.style.setProperty("--split", 0.5); });
+  div.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    el.classList.add("dragging"); // 끄는 동안 칸 안으로 마우스가 빨려 들어가지 않게
+    const move = (ev) => {
+      const r = splitVertical() ? ev.clientY / innerHeight : ev.clientX / innerWidth;
+      SPLIT.ratio = Math.max(0.2, Math.min(0.8, r));
+      el.style.setProperty("--split", SPLIT.ratio);
+    };
+    const up = () => {
+      el.classList.remove("dragging");
+      save("ffxivSplit", SPLIT);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+}
+
+// 다른 칸(또는 다른 창)에서 장바구니·트래킹·제작일지를 고치면 여기도 따라간다
+window.addEventListener("storage", (e) => {
+  if (!meta || !e.key) return;
+  const st = window.__ffxivDash;
+  if (["ffxivCart", "ffxivCartDone", "ffxivCartQty"].includes(e.key)) {
+    if (st) { st.cart = load("ffxivCart", {}); st.done = load("ffxivCartDone", {}); st.qty = load("ffxivCartQty", {}); }
+    window.dispatchEvent(new Event("ffxiv-cart"));
+    if (["craft", "cart"].includes(page())) render();
+  } else if (e.key === "ffxivTrack") {
+    if (page() === "track") renderTrack(); else if (MP) renderMatPanel();
+  } else if (e.key.startsWith("ffxivJournal")) {
+    J = null; JUSE = null;
+    if (page() === "journal") render();
+  }
+});
+
 bindSide();
-frogRain();
-start();
+if (!PANE && SPLIT && SPLIT.on) renderSplit();
+else {
+  if (!PANE) frogRain();
+  start();
+}
